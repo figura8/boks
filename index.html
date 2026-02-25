@@ -1,722 +1,790 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
   <title>Cubetto</title>
-
-  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#667eea">
-
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #ece6dc;
+      font-family: system-ui, sans-serif;
+    }
 
-    body {
-      font-family: 'Comic Sans MS', 'Chalkboard SE', 'Arial Rounded MT Bold', system-ui, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
+    /* Full-screen column layout */
+    #app {
+      position: fixed; inset: 0;
       display: flex;
+      flex-direction: column;
+      align-items: center;
       justify-content: center;
-      align-items: center;
-      padding: 20px;
+      padding: 6px 10px 10px;
+      gap: 6px;
     }
 
-    .container {
-      background: white;
-      border-radius: 30px;
-      padding: 30px;
-      max-width: 900px;
-      width: 100%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    h1 {
-      text-align: center;
-      color: #667eea;
-      margin-bottom: 10px;
-      font-size: 2.5em;
-    }
-
-    .subtitle {
-      text-align: center;
-      color: #666;
-      margin-bottom: 30px;
-      font-size: 1.2em;
-    }
-
-    .game-area {
-      display: flex;
-      flex-direction: column;
-      gap: 30px;
-      margin-bottom: 30px;
-    }
-
-    .grid-container {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      position: relative; /* per sprite overlay */
-    }
-
-    .grid-title {
-      font-size: 1.3em;
-      color: #667eea;
-      margin-bottom: 15px;
-      font-weight: bold;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(6, 60px);
-      grid-template-rows: repeat(6, 60px);
-      gap: 5px;
-      background: #ddd;
-      padding: 5px;
-      border-radius: 15px;
+    /* Grid wrapper: fixed size set by JS */
+    #gridWrap {
       position: relative;
+      width: 100%;
+      max-width: 460px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
+    /* Grid: square, sized by JS after measuring available height */
+    #gameGrid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 3px;
+      position: relative;
+      flex-shrink: 0;
+    }
     .cell {
-      background: white;
-      border: 2px solid #ddd;
-      border-radius: 10px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 2.5em;
-      transition: all 0.2s ease;
+      background: rgba(245,241,235,0.55);
+      border: none;
+      border-radius: 7px;
     }
+    .cell.hi { background: rgba(120,180,255,0.55); }
 
-    .cell.goal {
-      background: #d4edda;
-      border-color: #28a745;
-      animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.08); }
-    }
-
-    .cell.drag-over-grid {
-      background: #E3F2FD;
-      border-color: #42A5F5;
-      transform: scale(1.03);
-    }
-
-    .character-sprite {
+    #sprite {
       position: absolute;
-      width: 60px;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      pointer-events: auto;
-      user-select: none;
+      z-index: 20;
       touch-action: none;
       cursor: grab;
     }
-    .character-sprite:active { cursor: grabbing; }
-
-    .character-sprite-inner {
-      width: 60px;
-      height: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    #sprite:active { cursor: grabbing; }
+    #sprite.moving { animation: wg .18s linear infinite; }
+    @keyframes wg {
+      0%,100% { transform: rotate(0deg); }
+      30%      { transform: rotate(-3deg) translateY(-1px); }
+      70%      { transform: rotate(3deg)  translateY(-1px); }
     }
 
-    .character-sprite.moving .character-sprite-inner {
-      animation: cubetto-wiggle 0.18s linear infinite;
-    }
-
-    @keyframes cubetto-wiggle {
-      0% { transform: translateY(0) rotate(0deg); }
-      25% { transform: translateY(-1px) rotate(-1deg); }
-      50% { transform: translateY(0) rotate(0deg); }
-      75% { transform: translateY(-1px) rotate(1deg); }
-      100% { transform: translateY(0) rotate(0deg); }
-    }
-
-    .blocks-section {
-      background: #f8f9fa;
-      padding: 20px;
-      border-radius: 20px;
+    /* Fixed bottom section */
+    #bottom {
+      width: 100%;
+      max-width: 460px;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
-      gap: 20px;
-    }
-
-    .section-title {
-      font-size: 1.3em;
-      color: #667eea;
-      margin-bottom: 15px;
-      font-weight: bold;
-      text-align: center;
-    }
-
-    .available-blocks {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 0;
-    }
-
-    .available-slot {
-      width: 70px;
-      height: 70px;
-      display: flex;
-      justify-content: center;
       align-items: center;
-      background: transparent;
-      transition: all 0.2s ease;
+      gap: 6px;
     }
 
-    .block {
-      width: 70px;
-      height: 70px;
+    /* Available blocks row */
+    #blocksRow {
+      width: 100%;
+      background: #faf5ee;
+      border-radius: 12px;
+      border: none;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-evenly;
+      align-items: center;
+    }
+    .ablock {
+      flex-shrink: 0;
+      touch-action: none;
+      cursor: grab;
+      border-radius: 5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.2);
+    }
+
+    /* Program board */
+    #boardRow {
+      width: 100%;
+      background: #faf5ee;
+      border-radius: 12px;
+      border: none;
+      box-shadow: none;
+      padding: 7px;
+    }
+    #boardGrid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .pslot {
+      background: #f5f1eb;
+      border: none;
       border-radius: 8px;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
-      font-size: 2.5em;
-      cursor: grab;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-      user-select: none;
-    }
-
-    .block:active { cursor: grabbing; transform: scale(0.95); }
-    .block:hover { transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.25); }
-
-    .cubetto-block { border: none; position: relative; }
-
-    .program-sequence {
-      display: grid;
-      grid-template-columns: repeat(3, 70px);
-      grid-template-rows: repeat(3, 70px);
-      gap: 12px;
-      padding: 20px;
-      background: #F5E6D3;
-      border-radius: 20px;
-      border: 3px solid #D7CCC8;
-      position: relative;
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
       justify-content: center;
-      margin: 0 auto;
-      width: fit-content;
+      gap: 3px;
+      padding: 3px 2px 5px;
+      touch-action: none;
+      transition: background .1s;
     }
-
-    .program-slot {
-      width: 70px;
-      height: 70px;
-      border: 2px solid #9FA8DA;
-      border-radius: 15px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background: #E8EAF6;
-      transition: all 0.2s ease;
-      position: relative;
-      z-index: 2;
+    .pslot.over   { background: #d8eeff; border-color: #7ab8f5; }
+    .pslot.active .dot {
+      background: #ffc107;
+      box-shadow: 0 0 5px rgba(255,193,7,.9);
+      animation: bd .6s infinite;
     }
+    @keyframes bd { 0%,100%{transform:scale(1)} 50%{transform:scale(1.6)} }
+    .sinner { display:flex; align-items:center; justify-content:center; }
+    .pblock  { border-radius: 4px; touch-action: none; cursor: grab; }
+    .dot     { width: 4px; height: 4px; background: #c0b090; border-radius: 50%; flex-shrink: 0; transition: all .2s; }
 
-    .program-slot::before {
-      content: '';
-      position: absolute;
-      bottom: -12px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 8px;
-      height: 8px;
-      background: #424242;
-      border-radius: 50%;
-      transition: all 0.2s ease;
-    }
-
-    .program-slot.active::before {
-      background: #FFC107;
-      box-shadow: 0 0 10px rgba(255, 193, 7, 1), 0 0 15px rgba(255, 193, 7, 0.8);
-      animation: pulse-light 0.6s ease-in-out infinite;
-    }
-
-    @keyframes pulse-light {
-      0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
-      50% { transform: translateX(-50%) scale(1.2); opacity: 0.8; }
-    }
-
-    .program-slot.drag-over {
-      background: #C5CAE9;
-      border-color: #667eea;
-      transform: scale(1.05);
-    }
-
-    .controls {
-      display: flex;
-      justify-content: center;
-      margin-top: 20px;
-    }
-
-    .btn {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
+    /* Run button */
+    #runBtn {
+      width: 52px; height: 52px;
+      flex-shrink: 0;
+      border-radius: 10px;
       border: none;
+      background: #f5f1eb;
+      box-shadow: 0 4px 0 #c8bfb0;
+      color: #5a4a3a;
+      font-size: 1.2em;
+      display: flex; align-items: center; justify-content: center;
       cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-      position: relative;
-      background: #4CAF50;
+      padding-left: 3px;
+      touch-action: manipulation;
+      transition: transform .1s, box-shadow .1s;
+      -webkit-appearance: none;
+      appearance: none;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+    }
+    #runBtn:active, #runBtn:focus { 
+      transform: translateY(4px); 
+      box-shadow: 0 0 0 #c8bfb0;
+      background: #f5f1eb;
+      outline: none;
+    }
+    #runBtn.running {
+      background: #f5f1eb;
+      box-shadow: 0 4px 0 #c8bfb0;
+      padding-left: 0;
+      animation: pb 1s ease-in-out infinite;
+    }
+    @keyframes pb { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
+    /* Ghost for drag */
+    #ghost {
+      position: fixed; z-index: 9999;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(1.1);
+      opacity: .88; display: none; border-radius: 5px;
     }
 
-    .btn:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.35); }
-    .btn:active { transform: translateY(0) scale(0.95); box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
-
-    .btn-run { background: linear-gradient(135deg, #66BB6A 0%, #4CAF50 100%); }
-    .btn-run.running {
-      background: linear-gradient(135deg, #FFA726 0%, #FF9800 100%);
-      animation: pulse-button 1s ease-in-out infinite;
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 70px;
+      left: 50%; transform: translateX(-50%);
+      background: white; border-radius: 16px;
+      padding: 5px 14px; font-size: .85em; font-weight: 700;
+      box-shadow: 0 3px 10px rgba(0,0,0,.15);
+      opacity: 0; transition: opacity .3s;
+      pointer-events: none; white-space: nowrap; z-index: 200;
     }
-
-    @keyframes pulse-button {
-      0%, 100% { transform: scale(1); box-shadow: 0 6px 20px rgba(255, 152, 0, 0.5); }
-      50% { transform: scale(1.1); box-shadow: 0 8px 30px rgba(255, 152, 0, 0.8); }
-    }
-
-    .message {
-      text-align: center;
-      font-size: 1.5em;
-      margin-top: 20px;
-      min-height: 40px;
-      font-weight: bold;
-      color: #667eea;
-    }
-    .message.success { color: #28a745; animation: bounce 0.5s; }
-    .message.error { color: #dc3545; }
-
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
-    }
-
-    @media (max-width: 768px) {
-      .grid { grid-template-columns: repeat(6, 50px); grid-template-rows: repeat(6, 50px); }
-      .character-sprite, .character-sprite-inner { width: 50px; height: 50px; }
-      h1 { font-size: 2em; }
-    }
-
-    @media (max-width: 499px) {
-      .program-sequence { grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 60px); gap: 8px; padding: 14px; }
-      .program-slot { width: 60px; height: 60px; }
-    }
+    #toast.show { opacity: 1; }
+    #toast.win  { color: #3a9a3e; }
   </style>
 </head>
-
 <body>
-  <div class="container">
-    <h1>🤖 Il Mio Primo Programma!</h1>
-    <p class="subtitle">Porta il robot alla stellina ⭐</p>
-
-    <div class="game-area">
-      <div class="grid-container" id="gridContainer">
-        <div class="grid-title">🎮 Area di Gioco</div>
-
-        <div id="characterSprite" class="character-sprite" draggable="true" aria-label="Cubetto">
-          <div class="character-sprite-inner" id="characterSpriteInner"></div>
-        </div>
-
-        <div class="grid" id="gameGrid"></div>
-      </div>
-
-      <div class="blocks-section">
-        <div class="section-title">📦 Blocchi Disponibili</div>
-        <div class="available-blocks" id="availableBlocks"></div>
-
-        <div class="section-title">🎯 Sequenza Programma</div>
-        <div class="program-sequence" id="programSequence">
-          <div class="program-slot" data-slot="0"></div><div class="program-slot" data-slot="1"></div><div class="program-slot" data-slot="2"></div>
-          <div class="program-slot" data-slot="3"></div><div class="program-slot" data-slot="4"></div><div class="program-slot" data-slot="5"></div>
-          <div class="program-slot" data-slot="6"></div><div class="program-slot" data-slot="7"></div><div class="program-slot" data-slot="8"></div>
-        </div>
-
-        <div class="controls">
-          <button class="btn btn-run" id="runButton" aria-label="Esegui programma" onclick="runProgram()"></button>
-        </div>
-      </div>
-    </div>
-
-    <div class="message" id="message"></div>
+<div id="app">
+  <!-- Row 1: grid (flexible) -->
+  <div id="gridWrap">
+    <canvas id="bgCanvas" style="position:absolute;inset:0;pointer-events:none;border-radius:7px;"></canvas>
+    <div id="gameGrid"></div>
+    <div id="sprite"></div>
   </div>
 
-  <script>
-    const GRID_SIZE = 6;
-    const goalPos = { x: 5, y: 5 };
-    const startPos = { x: 0, y: 0 };
-    const startOrientation = 'right';
+  <!-- Row 2: fixed bottom section -->
+  <div id="bottom">
+    <div id="blocksRow"></div>
+    <div id="boardRow"><div id="boardGrid"></div></div>
+    <button id="runBtn" onclick="run()">▶</button>
+  </div>
+</div>
+<div id="ghost"></div>
+<div id="toast"></div>
 
-    let characterPos = { ...startPos };
-    let characterOrientation = startOrientation;
+<script>
+// ═══ CONSTANTS ═══
+const COLS = 6, ROWS = 6, SLOTS = 12;
+const GOAL = {x:5,y:5}, START = {x:2,y:2};
+let ori = 'right';
+const MOVE_MS = 650, TURN_MS = 320, STEP_MS = 380;
+const POOL = {
+  forward: {dir:'forward', color:'#7edcc4'},
+  left:    {dir:'left',    color:'#ffe089'},
+  right:   {dir:'right',  color:'#ff8a8a'}
+};
 
-    let isRunning = false;
-    let isDraggingCharacter = false;
-    let isCharacterAnimating = false;
+// ═══ STATE ═══
+let pos = {...START};
+let running = false, animating = false, idN = 0;
+const avail = ['forward','left','right'].map((d,i) => ({id:`${d}${i}`, ...POOL[d]}));
+const prog = Array(SLOTS).fill(null);
 
-    const MOVE_DURATION_MS = 850;
-    const TURN_PAUSE_MS = 420;
-    const STEP_PAUSE_MS = 500;
+// ═══ AUDIO ═══
+let ac;
+const AC = () => { if(!ac) ac = new (window.AudioContext||window.webkitAudioContext)(); if(ac.state==='suspended') ac.resume(); return ac; };
+function T(f,t,s,d,v=.12) {
+  const c=AC(),o=c.createOscillator(),g=c.createGain();
+  o.type=t; o.frequency.setValueAtTime(f,c.currentTime+s);
+  g.gain.setValueAtTime(v,c.currentTime+s);
+  g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+s+d);
+  o.connect(g); g.connect(c.destination);
+  o.start(c.currentTime+s); o.stop(c.currentTime+s+d+.05);
+}
+const sStart = () => [400,500,400,600,800].forEach((f,i) => T(f,'square',i*.08,.1,.1));
+const sStep  = () => { T(300,'square',0,.07,.1); T(500,'square',.09,.07,.1); };
+const sEnd   = () => [523,659,784,1047,784,659,523].forEach((f,i) => T(f,'square',i*.09,.12,.12));
+const sErr   = () => { T(300,'sine',0,.18,.2); T(180,'sine',.2,.22,.18); };
 
-    let audioCtx = null;
-    function getAudioCtx() {
-      if (!audioCtx) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new Ctx();
-      }
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      return audioCtx;
-    }
-    function beep(freq = 880, durationSec = 0.08, volume = 0.15) {
-      const ctx = getAudioCtx();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(freq, ctx.currentTime);
-      g.gain.setValueAtTime(volume, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + durationSec);
-      o.connect(g); g.connect(ctx.destination);
-      o.start(); o.stop(ctx.currentTime + durationSec);
-    }
+// ═══ UTILS ═══
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function toast(msg, cls='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = msg ? 'show '+cls : '';
+  clearTimeout(el._t); if(msg) el._t = setTimeout(() => el.className='', 3000);
+}
 
-    const blockPool = {
-      forward: { direction: 'forward', label: 'Forward', color: '#7EDCC4' },
-      left: { direction: 'left', label: 'Left', color: '#FFE089' },
-      right: { direction: 'right', label: 'Right', color: '#FF8A8A' }
-    };
+// ═══ CLIP PATHS ═══
+const clip = dir =>
+  dir==='forward' ? 'polygon(0 10%,80% 10%,100% 50%,80% 90%,0 90%)' :
+  dir==='left'    ? 'polygon(50% 0,100% 32%,100% 100%,0 100%,0 32%)' :
+                    'polygon(0 0,100% 0,100% 68%,50% 100%,0 68%)';
 
-    let availableBlocks = [
-      { id: 'forward-0', ...blockPool.forward },
-      { id: 'left-0', ...blockPool.left },
-      { id: 'right-0', ...blockPool.right }
-    ];
+// ═══ BUILD BLOCK ═══
+function mkB(block, w, h, cls='') {
+  const el = document.createElement('div');
+  el.className = cls;
+  el.dataset.dir = block.dir || block.direction;
+  el.dataset.bid = block.id;
+  el.style.cssText = `width:${w}px;height:${h}px;background:${block.color};clip-path:${clip(el.dataset.dir)};flex-shrink:0;border-radius:4px;`;
+  return el;
+}
 
-    let blockIdCounter = 1;
-    let programBlocks = Array(9).fill(null);
+// ═══ GRID ═══
+function initGrid() {
+  const g = document.getElementById('gameGrid');
+  g.innerHTML = '';
+  for(let y=0; y<ROWS; y++) for(let x=0; x<COLS; x++) {
+    const c = document.createElement('div');
+    c.className = 'cell'; c.dataset.cx = x; c.dataset.cy = y;
+    g.appendChild(c);
+  }
+}
 
-    let draggedBlock = null;
-    let dragSource = null;
-    let dragSourceIndex = null;
+// ═══ SIZE THE GRID AS A SQUARE ═══
+function sizeGrid() {
+  const wrap  = document.getElementById('gridWrap');
+  const grid  = document.getElementById('gameGrid');
+  const app   = document.getElementById('app');
+  const bot   = document.getElementById('bottom');
 
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    function showMessage(text, type = '') {
-      const message = document.getElementById('message');
-      message.textContent = text;
-      message.className = `message ${type}`;
-    }
+  // Measure what bottom actually needs
+  const appH  = app.clientHeight;
+  const botH  = bot.offsetHeight;
+  const availH = appH - botH - 6 - 6 - 6; // gaps + padding
+  const availW = wrap.clientWidth;
+  const sq = Math.floor(Math.min(availH, availW));
 
-    function initGrid() {
-      const grid = document.getElementById('gameGrid');
-      grid.innerHTML = '';
-      for (let y = 0; y < GRID_SIZE; y++) {
-        for (let x = 0; x < GRID_SIZE; x++) {
-          const cell = document.createElement('div');
-          cell.className = 'cell';
-          cell.dataset.x = String(x);
-          cell.dataset.y = String(y);
+  grid.style.width  = sq + 'px';
+  grid.style.height = sq + 'px';
+  wrap.style.height = sq + 'px'; // shrink wrap to exact grid size, no extra space
+}
 
-          cell.addEventListener('dragover', (e) => {
-            if (isRunning || isCharacterAnimating) return;
-            if (!isDraggingCharacter) return;
-            e.preventDefault();
-            cell.classList.add('drag-over-grid');
-            e.dataTransfer.dropEffect = 'move';
-          });
-          cell.addEventListener('dragleave', () => cell.classList.remove('drag-over-grid'));
-          cell.addEventListener('drop', async (e) => {
-            if (isRunning || isCharacterAnimating) return;
-            if (!isDraggingCharacter) return;
-            e.preventDefault();
-            cell.classList.remove('drag-over-grid');
-            isDraggingCharacter = false;
-            await animateCharacterTo(x, y, MOVE_DURATION_MS);
-            showMessage('');
-          });
+// ═══ SPRITE ═══
+function svgRobot(o) {
+  const rot = { right: 0, down: 90, left: 180, up: 270 };
+  const deg = rot[o];
+  return `<svg width="100%" height="100%" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+    <g transform="rotate(${deg} 25 25)">
+      <rect x="4" y="4" width="42" height="42" fill="#F5DEB3" rx="7" ry="7" stroke="#b0a898" stroke-width="1.5"/>
+      <path d="M32 25 L20 16 L23 25 L20 34Z" fill="#5a4a3a"/>
+    </g>
+  </svg>`;
+}
 
-          grid.appendChild(cell);
-        }
-      }
-      updateGrid();
-      syncCharacterSprite();
-      setupCharacterSpriteDrag();
-    }
+function cellPos(x, y) {
+  const cell = document.querySelector(`.cell[data-cx="${x}"][data-cy="${y}"]`);
+  const wrap = document.getElementById('gridWrap');
+  if(!cell || !wrap) return null;
+  const cr = cell.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+  return { l: cr.left-wr.left, t: cr.top-wr.top, w: cr.width, h: cr.height };
+}
 
-    function updateGrid() {
-      document.querySelectorAll('.cell').forEach(cell => {
-        const x = Number(cell.dataset.x);
-        const y = Number(cell.dataset.y);
-        cell.innerHTML = '';
-        cell.className = 'cell';
-        if (x === goalPos.x && y === goalPos.y) {
-          cell.innerHTML = '⭐';
-          cell.classList.add('goal');
-        }
-      });
-      renderCharacterSprite();
-    }
+function syncSprite() {
+  const r = cellPos(pos.x, pos.y);
+  const s = document.getElementById('sprite');
+  if(!r || !s) return;
+  s.style.left = r.l+'px'; s.style.top = r.t+'px';
+  s.style.width = r.w+'px'; s.style.height = r.h+'px';
+  s.innerHTML = svgRobot(ori);
+}
 
-    function renderCharacterSprite() {
-      const inner = document.getElementById('characterSpriteInner');
-      if (!inner) return;
-      inner.innerHTML = getRobotWithOrientation(characterOrientation);
-    }
+async function animTo(tx, ty) {
+  if(animating) return;
+  animating = true;
+  const s = document.getElementById('sprite');
+  const fr = cellPos(pos.x,pos.y), to = cellPos(tx,ty);
+  if(!fr||!to) { pos={x:tx,y:ty}; syncSprite(); animating=false; return; }
+  s.classList.add('moving');
+  const a = s.animate(
+    [{left:fr.l+'px',top:fr.t+'px'},{left:to.l+'px',top:to.t+'px'}],
+    {duration:MOVE_MS, easing:'cubic-bezier(.2,.9,.2,1)', fill:'forwards'}
+  );
+  await a.finished.catch(()=>{});
+  s.style.left=to.l+'px'; s.style.top=to.t+'px';
+  s.classList.remove('moving');
+  pos={x:tx,y:ty}; animating=false;
+}
 
-    function getCellRectRelativeToContainer(x, y) {
-      const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
-      const container = document.getElementById('gridContainer');
-      if (!cell || !container) return null;
-      const cellRect = cell.getBoundingClientRect();
-      const contRect = container.getBoundingClientRect();
-      return { left: cellRect.left - contRect.left, top: cellRect.top - contRect.top, width: cellRect.width, height: cellRect.height };
-    }
+// ═══ SPRITE DRAG ═══
+function setupSpriteDrag() {
+  const s = document.getElementById('sprite');
+  function start(cx,cy) {
+    if(running||animating) return false;
+    const g = document.getElementById('ghost');
+    const w = s.offsetWidth;
+    g.innerHTML = svgRobot(ori);
+    g.style.cssText = `display:block;width:${w}px;height:${w}px;left:${cx}px;top:${cy}px;`;
+    s.style.opacity = '0.3'; return true;
+  }
+  function move(cx,cy) {
+    const g = document.getElementById('ghost');
+    g.style.left=cx+'px'; g.style.top=cy+'px';
+    g.style.display='none';
+    const u = document.elementFromPoint(cx,cy);
+    g.style.display='block';
+    document.querySelectorAll('.cell.hi').forEach(c=>c.classList.remove('hi'));
+    u?.closest('.cell')?.classList.add('hi');
+  }
+  async function end(cx,cy) {
+    document.getElementById('ghost').style.display='none';
+    s.style.opacity='1';
+    document.querySelectorAll('.cell.hi').forEach(c=>c.classList.remove('hi'));
+    const u = document.elementFromPoint(cx,cy);
+    const cell = u?.closest('.cell');
+    if(cell) await animTo(+cell.dataset.cx, +cell.dataset.cy);
+    syncSprite();
+  }
+  s.addEventListener('touchstart',e=>{
+    e.preventDefault(); e.stopPropagation();
+    const t=e.touches[0]; if(!start(t.clientX,t.clientY)) return;
+    const mm=e=>{e.preventDefault();move(e.touches[0].clientX,e.touches[0].clientY);};
+    const mu=e=>{e.preventDefault();end(e.changedTouches[0].clientX,e.changedTouches[0].clientY);s.removeEventListener('touchmove',mm);s.removeEventListener('touchend',mu);};
+    s.addEventListener('touchmove',mm,{passive:false});
+    s.addEventListener('touchend',mu,{passive:false});
+  },{passive:false});
+  s.addEventListener('mousedown',e=>{
+    e.preventDefault(); if(!start(e.clientX,e.clientY)) return;
+    const mm=e=>move(e.clientX,e.clientY);
+    const mu=e=>{end(e.clientX,e.clientY);document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    document.addEventListener('mousemove',mm);
+    document.addEventListener('mouseup',mu);
+  });
+}
 
-    function syncCharacterSprite() {
-      const sprite = document.getElementById('characterSprite');
-      const r = getCellRectRelativeToContainer(characterPos.x, characterPos.y);
-      if (!sprite || !r) return;
-      sprite.style.left = (r.left + r.width / 2 - sprite.offsetWidth / 2) + 'px';
-      sprite.style.top  = (r.top + r.height / 2 - sprite.offsetHeight / 2) + 'px';
-      renderCharacterSprite();
-    }
+// ═══ PROCEDURAL BACKGROUND ═══
+function drawBackground() {
+  const canvas = document.getElementById('bgCanvas');
+  const grid   = document.getElementById('gameGrid');
+  if (!canvas || !grid) return;
+  const rect = grid.getBoundingClientRect();
+  const wrap = document.getElementById('gridWrap').getBoundingClientRect();
+  const S = Math.round(rect.width);
+  if (!S) return;
+  canvas.width  = S;
+  canvas.height = S;
+  // Position canvas exactly over gameGrid within gridWrap
+  canvas.style.left   = (rect.left - wrap.left) + 'px';
+  canvas.style.top    = (rect.top  - wrap.top)  + 'px';
+  canvas.style.width  = S + 'px';
+  canvas.style.height = S + 'px';
+  const cx = canvas.getContext('2d');
 
-    async function animateCharacterTo(x, y, durationMs = 400) {
-      if (isCharacterAnimating) return;
-      const sprite = document.getElementById('characterSprite');
-      const from = getCellRectRelativeToContainer(characterPos.x, characterPos.y);
-      const to = getCellRectRelativeToContainer(x, y);
-      if (!sprite || !from || !to) { characterPos = { x, y }; syncCharacterSprite(); return; }
-      isCharacterAnimating = true;
-      sprite.classList.add('moving');
-      const fromLeft = (from.left + from.width / 2 - sprite.offsetWidth / 2);
-      const fromTop  = (from.top + from.height / 2 - sprite.offsetHeight / 2);
-      const toLeft   = (to.left + to.width / 2 - sprite.offsetWidth / 2);
-      const toTop    = (to.top + to.height / 2 - sprite.offsetHeight / 2);
+  const r = (min,max) => min + Math.random()*(max-min);
+  const seed = 42; // deterministic-ish using array
+  let si = 0;
+  const rands = Array.from({length:200},(_,i)=>{
+    si = (si*1664525+1013904223)&0xffffffff;
+    return (si>>>0)/4294967296;
+  });
+  let ri = 0;
+  const rn = (mn,mx) => mn + rands[ri++%rands.length]*(mx-mn);
 
-      const anim = sprite.animate(
-        [{ left: fromLeft + 'px', top: fromTop + 'px' }, { left: toLeft + 'px', top: toTop + 'px' }],
-        { duration: durationMs, easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)', fill: 'forwards' }
+  // ── BACKGROUND: sand gradient ──
+  const grad = cx.createLinearGradient(0,0,S,S);
+  grad.addColorStop(0,   '#f0dda8');
+  grad.addColorStop(0.4, '#e8c87a');
+  grad.addColorStop(0.7, '#dbb96a');
+  grad.addColorStop(1,   '#c8a050');
+  cx.fillStyle = grad;
+  cx.fillRect(0,0,S,S);
+
+  // ── RIVER: diagonal blue strip ──
+  cx.save();
+  const rg = cx.createLinearGradient(S*0.1, 0, S*0.32, S);
+  rg.addColorStop(0,'#5aa0d0'); rg.addColorStop(0.5,'#7ec8e8'); rg.addColorStop(1,'#4888b8');
+  cx.fillStyle = rg;
+  cx.beginPath();
+  cx.moveTo(S*0.08, 0);
+  cx.bezierCurveTo(S*0.18,S*0.2, S*0.12,S*0.5, S*0.22,S*0.75);
+  cx.bezierCurveTo(S*0.26,S*0.85, S*0.30,S*0.92, S*0.28,S);
+  cx.lineTo(S*0.38, S);
+  cx.bezierCurveTo(S*0.36,S*0.9, S*0.32,S*0.8, S*0.28,S*0.65);
+  cx.bezierCurveTo(S*0.24,S*0.45, S*0.30,S*0.18, S*0.20,0);
+  cx.closePath();
+  cx.fill();
+  // river ripples
+  cx.strokeStyle='rgba(255,255,255,0.3)'; cx.lineWidth=1.5;
+  for(let i=0;i<5;i++){
+    const ty = S*(0.1+i*0.18);
+    cx.beginPath();
+    cx.moveTo(S*0.12,ty);
+    cx.quadraticCurveTo(S*0.18,ty-S*0.02, S*0.24,ty);
+    cx.stroke();
+  }
+  cx.restore();
+
+  // ── GREEN OASIS banks ──
+  cx.save();
+  cx.fillStyle='#7ab870';
+  [[S*0.06,S*0.1,S*0.08,S*0.14],[S*0.22,S*0.4,S*0.1,S*0.12],
+   [S*0.14,S*0.68,S*0.09,S*0.11],[S*0.26,S*0.82,S*0.08,S*0.1]].forEach(([ex,ey,ew,eh])=>{
+    cx.beginPath(); cx.ellipse(ex,ey,ew,eh,0.3,0,Math.PI*2); cx.fill();
+  });
+  cx.restore();
+
+  // ── SAND DUNES ──
+  cx.save();
+  cx.globalAlpha = 0.22;
+  cx.fillStyle = '#c8903a';
+  [[S*0.65,S*0.15,S*0.22,S*0.08],[S*0.75,S*0.35,S*0.18,S*0.06],
+   [S*0.55,S*0.6, S*0.25,S*0.09],[S*0.80,S*0.75,S*0.15,S*0.05]].forEach(([dx,dy,dw,dh])=>{
+    cx.beginPath(); cx.ellipse(dx,dy,dw,dh,0.2,0,Math.PI*2); cx.fill();
+  });
+  cx.globalAlpha=1;
+  cx.restore();
+
+  function drawPyramid(px,py,base,h) {
+    // shadow
+    cx.fillStyle='rgba(0,0,0,0.13)';
+    cx.beginPath(); cx.ellipse(px+base*0.3,py+4,base*0.5,5,0,0,Math.PI*2); cx.fill();
+    // left face
+    const lg=cx.createLinearGradient(px-base/2,py,px,py-h);
+    lg.addColorStop(0,'#d4a040'); lg.addColorStop(1,'#f0cc70');
+    cx.fillStyle=lg;
+    cx.beginPath(); cx.moveTo(px,py-h); cx.lineTo(px-base/2,py); cx.lineTo(px,py); cx.closePath(); cx.fill();
+    // right face
+    const rg2=cx.createLinearGradient(px,py,px+base/2,py-h*0.3);
+    rg2.addColorStop(0,'#b08020'); rg2.addColorStop(1,'#c89830');
+    cx.fillStyle=rg2;
+    cx.beginPath(); cx.moveTo(px,py-h); cx.lineTo(px+base/2,py); cx.lineTo(px,py); cx.closePath(); cx.fill();
+  }
+
+  // ── THREE PYRAMIDS (bottom-right zone) ──
+  drawPyramid(S*0.72, S*0.58, S*0.16, S*0.14);
+  drawPyramid(S*0.84, S*0.62, S*0.12, S*0.10);
+  drawPyramid(S*0.62, S*0.65, S*0.10, S*0.08);
+
+  function drawPalm(px,py,h) {
+    // trunk
+    cx.strokeStyle='#8a5a20'; cx.lineWidth=h*0.12;
+    cx.beginPath(); cx.moveTo(px,py); cx.bezierCurveTo(px+h*0.1,py-h*0.4,px-h*0.1,py-h*0.7,px,py-h); cx.stroke();
+    // fronds
+    cx.strokeStyle='#4a9040'; cx.lineWidth=1.5;
+    for(let a=0;a<6;a++){
+      const ang = (a/6)*Math.PI*2;
+      cx.beginPath();
+      cx.moveTo(px,py-h);
+      cx.quadraticCurveTo(
+        px+Math.cos(ang)*h*0.45, py-h+Math.sin(ang)*h*0.3,
+        px+Math.cos(ang)*h*0.7,  py-h+Math.sin(ang)*h*0.45
       );
-
-      await anim.finished.catch(() => {});
-      sprite.style.left = toLeft + 'px';
-      sprite.style.top  = toTop + 'px';
-      sprite.classList.remove('moving');
-      characterPos = { x, y };
-      isCharacterAnimating = false;
-      document.querySelectorAll('.cell.drag-over-grid').forEach(c => c.classList.remove('drag-over-grid'));
+      cx.stroke();
     }
+  }
 
-    function setupCharacterSpriteDrag() {
-      const sprite = document.getElementById('characterSprite');
-      if (!sprite) return;
-      sprite.addEventListener('dragstart', (e) => {
-        if (isRunning || isCharacterAnimating) { e.preventDefault(); return; }
-        isDraggingCharacter = true;
-        e.dataTransfer.setData('text/plain', 'character');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      sprite.addEventListener('dragend', () => {
-        isDraggingCharacter = false;
-        document.querySelectorAll('.cell.drag-over-grid').forEach(c => c.classList.remove('drag-over-grid'));
-      });
-    }
+  // ── PALM TREES along river banks ──
+  [[S*0.25,S*0.12,S*0.065],[S*0.05,S*0.3,S*0.055],[S*0.29,S*0.5,S*0.06],
+   [S*0.07,S*0.6,S*0.05],[S*0.32,S*0.78,S*0.055]].forEach(([px,py,h])=>drawPalm(px,py,h));
 
-    function getRobotWithOrientation(orientation) {
-      return `
-        <svg width="45" height="45" viewBox="0 0 50 50" style="display:block;margin:auto;">
-          <rect x="5" y="5" width="40" height="40" fill="#F5DEB3" stroke="#8B7355" stroke-width="2" rx="3"/>
-          <circle cx="12" cy="12" r="5" fill="#87CEEB" stroke="#4682B4" stroke-width="1.5"/>
-          <circle cx="38" cy="12" r="5" fill="#87CEEB" stroke="#4682B4" stroke-width="1.5"/>
-          <circle cx="12" cy="38" r="5" fill="#87CEEB" stroke="#4682B4" stroke-width="1.5"/>
-          <circle cx="38" cy="38" r="5" fill="#87CEEB" stroke="#4682B4" stroke-width="1.5"/>
-          ${getOrientationMarker(orientation)}
-        </svg>`;
+  // ── SPHINX (center-left) ──
+  cx.save();
+  cx.translate(S*0.42, S*0.38);
+  // body
+  const sbg = cx.createLinearGradient(-S*0.08,0,S*0.08,0);
+  sbg.addColorStop(0,'#c89840'); sbg.addColorStop(1,'#e0b858');
+  cx.fillStyle=sbg;
+  cx.beginPath(); cx.ellipse(0,0,S*0.1,S*0.055,0,0,Math.PI*2); cx.fill();
+  cx.fillStyle='#c89840';
+  cx.beginPath(); cx.rect(-S*0.1,-S*0.055,S*0.2,S*0.055); cx.fill();
+  // head
+  cx.fillStyle='#d8aa50';
+  cx.beginPath(); cx.ellipse(-S*0.07,-S*0.045,S*0.038,S*0.042,0,0,Math.PI*2); cx.fill();
+  // headdress
+  cx.fillStyle='#e8c060';
+  cx.beginPath(); cx.rect(-S*0.1,-S*0.09,S*0.06,S*0.05); cx.fill();
+  // eye
+  cx.fillStyle='#5a3a10';
+  cx.beginPath(); cx.ellipse(-S*0.065,-S*0.052,3,2,0,0,Math.PI*2); cx.fill();
+  cx.restore();
+
+  // ── SMALL DOTS/GEMS scattered ──
+  cx.save();
+  [[S*0.52,S*0.2,'#e85858'],[S*0.60,S*0.32,'#58a8e8'],[S*0.48,S*0.48,'#e85858'],
+   [S*0.70,S*0.48,'#58a8e8'],[S*0.55,S*0.78,'#e8c058']].forEach(([gx,gy,gc])=>{
+    cx.fillStyle=gc;
+    cx.beginPath(); cx.moveTo(gx,gy-6); cx.lineTo(gx+5,gy); cx.lineTo(gx,gy+6); cx.lineTo(gx-5,gy); cx.closePath(); cx.fill();
+    cx.fillStyle='rgba(255,255,255,0.5)';
+    cx.beginPath(); cx.moveTo(gx,gy-6); cx.lineTo(gx+5,gy); cx.lineTo(gx,gy); cx.closePath(); cx.fill();
+  });
+  cx.restore();
+
+  // ── GRID LINES (subtle) ──
+  cx.save();
+  cx.globalAlpha = 0.08;
+  cx.strokeStyle = '#5a3a00'; cx.lineWidth = 1;
+  const cell = S/6;
+  for(let i=1;i<6;i++){
+    cx.beginPath(); cx.moveTo(i*cell,0); cx.lineTo(i*cell,S); cx.stroke();
+    cx.beginPath(); cx.moveTo(0,i*cell); cx.lineTo(S,i*cell); cx.stroke();
+  }
+  cx.restore();
+}
+
+
+function renderAvail() {
+  const row = document.getElementById('blocksRow');
+  row.innerHTML = '';
+  const sz = 40;
+  avail.forEach((block, i) => {
+    const el = mkB(block, sz, sz, 'ablock');
+    el.dataset.ai = i;
+    bindDrag(el, 'avail', i, sz);
+    row.appendChild(el);
+  });
+}
+
+// ═══ RENDER BOARD ═══
+// Block/slot sizes computed dynamically in renderBoard
+const BSIZ = 28; // fallback
+const SLOT_H = 38; // fallback
+
+function getBoardSizes() {
+  const board = document.getElementById('boardRow');
+  const app   = document.getElementById('app');
+
+  // Fixed board height: 3 rows * 56px + 2 gaps * 5px + 14px padding
+  const FIXED_BOARD_H = 3 * 56 + 2 * 5 + 14;
+  const boardW = board.clientWidth || (app.clientWidth - 20);
+
+  const innerH = FIXED_BOARD_H - 14;
+  const slotH  = Math.floor((innerH - 2 * 5) / 3); // = 56px
+  const innerW = boardW - 14;
+  const slotW  = Math.floor((innerW - 3 * 5) / 4);
+  const bsiz   = Math.max(28, Math.min(slotW - 6, slotH - 10));
+
+  return { slotH, bsiz };
+}
+
+function renderBoard() {
+  const g = document.getElementById('boardGrid');
+  g.innerHTML = '';
+  const { slotH, bsiz } = getBoardSizes();
+
+  for(let i=0; i<SLOTS; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'pslot'; slot.dataset.slot = i;
+    slot.style.height = slotH + 'px';
+
+    const inn = document.createElement('div');
+    inn.className = 'sinner';
+    inn.style.cssText = `width:100%;height:${bsiz}px;`;
+
+    if(prog[i]) {
+      const be = mkB(prog[i], bsiz, bsiz, 'pblock');
+      be.dataset.si = i;
+      bindDrag(be, 'prog', i, bsiz);
+      inn.appendChild(be);
     }
-    function getOrientationMarker(orientation) {
-      switch (orientation) {
-        case 'up': return '<path d="M 25 15 L 18 25 L 25 22 L 32 25 Z" fill="white" stroke="#CCC" stroke-width="1"/>';
-        case 'down': return '<path d="M 25 35 L 18 25 L 25 28 L 32 25 Z" fill="white" stroke="#CCC" stroke-width="1"/>';
-        case 'left': return '<path d="M 15 25 L 25 18 L 22 25 L 25 32 Z" fill="white" stroke="#CCC" stroke-width="1"/>';
-        default: return '<path d="M 35 25 L 25 18 L 28 25 L 25 32 Z" fill="white" stroke="#CCC" stroke-width="1"/>';
+    const dot = document.createElement('div'); dot.className = 'dot';
+    slot.appendChild(inn); slot.appendChild(dot);
+    g.appendChild(slot);
+  }
+}
+
+// ═══ DRAG ═══
+let dg = {active:false, block:null, src:null, si:null, hover:null};
+
+function bindDrag(el, src, idx, sz) {
+  el.addEventListener('touchstart',e=>{
+    if(running) return; e.preventDefault(); e.stopPropagation();
+    startDg(e.touches[0].clientX,e.touches[0].clientY,src,idx,sz);
+  },{passive:false});
+  el.addEventListener('touchmove', e=>{e.preventDefault();moveDg(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  el.addEventListener('touchend',  e=>{e.preventDefault();endDg(e.changedTouches[0].clientX,e.changedTouches[0].clientY);},{passive:false});
+  el.addEventListener('mousedown',e=>{
+    if(running) return; e.preventDefault();
+    startDg(e.clientX,e.clientY,src,idx,sz);
+    const mm=e=>moveDg(e.clientX,e.clientY);
+    const mu=e=>{endDg(e.clientX,e.clientY);document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    document.addEventListener('mousemove',mm);
+    document.addEventListener('mouseup',mu);
+  });
+}
+
+function startDg(cx,cy,src,idx,sz) {
+  const block = src==='avail' ? avail[idx] : prog[idx];
+  if(!block) return;
+  dg = {active:true, block, src, si:idx, hover:null};
+  const g = document.getElementById('ghost');
+  g.innerHTML=''; g.appendChild(mkB(block,sz,sz));
+  g.style.cssText=`display:block;width:${sz}px;height:${sz}px;left:${cx}px;top:${cy}px;border-radius:5px;`;
+  if(src==='avail') {
+    document.querySelectorAll('.ablock').forEach(el=>{ if(+el.dataset.ai===idx) el.style.opacity='0.3'; });
+  } else {
+    const s=document.querySelector(`.pslot[data-slot="${idx}"] .sinner`);
+    if(s) s.style.opacity='0.3';
+  }
+}
+
+function moveDg(cx,cy) {
+  if(!dg.active) return;
+  const g = document.getElementById('ghost');
+  g.style.left=cx+'px'; g.style.top=cy+'px';
+  g.style.display='none';
+  const u=document.elementFromPoint(cx,cy);
+  g.style.display='block';
+  const slot=u?.closest('.pslot');
+  if(dg.hover&&dg.hover!==slot) dg.hover.classList.remove('over');
+  if(slot){slot.classList.add('over');dg.hover=slot;} else dg.hover=null;
+}
+
+function endDg(cx,cy) {
+  if(!dg.active) return;
+  document.getElementById('ghost').style.display='none';
+  if(dg.hover) dg.hover.classList.remove('over');
+  document.querySelectorAll('.ablock,.pblock').forEach(e=>e.style.opacity='1');
+  document.querySelectorAll('.sinner').forEach(e=>e.style.opacity='1');
+  const u=document.elementFromPoint(cx,cy);
+  const slot=u?.closest('.pslot');
+  if(slot) {
+    const ti=+slot.dataset.slot;
+    if(dg.src==='avail') prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
+    else if(dg.src==='prog'&&dg.si!==ti){ const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp; }
+  } else if(dg.src==='prog') prog[dg.si]=null;
+  dg.active=false;
+  renderAvail(); renderBoard();
+}
+
+// ═══ GAME LOGIC ═══
+function hlSlot(i) {
+  document.querySelectorAll('.pslot').forEach(s=>s.classList.remove('active'));
+  document.querySelector(`.pslot[data-slot="${i}"]`)?.classList.add('active');
+}
+async function moveChar(dir) {
+  if(dir==='forward') {
+    const p={...pos};
+    if(ori==='up')        p.y=Math.max(0,p.y-1);
+    else if(ori==='down') p.y=Math.min(ROWS-1,p.y+1);
+    else if(ori==='left') p.x=Math.max(0,p.x-1);
+    else                   p.x=Math.min(COLS-1,p.x+1);
+    await animTo(p.x,p.y); await sleep(80);
+  } else {
+    const newOri = dir==='left'
+      ? {up:'left',left:'down',down:'right',right:'up'}[ori]
+      : {up:'right',right:'down',down:'left',left:'up'}[ori];
+    const deg = dir==='left' ? -90 : 90;
+    const s = document.getElementById('sprite');
+    // animate rotation
+    const anim = s.animate(
+      [{transform:'rotate(0deg)'},{transform:`rotate(${deg}deg)`}],
+      {duration: TURN_MS, easing:'cubic-bezier(0.4,0,0.2,1)', fill:'forwards'}
+    );
+    await anim.finished.catch(()=>{});
+    anim.cancel(); // reset transform so syncSprite takes over
+    ori = newOri;
+    syncSprite();
+  }
+}
+async function run() {
+  if(running||animating) return;
+  let last=-1;
+  for(let i=0;i<SLOTS;i++) if(prog[i]) last=i;
+  if(last===-1){sErr();return;}
+  running=true;
+  const btn=document.getElementById('runBtn');
+  btn.classList.add('running');
+  toast(''); sStart(); await sleep(400);
+  for(let i=0;i<=last;i++) {
+    hlSlot(i); (i===last?sEnd():sStep()); await sleep(STEP_MS);
+    if(prog[i]) {
+      await moveChar(prog[i].dir||prog[i].direction); await sleep(STEP_MS);
+      if(pos.x===GOAL.x&&pos.y===GOAL.y) {
+        await sleep(200); toast('🎉 Hai vinto!','win');
+        document.querySelectorAll('.pslot').forEach(s=>s.classList.remove('active'));
+        btn.classList.remove('running'); btn.textContent='▶'; running=false;
+        await sleep(800);
+        for(let j=0;j<SLOTS;j++) prog[j]=null;
+        renderBoard(); return;
       }
-    }
+    } else { await sleep(STEP_MS); }
+  }
+  document.querySelectorAll('.pslot').forEach(s=>s.classList.remove('active'));
+  btn.classList.remove('running'); btn.textContent='▶'; running=false;
+  await sleep(400);
+  for(let j=0;j<SLOTS;j++) prog[j]=null;
+  renderBoard();
+}
 
-    function createBlockElement(block) {
-      const blockEl = document.createElement('div');
-      blockEl.className = 'block cubetto-block';
-      blockEl.draggable = true;
-      blockEl.dataset.blockId = block.id;
-      blockEl.dataset.direction = block.direction;
-      blockEl.style.background = block.color;
-      blockEl.style.position = 'relative';
-      if (block.direction === 'forward') blockEl.style.clipPath = 'polygon(0 0, 85% 0, 100% 50%, 85% 100%, 0 100%)';
-      else if (block.direction === 'left') blockEl.style.clipPath = 'polygon(50% 0, 100% 35%, 100% 100%, 0 100%, 0 35%)';
-      else if (block.direction === 'right') blockEl.style.clipPath = 'polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%)';
-      return blockEl;
-    }
+// ═══ INIT ═══
+function init() {
+  document.getElementById('gridWrap').style.position = 'relative';
+  initGrid();
+  renderAvail();
+  renderBoard(); // initial render with fallback sizes
 
-    function renderAvailableBlocks() {
-      const container = document.getElementById('availableBlocks');
-      container.innerHTML = '';
-      availableBlocks.forEach((block, i) => {
-        const slot = document.createElement('div');
-        slot.className = 'available-slot';
-        slot.dataset.availableIndex = String(i);
-        const blockEl = createBlockElement(block);
-        blockEl.dataset.availableIndex = String(i);
-        slot.appendChild(blockEl);
-        container.appendChild(slot);
-      });
-      setupAvailableDragListeners();
-    }
+  // Pass 1: let CSS lay out everything
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    sizeGrid();           // set grid to exact square based on real bottom height
+    // Pass 2: now grid height is known, re-render board to fill remaining space
+    requestAnimationFrame(() => {
+      renderBoard();
+      drawBackground();
+      syncSprite();
+      setupSpriteDrag();
+    });
+  }));
+}
 
-    function setupAvailableDragListeners() {
-      document.querySelectorAll('.available-slot .block').forEach(blockEl => {
-        blockEl.addEventListener('dragstart', (e) => {
-          const availableIndex = Number(e.target.dataset.availableIndex);
-          draggedBlock = availableBlocks[availableIndex];
-          dragSource = 'available';
-          dragSourceIndex = availableIndex;
-          e.target.style.opacity = '0.5';
-        });
-        blockEl.addEventListener('dragend', (e) => { e.target.style.opacity = '1'; });
-      });
-    }
+init();
 
-    function renderProgramSequence() {
-      document.querySelectorAll('.program-slot').forEach((slot, index) => {
-        slot.innerHTML = '';
-        const block = programBlocks[index];
-        if (!block) return;
-        const blockEl = createBlockElement(block);
-        slot.appendChild(blockEl);
-        blockEl.addEventListener('dragstart', (e) => {
-          draggedBlock = programBlocks[index];
-          dragSource = 'program';
-          dragSourceIndex = index;
-          e.target.style.opacity = '0.5';
-        });
-        blockEl.addEventListener('dragend', (e) => {
-          e.target.style.opacity = '1';
-          if (draggedBlock && dragSource === 'program') {
-            programBlocks[dragSourceIndex] = null;
-            draggedBlock = null; dragSource = null; dragSourceIndex = null;
-            renderProgramSequence();
-          }
-        });
-      });
-    }
+window.addEventListener('resize', () => {
+  renderAvail();
+  requestAnimationFrame(() => {
+    sizeGrid();
+    renderBoard();
+    drawBackground();
+    syncSprite();
+  });
+});
 
-    function setupProgramDropZones() {
-      document.querySelectorAll('.program-slot').forEach((slot, index) => {
-        slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
-        slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
-        slot.addEventListener('drop', (e) => {
-          e.preventDefault(); slot.classList.remove('drag-over');
-          if (!draggedBlock) return;
-          if (dragSource === 'available') {
-            programBlocks[index] = { id: `${draggedBlock.direction}-${blockIdCounter++}`, direction: draggedBlock.direction, label: draggedBlock.label, color: draggedBlock.color };
-            availableBlocks[dragSourceIndex] = { id: `${draggedBlock.direction}-${blockIdCounter++}`, ...blockPool[draggedBlock.direction] };
-          } else if (dragSource === 'program') {
-            const temp = programBlocks[index];
-            programBlocks[index] = draggedBlock;
-            programBlocks[dragSourceIndex] = temp;
-          }
-          draggedBlock = null; dragSource = null; dragSourceIndex = null;
-          renderAvailableBlocks(); renderProgramSequence();
-        });
-      });
-    }
 
-    function highlightSlot(index) {
-      document.querySelectorAll('.program-slot').forEach(s => s.classList.remove('active'));
-      const slots = document.querySelectorAll('.program-slot');
-      if (slots[index]) slots[index].classList.add('active');
-    }
-
-    async function moveCharacter(direction) {
-      if (direction === 'forward') {
-        const newPos = { ...characterPos };
-        if (characterOrientation === 'up') newPos.y = Math.max(0, newPos.y - 1);
-        else if (characterOrientation === 'down') newPos.y = Math.min(GRID_SIZE - 1, newPos.y + 1);
-        else if (characterOrientation === 'left') newPos.x = Math.max(0, newPos.x - 1);
-        else newPos.x = Math.min(GRID_SIZE - 1, newPos.x + 1);
-        await animateCharacterTo(newPos.x, newPos.y, MOVE_DURATION_MS);
-        await sleep(120);
-      } else if (direction === 'left') {
-        const rotations = { up: 'left', left: 'down', down: 'right', right: 'up' };
-        characterOrientation = rotations[characterOrientation];
-        renderCharacterSprite();
-        await sleep(TURN_PAUSE_MS);
-      } else if (direction === 'right') {
-        const rotations = { up: 'right', right: 'down', down: 'left', left: 'up' };
-        characterOrientation = rotations[characterOrientation];
-        renderCharacterSprite();
-        await sleep(TURN_PAUSE_MS);
-      }
-    }
-
-    async function runProgram() {
-      if (isRunning || isCharacterAnimating) return;
-      isRunning = true;
-      const button = document.getElementById('runButton');
-      button.classList.add('running');
-      showMessage('');
-      beep(880, 0.10, 0.18);
-      await sleep(350);
-
-      for (let i = 0; i < 9; i++) {
-        highlightSlot(i);
-        beep(660, 0.06, 0.14);
-        await sleep(STEP_PAUSE_MS);
-
-        if (programBlocks[i] !== null) {
-          await moveCharacter(programBlocks[i].direction);
-          await sleep(STEP_PAUSE_MS);
-
-          if (characterPos.x === goalPos.x && characterPos.y === goalPos.y) {
-            await sleep(250);
-            showMessage('🎉 COMPLIMENTI! Hai vinto!', 'success');
-            document.querySelectorAll('.program-slot').forEach(s => s.classList.remove('active'));
-            button.classList.remove('running');
-            isRunning = false;
-            return;
-          }
-        } else {
-          await sleep(STEP_PAUSE_MS);
-        }
-      }
-      document.querySelectorAll('.program-slot').forEach(s => s.classList.remove('active'));
-      button.classList.remove('running');
-      isRunning = false;
-    }
-
-    initGrid();
-    renderAvailableBlocks();
-    renderProgramSequence();
-    setupProgramDropZones();
-    window.addEventListener('resize', () => syncCharacterSprite());
-  </script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js');
-      });
-    }
-  </script>
+</script>
+<script>
+  if('serviceWorker' in navigator)
+    window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+</script>
 </body>
 </html>
