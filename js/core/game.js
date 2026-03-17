@@ -45,6 +45,37 @@ const DECOR_CLASSES = ['decor-grass', 'decor-flower', 'decor-stone', 'decor-spac
 
 // ═══ UTILS ═══
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let fxAc;
+const FX = () => {
+  if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
+  if (fxAc.state === 'suspended') fxAc.resume();
+  return fxAc;
+};
+function playLevelTransitionSfx() {
+  try {
+    const c = FX();
+    const notes = [740, 988, 1319];
+    notes.forEach((f, i) => {
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f, c.currentTime + i * 0.09);
+      g.gain.setValueAtTime(0.0001, c.currentTime + i * 0.09);
+      g.gain.exponentialRampToValueAtTime(0.08, c.currentTime + i * 0.09 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + i * 0.09 + 0.22);
+      o.connect(g); g.connect(c.destination);
+      o.start(c.currentTime + i * 0.09);
+      o.stop(c.currentTime + i * 0.09 + 0.25);
+    });
+  } catch (_) {}
+}
+async function fadeTransition(ms = 560) {
+  const fade = document.getElementById('levelFade');
+  if (!fade) { await sleep(ms); return; }
+  fade.classList.add('show');
+  await sleep(ms);
+  fade.classList.remove('show');
+}
 function syncViewportHeight() {
   const h = window.visualViewport ? Math.round(window.visualViewport.height) : window.innerHeight;
   document.documentElement.style.setProperty('--app-vh', `${h}px`);
@@ -682,6 +713,22 @@ async function run() {
   btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.5" fill="#00aa50"/></svg>'; running=false;
 
   if(won) {
+    if (currentLevel === 'level1') {
+      playLevelTransitionSfx();
+      await fadeTransition(620);
+      setLevel('level2');
+      pos = {...START};
+      ori = 'right';
+      for(let j=0;j<SLOTS;j++) prog[j]=null;
+      for(let j=0;j<FSLOTS;j++) fnProg[j]=null;
+      initGrid();
+      renderAvail();
+      renderBoard(); renderFn();
+      drawBackground();
+      syncSprite();
+      moveGoal();
+      return;
+    }
     await sleep(1200);
     for(let j=0;j<SLOTS;j++) prog[j]=null;
     for(let j=0;j<FSLOTS;j++) fnProg[j]=null;
@@ -696,7 +743,8 @@ async function run() {
 // ═══ INIT ═══
 function init() {
   syncViewportHeight();
-  setLevel(currentLevel, { persist: false });
+  currentLevel = 'level1';
+  setLevel('level1', { persist: false });
   document.getElementById('gridWrap').style.position = 'relative';
   initGrid();
   renderAvail();
@@ -718,29 +766,16 @@ function init() {
 init();
 
 // ── Splash dismiss ──
-let splashLevelApplied = false;
-function enterLevel2AfterSplash() {
-  if (splashLevelApplied) return;
-  splashLevelApplied = true;
-  if (setLevel('level2')) {
-    initGrid();
-    drawBackground();
-    syncSprite();
-  }
-}
-
 setTimeout(() => {
   const splash = document.getElementById('splash');
   splash.classList.add('hide');
   setTimeout(() => splash.remove(), 500);
-  enterLevel2AfterSplash();
 }, 2200);
 
 // tap to skip
 document.getElementById('splash').addEventListener('pointerdown', () => {
   const splash = document.getElementById('splash');
   if(splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500); }
-  enterLevel2AfterSplash();
 });
 
 window.addEventListener('resize', () => {
