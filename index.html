@@ -199,9 +199,8 @@
       border: 2px solid var(--panel-edge);
       border-radius: 16px;
       padding: 10px 14px;
-      display: flex;
-      justify-content: space-evenly;
-      align-items: center;
+      position: relative;
+      min-height: 72px;
       box-shadow: 0 2px 0 #cdc2ab, 0 7px 14px rgba(95, 78, 52, 0.12), inset 0 1px 0 rgba(255,255,255,0.72);
     }
     .ablock {
@@ -708,29 +707,24 @@ function mkB(block, w, h, cls='') {
   svg.setAttribute('viewBox','0 0 40 32');
   svg.setAttribute('width', w); svg.setAttribute('height', h);
 
-  const shape = {
-    forward:  `M4,8 Q4,4 8,4 L32,4 Q38,4 38,10 L38,22 Q38,28 32,28 L8,28 Q4,28 4,24 Z`,
-    left:     `M20,4 L36,4 Q40,4 40,8 L40,28 L4,28 L4,8 Q4,4 8,4 Z`,
-    right:    `M4,4 L36,4 Q40,4 40,8 L40,28 L4,28 L4,8 Q4,4 4,4 Z`,
-    function: `M4,8 Q4,4 8,4 L32,4 Q36,4 36,8 L36,24 Q36,28 32,28 L8,28 Q4,28 4,24 Z`,
-  };
+  const blockShape = `M4,8 Q4,4 8,4 L32,4 Q36,4 36,8 L36,24 Q36,28 32,28 L8,28 Q4,28 4,24 Z`;
 
   // ombra
   const shadow = document.createElementNS('http://www.w3.org/2000/svg','path');
-  shadow.setAttribute('d', shape[dir] || shape.forward);
+  shadow.setAttribute('d', blockShape);
   shadow.setAttribute('fill', dk);
   shadow.setAttribute('transform','translate(0,3)');
   svg.appendChild(shadow);
 
   // corpo
   const body = document.createElementNS('http://www.w3.org/2000/svg','path');
-  body.setAttribute('d', shape[dir] || shape.forward);
+  body.setAttribute('d', blockShape);
   body.setAttribute('fill', c);
   svg.appendChild(body);
 
   // highlight
   const hi = document.createElementNS('http://www.w3.org/2000/svg','path');
-  hi.setAttribute('d', shape[dir] || shape.forward);
+  hi.setAttribute('d', blockShape);
   hi.setAttribute('fill', lt);
   hi.setAttribute('opacity','0.35');
   hi.setAttribute('clip-path','inset(0 0 55% 0)');
@@ -1041,11 +1035,40 @@ function renderAvail() {
   const row = document.getElementById('blocksRow');
   row.innerHTML = '';
   const sz = 52;
+
   avail.forEach((block, i) => {
     const el = mkB(block, sz, sz, 'ablock');
     el.dataset.ai = i;
+    el.style.position = 'absolute';
+    el.style.top = '50%';
+    el.style.transform = 'translate(-50%, -50%)';
     bindDrag(el, 'avail', i, sz);
     row.appendChild(el);
+  });
+  alignAvailBlocksToSlots();
+}
+
+function alignAvailBlocksToSlots() {
+  const row = document.getElementById('blocksRow');
+  if (!row) return;
+  const blocks = Array.from(row.querySelectorAll('.ablock'));
+  if (blocks.length !== 4) return;
+
+  const firstRowSlots = Array.from(document.querySelectorAll('#boardSlots .board-row:first-child .pslot'));
+  const rowRect = row.getBoundingClientRect();
+
+  if (firstRowSlots.length !== 4) {
+    // fallback finche il board non e pronto
+    blocks.forEach((b, i) => {
+      b.style.left = `${((i + 0.5) / 4) * rowRect.width}px`;
+    });
+    return;
+  }
+
+  firstRowSlots.forEach((slot, i) => {
+    const sr = slot.getBoundingClientRect();
+    const centerX = sr.left + sr.width / 2 - rowRect.left;
+    blocks[i].style.left = `${centerX}px`;
   });
 }
 
@@ -1130,6 +1153,7 @@ function renderBoard() {
   });
 
   g.appendChild(slotsWrap);
+  alignAvailBlocksToSlots();
 
   // Traccia completa: riga1 → connettore → riga2
   requestAnimationFrame(() => {
@@ -1192,6 +1216,7 @@ function renderBoard() {
     sep.setAttribute('stroke-width', '1.5');
     sep.setAttribute('stroke-dasharray', '5 4');
     svg.appendChild(sep);
+    alignAvailBlocksToSlots();
   });
 }
 
