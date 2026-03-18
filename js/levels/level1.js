@@ -170,6 +170,102 @@
   window.BOKS_LEVELS.level1 = {
     id: 'level1',
     name: 'Prato Base',
+    tutorialSteps: [
+      {
+        start: { x: 2, y: 3 },
+        goal: { x: 3, y: 3 },
+        startOri: 'right',
+        mainSlots: 1,
+        availableBlocks: ['forward']
+      },
+      {
+        start: { x: 1, y: 3 },
+        goal: { x: 3, y: 3 },
+        startOri: 'right',
+        mainSlots: 2,
+        availableBlocks: ['forward']
+      },
+      {
+        start: { x: 1, y: 4 },
+        goal: { x: 2, y: 3 },
+        startOri: 'up',
+        mainSlots: 3,
+        availableBlocks: ['forward', 'right']
+      },
+      {
+        start: { x: 4, y: 4 },
+        goal: { x: 3, y: 3 },
+        startOri: 'up',
+        mainSlots: 3,
+        availableBlocks: ['forward', 'left']
+      },
+      {
+        start: { x: 1, y: 4 },
+        goal: { x: 2, y: 3 },
+        startOri: 'up',
+        mainSlots: 4,
+        availableBlocks: ['forward', 'left', 'right'],
+        obstacles: [{ x: 1, y: 3 }]
+      },
+      {
+        start: { x: 1, y: 3 },
+        goal: { x: 3, y: 3 },
+        startOri: 'right',
+        mainSlots: 1,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'function']
+      },
+      {
+        start: { x: 1, y: 3 },
+        goal: { x: 3, y: 3 },
+        startOri: 'up',
+        mainSlots: 2,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'right', 'function']
+      },
+      {
+        start: { x: 1, y: 3 },
+        goal: { x: 5, y: 3 },
+        startOri: 'right',
+        mainSlots: 2,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'function']
+      },
+      {
+        start: { x: 1, y: 4 },
+        goal: { x: 2, y: 3 },
+        startOri: 'up',
+        mainSlots: 3,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'left', 'right', 'function'],
+        obstacles: [{ x: 1, y: 3 }, { x: 3, y: 4 }]
+      },
+      {
+        start: { x: 1, y: 4 },
+        goal: { x: 3, y: 1 },
+        startOri: 'up',
+        mainSlots: 3,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'left', 'right', 'function']
+      },
+      {
+        start: { x: 4, y: 4 },
+        goal: { x: 1, y: 1 },
+        startOri: 'up',
+        mainSlots: 3,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'left', 'right', 'function']
+      },
+      {
+        start: { x: 4, y: 4 },
+        goal: { x: 0, y: 3 },
+        startOri: 'up',
+        mainSlots: 4,
+        fnSlots: 3,
+        availableBlocks: ['forward', 'left', 'right', 'function'],
+        obstacles: [{ x: 3, y: 3 }]
+      }
+    ],
     sceneVars: {
       '--scene-body-bg': 'radial-gradient(140% 95% at 50% 0%, #f3ecdd 0%, #ece3d1 48%, #e8dfcc 100%)',
       '--scene-grid-wrap-bg': '#d7efba',

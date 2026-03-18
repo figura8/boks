@@ -1,7 +1,7 @@
 // ═══ CONSTANTS ═══
 const COLS = 6, ROWS = 6, SLOTS = 8, FSLOTS = 4;
 let GOAL = {x:5,y:5};
-const START = {x:2,y:2};
+let START = {x:2,y:2};
 
 function moveGoal() {
   const old = document.querySelector('.goal-cell');
@@ -38,15 +38,23 @@ const POOL = {
 // ═══ STATE ═══
 let pos = {...START};
 let running = false, animating = false, idN = 0;
-const avail = ['forward','right','left','function'].map((d,i) => ({id:`${d}${i}`, ...POOL[d]}));
+const avail = [];
 const prog  = Array(SLOTS).fill(null);
 const fnProg = Array(FSLOTS).fill(null);
 const DECOR_CLASSES = ['decor-grass', 'decor-flower', 'decor-stone', 'decor-space-dust', 'decor-space-crater'];
+let tutorialStepIndex = 0;
+let blockedCells = new Set();
+let activeMainSlots = SLOTS;
+let activeFnSlots = FSLOTS;
+let fnUnlockHintActive = false;
 let gameStarted = false;
+let debugVisible = true;
 document.body?.classList.add('prestart');
+document.body?.classList.add('debug-visible');
 
 // ═══ UTILS ═══
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 let fxAc;
 let bgmBus;
 let bgmTicker = null;
@@ -366,6 +374,10 @@ function initGrid() {
     const c = document.createElement('div');
     c.className = 'cell'; c.dataset.cx = x; c.dataset.cy = y;
     if (lv?.decorateCell) lv.decorateCell(c, x, y);
+    if (isBlockedCell(x, y)) {
+      c.classList.remove(...DECOR_CLASSES);
+      c.classList.add('obstacle-cell');
+    }
     if(x===GOAL.x && y===GOAL.y) {
       c.classList.remove(...DECOR_CLASSES);
       c.classList.add('goal-cell');
@@ -419,8 +431,16 @@ async function animTo(tx, ty) {
   if(animating) return;
   animating = true;
   const s = document.getElementById('sprite');
-  const fr = cellPos(pos.x,pos.y), to = cellPos(tx,ty);
-  if(!fr||!to) { pos={x:tx,y:ty}; syncSprite(); animating=false; return; }
+  let fr = cellPos(pos.x, pos.y), to = cellPos(tx, ty);
+  if(!fr || !to) {
+    sizeGrid();
+    drawBackground();
+    syncSprite();
+    await sleep(16);
+    fr = cellPos(pos.x, pos.y);
+    to = cellPos(tx, ty);
+  }
+  if(!fr || !to) { pos={x:tx,y:ty}; syncSprite(); animating=false; return; }
   s.classList.add('moving');
   const a = s.animate(
     [{left:fr.l+'px',top:fr.t+'px'},{left:to.l+'px',top:to.t+'px'}],
@@ -428,6 +448,7 @@ async function animTo(tx, ty) {
   );
   await a.finished.catch(()=>{});
   s.style.left=to.l+'px'; s.style.top=to.t+'px';
+  a.cancel();
   s.classList.remove('moving');
   pos={x:tx,y:ty}; animating=false;
 }
@@ -502,6 +523,124 @@ function setLevel(levelId, { persist = true } = {}) {
   currentLevel = levelId;
   applyLevelSceneVars();
   if (persist) localStorage.setItem(LEVEL_STORAGE_KEY, levelId);
+  updateDebugBadge();
+  return true;
+}
+function ensureDebugBadge() {
+  let badge = document.getElementById('debugBadge');
+  if (badge) return badge;
+  badge = document.createElement('div');
+  badge.id = 'debugBadge';
+  document.body.appendChild(badge);
+  return badge;
+}
+function updateDebugBadge() {
+  const badge = ensureDebugBadge();
+  const lv = getLevel();
+  const steps = getTutorialSteps();
+  if (steps.length) {
+    badge.textContent = `${lv?.name || currentLevel} | Step ${tutorialStepIndex + 1}/${steps.length}`;
+    return;
+  }
+  badge.textContent = `${lv?.name || currentLevel} | Single level`;
+}
+function toggleDebugBadge() {
+  debugVisible = !debugVisible;
+  document.body.classList.toggle('debug-visible', debugVisible);
+  if (debugVisible) updateDebugBadge();
+}
+function debugStepJump(delta) {
+  if (running || animating) return;
+  if (currentLevel !== 'level1') return;
+  const steps = getTutorialSteps();
+  if (!steps.length) return;
+  applyTutorialStep(tutorialStepIndex + delta);
+}
+
+function cellKey(x, y) {
+  return `${x},${y}`;
+}
+function isBlockedCell(x, y) {
+  return blockedCells.has(cellKey(x, y));
+}
+function setBlockedCells(obstacles = []) {
+  blockedCells = new Set(obstacles.map(o => cellKey(o.x, o.y)));
+}
+function resetPrograms() {
+  for (let j = 0; j < SLOTS; j++) prog[j] = null;
+  for (let j = 0; j < FSLOTS; j++) fnProg[j] = null;
+}
+function setAvailableBlocks(blocks = ['forward', 'right', 'left']) {
+  avail.length = 0;
+  blocks.forEach((dir, i) => {
+    if (!POOL[dir]) return;
+    avail.push({ id: `${dir}${idN + i}`, ...POOL[dir] });
+  });
+  idN += blocks.length;
+}
+function getTutorialSteps() {
+  const lv = getLevel();
+  return lv?.tutorialSteps || [];
+}
+function getCurrentTutorialStep() {
+  const steps = getTutorialSteps();
+  if (!steps.length) return null;
+  return steps[tutorialStepIndex] || null;
+}
+function isFunctionTutorialStep() {
+  const step = getCurrentTutorialStep();
+  if (!step) return false;
+  const blocks = step.availableBlocks || [];
+  return (step.fnSlots || 0) > 0 && blocks.includes('function');
+}
+function resetPlayerToStepStart() {
+  const step = getCurrentTutorialStep();
+  pos = { ...START };
+  ori = step?.startOri || 'right';
+  const sprite = document.getElementById('sprite');
+  if (sprite) {
+    sprite.getAnimations().forEach(a => a.cancel());
+    sprite.classList.remove('moving');
+  }
+  syncSprite();
+}
+function applyTutorialStep(idx = 0) {
+  const steps = getTutorialSteps();
+  if (!steps.length) return false;
+  tutorialStepIndex = ((idx % steps.length) + steps.length) % steps.length;
+  const step = steps[tutorialStepIndex];
+  activeMainSlots = Math.max(1, Math.min(SLOTS, step.mainSlots || SLOTS));
+  activeFnSlots = Math.max(0, Math.min(FSLOTS, step.fnSlots ?? 0));
+  fnUnlockHintActive = false;
+  START = { ...(step.start || { x: 2, y: 2 }) };
+  GOAL = { ...(step.goal || { x: 5, y: 5 }) };
+  pos = { ...START };
+  animating = false;
+  ori = step.startOri || 'right';
+  setBlockedCells(step.obstacles || []);
+  setAvailableBlocks(step.availableBlocks || ['forward', 'right', 'left']);
+  resetPrograms();
+  initGrid();
+  renderAvail();
+  renderBoard();
+  renderFn();
+  drawBackground();
+  const sprite = document.getElementById('sprite');
+  if (sprite) {
+    sprite.getAnimations().forEach(a => a.cancel());
+    sprite.classList.remove('moving');
+  }
+  syncSprite();
+  requestAnimationFrame(() => {
+    sizeGrid();
+    drawBackground();
+    if (sprite) {
+      sprite.getAnimations().forEach(a => a.cancel());
+      sprite.classList.remove('moving');
+    }
+    syncSprite();
+  });
+  updateDebugBadge();
   return true;
 }
 
@@ -517,6 +656,17 @@ function renderAvail() {
 
   avail.forEach((block, i) => {
     const el = mkB(block, sz, sz, 'ablock');
+    if (currentLevel === 'level1' && tutorialStepIndex === 0 && block.dir === 'forward') {
+      el.classList.add('tutorial-focus');
+    }
+    if (currentLevel === 'level1' && isFunctionTutorialStep()) {
+      if (!fnUnlockHintActive && block.dir === 'forward') {
+        el.classList.add('tutorial-focus');
+      }
+      if (fnUnlockHintActive && block.dir === 'function') {
+        el.classList.add('tutorial-focus', 'function-hint');
+      }
+    }
     el.dataset.ai = i;
     el.style.position = 'absolute';
     el.style.top = '50%';
@@ -531,20 +681,26 @@ function alignAvailBlocksToSlots() {
   const row = document.getElementById('blocksRow');
   if (!row) return;
   const blocks = Array.from(row.querySelectorAll('.ablock'));
-  if (blocks.length !== 4) return;
-
-  const firstRowSlots = Array.from(document.querySelectorAll('#boardSlots .board-row:first-child .pslot'));
+  if (!blocks.length) return;
   const rowRect = row.getBoundingClientRect();
 
-  if (firstRowSlots.length !== 4) {
-    // fallback finche il board non e pronto
-    blocks.forEach((b, i) => {
-      b.style.left = `${((i + 0.5) / 4) * rowRect.width}px`;
-    });
+  if (blocks.length === 1) {
+    blocks[0].style.left = `${rowRect.width / 2}px`;
     return;
   }
 
-  firstRowSlots.forEach((slot, i) => {
+  const firstRowSlots = Array.from(document.querySelectorAll('#boardSlots .board-row:first-child .pslot:not(.locked)'));
+
+  if (firstRowSlots.length < blocks.length) {
+    // fallback finche il board non e pronto
+    blocks.forEach((b, i) => {
+      b.style.left = `${((i + 0.5) / blocks.length) * rowRect.width}px`;
+    });
+    return;
+  }
+  const startIdx = Math.max(0, Math.floor((firstRowSlots.length - blocks.length) / 2));
+  blocks.forEach((_, i) => {
+    const slot = firstRowSlots[startIdx + i];
     const sr = slot.getBoundingClientRect();
     const centerX = sr.left + sr.width / 2 - rowRect.left;
     blocks[i].style.left = `${centerX}px`;
@@ -609,6 +765,8 @@ function renderBoard() {
       const slot = document.createElement('div');
       slot.className = 'pslot';
       slot.dataset.slot = i; slot.dataset.zone = zone;
+      if (zone === 'main' && i >= activeMainSlots) slot.classList.add('locked');
+      if (zone === 'fn' && i >= activeFnSlots) slot.classList.add('locked');
       slot.style.height = slotH + 'px';
       const wellSize = Math.max(28, Math.round(bsiz * 0.96));
       const blockSize = Math.max(30, Math.round(wellSize * 1.06));
@@ -810,6 +968,16 @@ function endDg(cx,cy) {
   if(slot) {
     const ti = +slot.dataset.slot;
     const zone = slot.dataset.zone;
+    if(zone === 'main' && ti >= activeMainSlots) {
+      dg.active=false;
+      renderAvail(); renderBoard(); renderFn();
+      return;
+    }
+    if(zone === 'fn' && ti >= activeFnSlots) {
+      dg.active=false;
+      renderAvail(); renderBoard(); renderFn();
+      return;
+    }
     if(zone === 'fn') {
       // blocchi function non possono stare nella fn zone
       if(dg.block.dir === 'function') { dg.active=false; renderAvail(); renderBoard(); renderFn(); return; }
@@ -824,6 +992,10 @@ function endDg(cx,cy) {
   } else {
     if(dg.src==='prog') prog[dg.si]=null;
     else if(dg.src==='fn') fnProg[dg.si]=null;
+  }
+  if (isFunctionTutorialStep() && !fnUnlockHintActive) {
+    const firstFnForwardPlaced = fnProg.some(b => (b?.dir || b?.direction) === 'forward');
+    if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
   dg.active=false;
   renderAvail(); renderBoard(); renderFn();
@@ -845,6 +1017,7 @@ function hlSlot(i, zone='main') {
   // no SVG track to redraw
 }
 async function moveChar(dir) {
+  syncSprite();
   if(dir==='forward') {
     playStepSfx();
     const p={...pos};
@@ -852,6 +1025,10 @@ async function moveChar(dir) {
     else if(ori==='down') p.y=Math.min(ROWS-1,p.y+1);
     else if(ori==='left') p.x=Math.max(0,p.x-1);
     else                   p.x=Math.min(COLS-1,p.x+1);
+    if (isBlockedCell(p.x, p.y)) {
+      await sleep(120);
+      return;
+    }
     await animTo(p.x,p.y); await sleep(80);
   } else {
     playTurnSfx(dir);
@@ -874,8 +1051,13 @@ async function moveChar(dir) {
 async function run() {
   if(!gameStarted || running || animating) return;
   requestAppFullscreen();
+  sizeGrid();
+  drawBackground();
+  syncSprite();
+  await nextFrame();
+  syncSprite();
   let last=-1;
-  for(let i=0;i<SLOTS;i++) if(prog[i]) last=i;
+  for(let i=0;i<activeMainSlots;i++) if(prog[i]) last=i;
   if(last===-1){return;}
   running=true;
   playRunPressSfx();
@@ -913,31 +1095,33 @@ async function run() {
   document.querySelectorAll('.pslot[data-zone="main"]').forEach(s=>s.classList.remove('active','done'));
   document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
   btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12 L12 7.5 A4.5 4.5 0 0 1 16.5 12 Z" fill="#2B8FD4"/><path d="M12 12 L16.5 12 A4.5 4.5 0 0 1 12 16.5 Z" fill="#FFD31A"/><path d="M12 12 L12 16.5 A4.5 4.5 0 0 1 7.5 12 Z" fill="#FF3B3B"/><path d="M12 12 L7.5 12 A4.5 4.5 0 0 1 12 7.5 Z" fill="#3F9A62"/></svg>'; running=false;
+  resetPrograms();
 
   if(won) {
     if (currentLevel === 'level1') {
       playLevelTransitionSfx();
       await fadeTransition(620);
-      setLevel('level2');
-      pos = {...START};
-      ori = 'right';
-      for(let j=0;j<SLOTS;j++) prog[j]=null;
-      for(let j=0;j<FSLOTS;j++) fnProg[j]=null;
-      initGrid();
-      renderAvail();
-      renderBoard(); renderFn();
-      drawBackground();
-      syncSprite();
-      moveGoal();
+      const steps = getTutorialSteps();
+      if (steps.length) {
+        applyTutorialStep((tutorialStepIndex + 1) % steps.length);
+      } else {
+        resetPrograms();
+        initGrid();
+        renderAvail();
+        renderBoard(); renderFn();
+        drawBackground();
+        syncSprite();
+        moveGoal();
+      }
       return;
     }
     await sleep(1200);
-    for(let j=0;j<SLOTS;j++) prog[j]=null;
-    for(let j=0;j<FSLOTS;j++) fnProg[j]=null;
+    resetPrograms();
     renderBoard(); renderFn();
     moveGoal();
   } else {
     await sleep(400);
+    resetPlayerToStepStart();
     renderBoard(); renderFn();
   }
 }
@@ -948,10 +1132,15 @@ function init() {
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
   document.getElementById('gridWrap').style.position = 'relative';
-  initGrid();
-  renderAvail();
-  renderBoard();
-  renderFn();
+  if (!applyTutorialStep(0)) {
+    activeMainSlots = SLOTS;
+    activeFnSlots = FSLOTS;
+    setAvailableBlocks(['forward', 'right', 'left', 'function']);
+    initGrid();
+    renderAvail();
+    renderBoard();
+    renderFn();
+  }
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
     sizeGrid();
@@ -963,6 +1152,7 @@ function init() {
       setupSpriteDrag();
     });
   }));
+  updateDebugBadge();
 }
 
 init();
@@ -999,6 +1189,20 @@ setTimeout(dismissSplash, 2200);
 // tap to skip
 document.getElementById('splash')?.addEventListener('pointerdown', dismissSplash);
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
+document.addEventListener('keydown', e => {
+  const key = (e.key || '').toLowerCase();
+  if (key === 'l') {
+    toggleDebugBadge();
+    return;
+  }
+  if (e.key === 'ArrowRight') {
+    debugStepJump(1);
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    debugStepJump(-1);
+  }
+});
 
 window.addEventListener('resize', () => {
   syncViewportHeight();

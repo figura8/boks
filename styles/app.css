@@ -120,6 +120,28 @@
       border-color: var(--cell-hi-edge);
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), 0 0 0 1px var(--cell-hi-ring);
     }
+    .cell.obstacle-cell {
+      background:
+        linear-gradient(180deg, rgba(205,184,148,0.95) 0%, rgba(181,156,116,0.96) 100%);
+      border-color: rgba(133,104,67,0.74);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.45),
+        inset 0 -1px 0 rgba(100,76,46,0.45);
+    }
+    .cell.obstacle-cell::before {
+      content: '';
+      position: absolute;
+      inset: 20% 12%;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(125,95,57,0.4) 0 2px,
+          transparent 2px 10px
+        );
+      border-radius: 5px;
+      opacity: 0.6;
+      pointer-events: none;
+    }
     .cell.decor-grass::before {
       content: '';
       position: absolute;
@@ -216,6 +238,41 @@
     .ablock:active {
       transform: translateY(1px) scale(0.96);
       filter: drop-shadow(0 2px 0 rgba(96, 75, 40, 0.28)) drop-shadow(0 4px 7px rgba(0,0,0,0.12));
+    }
+    .ablock.tutorial-focus {
+      animation: tutorialGlow 1.05s ease-in-out infinite;
+      z-index: 2;
+    }
+    .ablock.tutorial-focus.function-hint {
+      animation-name: tutorialGlowFunction;
+    }
+    @keyframes tutorialGlow {
+      0%, 100% {
+        filter:
+          drop-shadow(0 3px 0 rgba(96, 75, 40, 0.3))
+          drop-shadow(0 6px 8px rgba(0,0,0,0.13))
+          drop-shadow(0 0 0 rgba(255, 240, 120, 0));
+      }
+      50% {
+        filter:
+          drop-shadow(0 3px 0 rgba(96, 75, 40, 0.3))
+          drop-shadow(0 6px 8px rgba(0,0,0,0.16))
+          drop-shadow(0 0 14px rgba(255, 234, 86, 0.95));
+      }
+    }
+    @keyframes tutorialGlowFunction {
+      0%, 100% {
+        filter:
+          drop-shadow(0 3px 0 rgba(96, 75, 40, 0.3))
+          drop-shadow(0 6px 8px rgba(0,0,0,0.13))
+          drop-shadow(0 0 0 rgba(143, 209, 255, 0));
+      }
+      50% {
+        filter:
+          drop-shadow(0 3px 0 rgba(96, 75, 40, 0.3))
+          drop-shadow(0 6px 8px rgba(0,0,0,0.16))
+          drop-shadow(0 0 14px rgba(143, 209, 255, 0.95));
+      }
     }
 
     /* Program board */
@@ -316,6 +373,14 @@
         inset 0 -1px 1px rgba(255,255,255,0.22),
         0 0 0 1px rgba(152,110,212,0.42);
     }
+    .pslot.locked {
+      opacity: 0.34;
+      filter: saturate(0.55);
+      pointer-events: none;
+    }
+    .pslot.locked::before {
+      opacity: 0.38;
+    }
     .pslot.done    { background: #d5bb93; }
     .pslot.active  {
       background: #c6e3ff;
@@ -415,6 +480,29 @@
       transition: opacity .55s ease;
     }
     #levelFade.show { opacity: 0.58; }
+
+    #debugBadge {
+      position: fixed;
+      top: calc(8px + var(--safe-top));
+      left: 10px;
+      z-index: 12000;
+      display: none;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(95, 78, 52, 0.35);
+      background: rgba(255, 250, 236, 0.92);
+      color: #5f4e34;
+      font-family: 'Fredoka', system-ui, sans-serif;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    body.debug-visible #debugBadge {
+      display: block;
+    }
 
     #rotateNotice {
       position: fixed;
