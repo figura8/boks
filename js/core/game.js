@@ -42,15 +42,136 @@ const avail = ['forward','right','left','function'].map((d,i) => ({id:`${d}${i}`
 const prog  = Array(SLOTS).fill(null);
 const fnProg = Array(FSLOTS).fill(null);
 const DECOR_CLASSES = ['decor-grass', 'decor-flower', 'decor-stone', 'decor-space-dust', 'decor-space-crater'];
+let gameStarted = false;
+document.body?.classList.add('prestart');
 
 // ═══ UTILS ═══
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let fxAc;
+let bgmBus;
+let bgmTicker = null;
+let bgmStarted = false;
+let bgmStep = 0;
+let bgmNextNoteTime = 0;
+const BGM_TARGET_GAIN = 0.02;
 const FX = () => {
   if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
   if (fxAc.state === 'suspended') fxAc.resume();
   return fxAc;
 };
+const BGM_TEMPO = 104;
+const BGM_STEP = (60 / BGM_TEMPO) / 2;
+const BGM_CHORDS = [
+  [57, 64, 69, 72], // A minor
+  [53, 60, 65, 69], // F major
+  [55, 62, 67, 71], // G major
+  [52, 59, 64, 67]  // E minor
+];
+const BGM_ARP = [0, 1, 2, 1, 3, 2, 1, 2];
+const midiToFreq = midi => 440 * Math.pow(2, (midi - 69) / 12);
+function getBgmBus() {
+  if (bgmBus) return bgmBus;
+  const c = FX();
+  const comp = c.createDynamicsCompressor();
+  comp.threshold.value = -30;
+  comp.knee.value = 8;
+  comp.ratio.value = 3;
+  comp.attack.value = 0.006;
+  comp.release.value = 0.18;
+  bgmBus = c.createGain();
+  bgmBus.gain.value = 0.0001;
+  bgmBus.connect(comp);
+  comp.connect(c.destination);
+  return bgmBus;
+}
+function fadeInPizzicatoBgm(ms = 2200) {
+  const c = FX();
+  const bus = getBgmBus();
+  const t = c.currentTime;
+  const now = Math.max(0.0001, bus.gain.value);
+  bus.gain.cancelScheduledValues(t);
+  bus.gain.setValueAtTime(now, t);
+  bus.gain.exponentialRampToValueAtTime(BGM_TARGET_GAIN, t + (ms / 1000));
+}
+function playPizzicatoNote(time, midi, accent = false) {
+  const c = FX();
+  const f = midiToFreq(midi);
+
+  const osc1 = c.createOscillator();
+  osc1.type = 'triangle';
+  osc1.frequency.setValueAtTime(f, time);
+  osc1.frequency.exponentialRampToValueAtTime(f * 0.995, time + 0.18);
+
+  const osc2 = c.createOscillator();
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(f * 2, time);
+  osc2.detune.setValueAtTime(4, time);
+
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(5200, time);
+  lp.frequency.exponentialRampToValueAtTime(1200, time + 0.2);
+
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(170, time);
+
+  const amp = c.createGain();
+  const peak = accent ? 0.095 : 0.062;
+  amp.gain.setValueAtTime(0.0001, time);
+  amp.gain.exponentialRampToValueAtTime(peak, time + 0.01);
+  amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.26);
+
+  osc1.connect(lp);
+  osc2.connect(lp);
+  lp.connect(hp);
+  hp.connect(amp);
+  amp.connect(getBgmBus());
+
+  osc1.start(time);
+  osc2.start(time);
+  osc1.stop(time + 0.27);
+  osc2.stop(time + 0.27);
+}
+function scheduleBgmStep(step, time) {
+  const chord = BGM_CHORDS[Math.floor(step / 8) % BGM_CHORDS.length];
+  const pos = step % 8;
+  const accent = pos === 0 || pos === 4;
+
+  playPizzicatoNote(time + 0.002, chord[BGM_ARP[pos]], accent);
+  if (accent) playPizzicatoNote(time + 0.008, chord[0] - 12, true);
+  if (pos === 2 || pos === 6) playPizzicatoNote(time + 0.014, chord[2] + 12, false);
+}
+function scheduleBgmLookahead() {
+  const c = FX();
+  while (bgmNextNoteTime < c.currentTime + 0.24) {
+    scheduleBgmStep(bgmStep, bgmNextNoteTime);
+    bgmNextNoteTime += BGM_STEP;
+    bgmStep = (bgmStep + 1) % (BGM_CHORDS.length * 8);
+  }
+}
+function startPizzicatoBgm() {
+  if (bgmStarted) return;
+  bgmStarted = true;
+  const c = FX();
+  getBgmBus();
+  bgmStep = 0;
+  bgmNextNoteTime = c.currentTime + 0.05;
+  scheduleBgmLookahead();
+  bgmTicker = setInterval(scheduleBgmLookahead, 70);
+}
+function pausePizzicatoBgm() {
+  if (!bgmTicker) return;
+  clearInterval(bgmTicker);
+  bgmTicker = null;
+}
+function resumePizzicatoBgm() {
+  if (!bgmStarted || bgmTicker) return;
+  const c = FX();
+  bgmNextNoteTime = c.currentTime + 0.05;
+  bgmTicker = setInterval(scheduleBgmLookahead, 70);
+  fadeInPizzicatoBgm(800);
+}
 function playLevelTransitionSfx() {
   try {
     const c = FX();
@@ -67,6 +188,69 @@ function playLevelTransitionSfx() {
       o.start(c.currentTime + i * 0.09);
       o.stop(c.currentTime + i * 0.09 + 0.25);
     });
+  } catch (_) {}
+}
+function playRunPressSfx() {
+  try {
+    const c = FX();
+    const t = c.currentTime;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(300, t);
+    o.frequency.exponentialRampToValueAtTime(520, t + 0.1);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.045, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 0.14);
+  } catch (_) {}
+}
+function playStepSfx() {
+  try {
+    const c = FX();
+    const t = c.currentTime;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const lp = c.createBiquadFilter();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(185, t);
+    o.frequency.exponentialRampToValueAtTime(132, t + 0.08);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1100, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.042, t + 0.007);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 0.12);
+  } catch (_) {}
+}
+function playTurnSfx(dir = 'right') {
+  try {
+    const c = FX();
+    const t = c.currentTime;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'square';
+    if (dir === 'left') {
+      o.frequency.setValueAtTime(470, t);
+      o.frequency.exponentialRampToValueAtTime(320, t + 0.08);
+    } else {
+      o.frequency.setValueAtTime(320, t);
+      o.frequency.exponentialRampToValueAtTime(470, t + 0.08);
+    }
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.036, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.095);
+    o.connect(g);
+    g.connect(c.destination);
+    o.start(t);
+    o.stop(t + 0.1);
   } catch (_) {}
 }
 async function fadeTransition(ms = 560) {
@@ -95,6 +279,7 @@ function updateOrientationGuard() {
   document.body.classList.toggle('landscape-block', !portrait && mobileLike);
 }
 async function requestAppFullscreen() {
+  startPizzicatoBgm();
   if (document.fullscreenElement) return;
   const el = document.documentElement;
   try {
@@ -661,6 +846,7 @@ function hlSlot(i, zone='main') {
 }
 async function moveChar(dir) {
   if(dir==='forward') {
+    playStepSfx();
     const p={...pos};
     if(ori==='up')        p.y=Math.max(0,p.y-1);
     else if(ori==='down') p.y=Math.min(ROWS-1,p.y+1);
@@ -668,6 +854,7 @@ async function moveChar(dir) {
     else                   p.x=Math.min(COLS-1,p.x+1);
     await animTo(p.x,p.y); await sleep(80);
   } else {
+    playTurnSfx(dir);
     const newOri = dir==='left'
       ? {up:'left',left:'down',down:'right',right:'up'}[ori]
       : {up:'right',right:'down',down:'left',left:'up'}[ori];
@@ -685,12 +872,13 @@ async function moveChar(dir) {
   }
 }
 async function run() {
-  if(running||animating) return;
+  if(!gameStarted || running || animating) return;
   requestAppFullscreen();
   let last=-1;
   for(let i=0;i<SLOTS;i++) if(prog[i]) last=i;
   if(last===-1){return;}
   running=true;
+  playRunPressSfx();
   const btn=document.getElementById('runBtn');
   btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="4" height="16" rx="1" fill="#00aa50"/><rect x="15" y="4" width="4" height="16" rx="1" fill="#00aa50"/></svg>';
   toast(''); await sleep(200);
@@ -724,7 +912,7 @@ async function run() {
 
   document.querySelectorAll('.pslot[data-zone="main"]').forEach(s=>s.classList.remove('active','done'));
   document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
-  btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.5" fill="#00aa50"/></svg>'; running=false;
+  btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12 L12 7.5 A4.5 4.5 0 0 1 16.5 12 Z" fill="#2B8FD4"/><path d="M12 12 L16.5 12 A4.5 4.5 0 0 1 12 16.5 Z" fill="#FFD31A"/><path d="M12 12 L12 16.5 A4.5 4.5 0 0 1 7.5 12 Z" fill="#FF3B3B"/><path d="M12 12 L7.5 12 A4.5 4.5 0 0 1 12 7.5 Z" fill="#3F9A62"/></svg>'; running=false;
 
   if(won) {
     if (currentLevel === 'level1') {
@@ -779,18 +967,38 @@ function init() {
 
 init();
 
-// ── Splash dismiss ──
-setTimeout(() => {
+function showStartGate() {
+  document.body.classList.add('prestart');
+  document.getElementById('startGate')?.classList.add('show');
+}
+function dismissSplash() {
   const splash = document.getElementById('splash');
+  if (!splash) return;
+  showStartGate();
   splash.classList.add('hide');
   setTimeout(() => splash.remove(), 500);
-}, 2200);
+}
+function startGameFromGate() {
+  if (gameStarted) return;
+  gameStarted = true;
+  const gate = document.getElementById('startGate');
+  const gateFadeMs = 1100;
+  const backgroundHoldMs = 500;
+  gate?.classList.add('hiding');
+  requestAppFullscreen();
+  setTimeout(() => gate?.classList.remove('show', 'hiding'), gateFadeMs);
+  setTimeout(() => {
+    document.body.classList.remove('prestart');
+    fadeInPizzicatoBgm(2200);
+  }, gateFadeMs + backgroundHoldMs);
+}
+
+// ── Splash dismiss ──
+setTimeout(dismissSplash, 2200);
 
 // tap to skip
-document.getElementById('splash').addEventListener('pointerdown', () => {
-  const splash = document.getElementById('splash');
-  if(splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500); }
-});
+document.getElementById('splash')?.addEventListener('pointerdown', dismissSplash);
+document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 
 window.addEventListener('resize', () => {
   syncViewportHeight();
@@ -806,12 +1014,16 @@ window.addEventListener('resize', () => {
 window.visualViewport?.addEventListener('resize', syncViewportHeight);
 window.visualViewport?.addEventListener('scroll', syncViewportHeight);
 window.addEventListener('orientationchange', syncViewportHeight);
-document.addEventListener('pointerdown', requestAppFullscreen);
 
 // ri-entra in fullscreen se l'utente torna sull'app (es. dopo notifica)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    requestAppFullscreen();
+    if (gameStarted) {
+      resumePizzicatoBgm();
+      requestAppFullscreen();
+    }
+  } else {
+    pausePizzicatoBgm();
   }
 });
 

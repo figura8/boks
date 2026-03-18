@@ -171,10 +171,10 @@
     id: 'level1',
     name: 'Prato Base',
     sceneVars: {
-      '--scene-body-bg': 'radial-gradient(140% 90% at 50% 0%, #d6f2ff 0%, #dff2cf 45%, #bfdc9d 100%)',
+      '--scene-body-bg': 'radial-gradient(140% 95% at 50% 0%, #f3ecdd 0%, #ece3d1 48%, #e8dfcc 100%)',
       '--scene-grid-wrap-bg': '#d7efba',
       '--grid-bg': '#b7e48c',
-      '--cell-bg': 'rgba(235, 250, 215, 0.56)',
+      '--cell-bg': '#cfeaa5',
       '--cell-edge': 'rgba(114, 164, 72, 0.5)',
       '--cell-hi-bg': 'rgba(255, 247, 173, 0.88)',
       '--cell-hi-edge': '#d4bc44',
