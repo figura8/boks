@@ -36,6 +36,11 @@ const POOL = {
 };
 const CUSTOM_LEVELS_STORAGE_KEY = 'boks-custom-levels';
 const EDITOR_LEVELS_STORAGE_KEY = 'boks-editor-levels-v1';
+const EDITOR_LEVELS_FILE_PATH = './data/editor-levels.json';
+const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
+const FILE_HANDLE_DB_NAME = 'boks-file-handles';
+const FILE_HANDLE_STORE_NAME = 'handles';
+const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
 
@@ -72,6 +77,7 @@ const NEW_EDITOR_LEVEL_ID = '__new_editor_level__';
 let playerPlaced = true;
 let goalPlaced = true;
 let selectedElementTool = null;
+let editorLevelsCache = [];
 document.body?.classList.add('prestart');
 document.body?.classList.add('debug-visible');
 
@@ -656,24 +662,35 @@ function buildCustomLevelThumbnail(level) {
 }
 
 function readCustomLevels() {
+  if (editorLevelsCache.length) return editorLevelsCache.map(normalizeCustomLevel);
   try {
     const raw = localStorage.getItem(EDITOR_LEVELS_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     if (!Array.isArray(parsed) || !parsed.length) {
       const seeded = buildInitialEditorLevels();
-      writeCustomLevels(seeded);
-      return seeded;
+      editorLevelsCache = seeded.map(normalizeCustomLevel);
+      return editorLevelsCache.map(normalizeCustomLevel);
     }
-    return parsed.map(normalizeCustomLevel);
+    editorLevelsCache = parsed.map(normalizeCustomLevel);
+    return editorLevelsCache.map(normalizeCustomLevel);
   } catch (_) {
     const seeded = buildInitialEditorLevels();
-    writeCustomLevels(seeded);
-    return seeded;
+    editorLevelsCache = seeded.map(normalizeCustomLevel);
+    return editorLevelsCache.map(normalizeCustomLevel);
   }
 }
 
 function writeCustomLevels(levels) {
-  localStorage.setItem(EDITOR_LEVELS_STORAGE_KEY, JSON.stringify(levels));
+  editorLevelsCache = levels.map(normalizeCustomLevel);
+  localStorage.setItem(EDITOR_LEVELS_STORAGE_KEY, JSON.stringify(editorLevelsCache));
+}
+
+function exportableLevelsPayload(levels = readCustomLevels()) {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    levels: levels.map(level => normalizeCustomLevel(level))
+  };
 }
 
 function normalizeSlotArray(source = [], length) {
@@ -755,6 +772,235 @@ function editorLevelToTutorialStep(level) {
 function buildInitialEditorLevels() {
   const steps = getOfficialTutorialSteps();
   return steps.map((step, idx) => tutorialStepToEditorLevel(step, idx));
+}
+
+function isProjectSaveSupported() {
+  return !!(window.isSecureContext && window.showSaveFilePicker && window.indexedDB && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  ));
+}
+
+function openFileHandleDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(FILE_HANDLE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_HANDLE_STORE_NAME)) {
+        db.createObjectStore(FILE_HANDLE_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getStoredFileHandle() {
+  if (!isProjectSaveSupported()) return null;
+  const db = await openFileHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_HANDLE_STORE_NAME, 'readonly');
+    const store = tx.objectStore(FILE_HANDLE_STORE_NAME);
+    const request = store.get(EDITOR_LEVELS_FILE_HANDLE_KEY);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storeFileHandle(handle) {
+  if (!isProjectSaveSupported()) return;
+  const db = await openFileHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_HANDLE_STORE_NAME, 'readwrite');
+    const store = tx.objectStore(FILE_HANDLE_STORE_NAME);
+    const request = store.put(handle, EDITOR_LEVELS_FILE_HANDLE_KEY);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function ensureProjectFilePermission(handle) {
+  if (!handle) return false;
+  if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+  return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
+}
+
+async function requestProjectLevelsFileHandle() {
+  if (!isProjectSaveSupported()) return null;
+  const handle = await window.showSaveFilePicker({
+    suggestedName: EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME,
+    types: [{
+      description: 'JSON levels file',
+      accept: { 'application/json': ['.json'] }
+    }]
+  });
+  await storeFileHandle(handle);
+  return handle;
+}
+
+async function getProjectLevelsFileHandle({ promptIfMissing = false } = {}) {
+  if (!isProjectSaveSupported()) return null;
+  let handle = await getStoredFileHandle();
+  if (handle && await ensureProjectFilePermission(handle)) return handle;
+  if (!promptIfMissing) return null;
+  handle = await requestProjectLevelsFileHandle();
+  if (handle && await ensureProjectFilePermission(handle)) return handle;
+  return null;
+}
+
+async function writeProjectLevelsFile(levels, { promptIfMissing = false } = {}) {
+  const handle = await getProjectLevelsFileHandle({ promptIfMissing });
+  if (!handle) return false;
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(exportableLevelsPayload(levels), null, 2));
+  await writable.close();
+  return true;
+}
+
+async function loadEditorLevelsSource() {
+  try {
+    const response = await fetch(EDITOR_LEVELS_FILE_PATH, { cache: 'no-store' });
+    if (response.ok) {
+      const payload = await response.json();
+      const levels = Array.isArray(payload) ? payload : payload?.levels;
+      if (Array.isArray(levels) && levels.length) {
+        writeCustomLevels(levels);
+        return;
+      }
+    }
+  } catch (_) {}
+  const fallback = readCustomLevels();
+  if (fallback.length) {
+    editorLevelsCache = fallback.map(normalizeCustomLevel);
+    return;
+  }
+  writeCustomLevels(buildInitialEditorLevels());
+}
+
+async function persistEditorLevels(levels, { promptIfMissing = false } = {}) {
+  writeCustomLevels(levels);
+  if (!isProjectSaveSupported()) return { projectFileSaved: false, localOnly: true };
+  try {
+    const projectFileSaved = await writeProjectLevelsFile(levels, { promptIfMissing });
+    return { projectFileSaved, localOnly: !projectFileSaved };
+  } catch (_err) {
+    return { projectFileSaved: false, localOnly: true };
+  }
+}
+
+function syncEditorStateAfterLevelsChange(levels, { preferredLevelId = null } = {}) {
+  const normalizedLevels = levels.map(normalizeCustomLevel);
+  const nextSelectedId = preferredLevelId || selectedEditorLevelId;
+  const selectedLevel = normalizedLevels.find(level => level.id === nextSelectedId) || normalizedLevels[0] || null;
+
+  if (selectedLevel) {
+    selectedEditorLevelId = selectedLevel.id;
+  } else {
+    selectedEditorLevelId = null;
+  }
+
+  if (editorMode) {
+    if (currentCustomLevel) {
+      const currentId = currentCustomLevel.id;
+      const refreshed = normalizedLevels.find(level => level.id === currentId);
+      if (refreshed) applyCustomLevel(refreshed, { openEditor: true });
+      else if (selectedLevel) applyCustomLevel(selectedLevel, { openEditor: true });
+      else startBlankEditorLevel();
+      renderCustomLevels();
+      return;
+    }
+    if (currentLevel === 'level1') {
+      applyTutorialStep(tutorialStepIndex);
+      renderCustomLevels();
+      return;
+    }
+    if (selectedLevel) {
+      applyCustomLevel(selectedLevel, { openEditor: true });
+      renderCustomLevels();
+      return;
+    }
+  }
+
+  if (!editorMode && currentCustomLevel) {
+    const refreshed = normalizedLevels.find(level => level.id === currentCustomLevel.id);
+    if (refreshed) {
+      applyCustomLevel(refreshed, { openEditor: false });
+      renderCustomLevels();
+      return;
+    }
+    currentCustomLevel = null;
+    currentLevel = 'level1';
+    applyTutorialStep(tutorialStepIndex);
+    renderCustomLevels();
+    return;
+  }
+
+  updateDebugBadge();
+  renderCustomLevels();
+}
+
+function exportEditorLevels() {
+  const payload = exportableLevelsPayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `boks-levels-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  toast('Livelli esportati in JSON');
+}
+
+async function importEditorLevelsFromText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_err) {
+    toast('File JSON non valido');
+    return false;
+  }
+
+  const rawLevels = Array.isArray(parsed) ? parsed : parsed?.levels;
+  if (!Array.isArray(rawLevels) || !rawLevels.length) {
+    toast('Nessun livello trovato nel file');
+    return false;
+  }
+
+  const normalizedLevels = rawLevels.map(normalizeCustomLevel);
+  const persistResult = await persistEditorLevels(normalizedLevels, { promptIfMissing: true });
+  syncEditorStateAfterLevelsChange(normalizedLevels, {
+    preferredLevelId: normalizedLevels[0]?.id || null
+  });
+  toast(persistResult.projectFileSaved
+    ? `Importati ${normalizedLevels.length} livelli nel progetto`
+    : `Importati ${normalizedLevels.length} livelli solo in questa sessione`);
+  return true;
+}
+
+function openImportLevelsPicker() {
+  const input = document.getElementById('importLevelsInput');
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+
+async function resetEditorLevels() {
+  if (!window.confirm('Ripristinare i livelli originali? I livelli salvati in questo browser verranno sostituiti.')) {
+    return;
+  }
+  const seeded = buildInitialEditorLevels();
+  const persistResult = await persistEditorLevels(seeded, { promptIfMissing: true });
+  currentCustomLevel = null;
+  currentLevel = 'level1';
+  tutorialStepIndex = 0;
+  syncEditorStateAfterLevelsChange(seeded, {
+    preferredLevelId: getEditorLevelIdForTutorialStep(0)
+  });
+  toast(persistResult.projectFileSaved
+    ? 'Livelli originali ripristinati nel progetto'
+    : 'Livelli originali ripristinati solo in questa sessione');
 }
 
 // ═══ PROCEDURAL BACKGROUND ═══
@@ -1388,7 +1634,7 @@ function renderIconPicker() {
 }
 
 function openSaveLevelModal() {
-  saveCurrentEditorLevel();
+  void saveCurrentEditorLevel();
 }
 
 function closeSaveLevelModal() {
@@ -1397,7 +1643,7 @@ function closeSaveLevelModal() {
   modal?.setAttribute('aria-hidden', 'true');
 }
 
-function saveCurrentEditorLevel() {
+async function saveCurrentEditorLevel() {
   if (!editorMode) return;
   const levelId = currentCustomLevel?.id
     || selectedEditorLevelId
@@ -1417,13 +1663,15 @@ function saveCurrentEditorLevel() {
       name: `Livello ${levels.length + 1}`
     });
     levels.push(newLevel);
-    writeCustomLevels(levels);
+    const persistResult = await persistEditorLevels(levels, { promptIfMissing: true });
     currentCustomLevel = cloneCustomLevel(newLevel);
     selectedEditorLevelId = newLevel.id;
     applyCustomLevel(newLevel, { openEditor: true });
     renderCustomLevels();
     renderElementPalette();
-    toast('Livello salvato e aggiornato nel gioco');
+    toast(persistResult.projectFileSaved
+      ? 'Livello salvato nel progetto: ora puoi fare commit'
+      : 'Livello salvato solo in questa sessione');
     return newLevel;
   }
   const idx = levels.findIndex(entry => entry.id === levelId);
@@ -1439,7 +1687,7 @@ function saveCurrentEditorLevel() {
     baseStepIndex: levels[idx].baseStepIndex,
     name: levels[idx].name
   });
-  writeCustomLevels(levels);
+  const persistResult = await persistEditorLevels(levels, { promptIfMissing: true });
   const savedLevel = levels[idx];
   selectedEditorLevelId = savedLevel.id;
   if (savedLevel.baseStepIndex != null) {
@@ -1455,7 +1703,9 @@ function saveCurrentEditorLevel() {
   }
   renderCustomLevels();
   renderElementPalette();
-  toast('Livello salvato e aggiornato nel gioco');
+  toast(persistResult.projectFileSaved
+    ? 'Livello salvato nel progetto: ora puoi fare commit'
+    : 'Livello salvato solo in questa sessione');
   return savedLevel;
 }
 
@@ -2115,7 +2365,8 @@ async function run() {
 }
 
 // ═══ INIT ═══
-function init() {
+async function init() {
+  await loadEditorLevelsSource();
   syncViewportHeight();
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
@@ -2153,7 +2404,7 @@ function init() {
   renderIconPicker();
 }
 
-init();
+void init();
 
 function showStartGate() {
   document.body.classList.add('prestart');
@@ -2217,9 +2468,22 @@ document.getElementById('splash')?.addEventListener('pointerdown', dismissSplash
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
+document.getElementById('exportLevelsBtn')?.addEventListener('click', exportEditorLevels);
+document.getElementById('importLevelsBtn')?.addEventListener('click', openImportLevelsPicker);
+document.getElementById('resetLevelsBtn')?.addEventListener('click', resetEditorLevels);
 document.getElementById('exitEditorBtn')?.addEventListener('click', exitEditorMode);
 document.getElementById('cancelSaveLevelBtn')?.addEventListener('click', closeSaveLevelModal);
 document.getElementById('confirmSaveLevelBtn')?.addEventListener('click', saveCurrentEditorLevel);
+document.getElementById('importLevelsInput')?.addEventListener('change', async e => {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    await importEditorLevelsFromText(text);
+  } catch (_err) {
+    toast('Impossibile leggere il file');
+  }
+});
 document.getElementById('saveLevelModal')?.addEventListener('click', e => {
   if (e.target?.id === 'saveLevelModal') closeSaveLevelModal();
 });

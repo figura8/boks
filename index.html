@@ -13,7 +13,7 @@
   <link rel="apple-touch-icon" href="icons/turtle-app-icon.svg">
   <link rel="stylesheet" href="styles/app.css">
 </head>
-<body class="prestart" data-build="2026-03-20-exit-fix-2">
+<body class="prestart" data-build="2026-03-20-project-save">
 
 <!-- Splash screen -->
 <div id="splash">
@@ -50,6 +50,9 @@
   </div>
   <div id="editorToolbar" aria-label="Level editor controls">
     <button id="saveLevelBtn" type="button">Salva</button>
+    <button id="exportLevelsBtn" type="button">Esporta</button>
+    <button id="importLevelsBtn" type="button">Importa</button>
+    <button id="resetLevelsBtn" type="button">Ripristina</button>
     <button id="exitEditorBtn" type="button" aria-label="Torna al gioco">Torna al gioco</button>
   </div>
   <div id="customLevelsPanel" aria-label="I miei livelli">
@@ -88,7 +91,8 @@
 <div id="ghost"></div>
 <div id="toast"></div>
 <div id="levelFade"></div>
-<div id="buildBadge" aria-label="Build version">build 2026-03-20-exit-fix-2</div>
+<div id="buildBadge" aria-label="Build version">build 2026-03-20-project-save</div>
+<input id="importLevelsInput" type="file" accept="application/json,.json" hidden>
 <div id="saveLevelModal" aria-hidden="true">
   <div class="save-level-card" role="dialog" aria-modal="true" aria-labelledby="saveLevelTitle">
     <h2 id="saveLevelTitle">Salva livello</h2>
@@ -107,10 +111,10 @@
   </div>
 </div>
 
-  <script src="js/levels/level1.js?v=20260320-exit-fix-2"></script>
-  <script src="js/editor/solver.js?v=20260320-exit-fix-2"></script>
-  <script src="js/editor/level-editor.js?v=20260320-exit-fix-2"></script>
-  <script src="js/core/game.js?v=20260320-exit-fix-2"></script>
-  <script src="js/core/sw-register.js?v=20260320-exit-fix-2"></script>
+  <script src="js/levels/level1.js?v=20260320-project-save"></script>
+  <script src="js/editor/solver.js?v=20260320-project-save"></script>
+  <script src="js/editor/level-editor.js?v=20260320-project-save"></script>
+  <script src="js/core/game.js?v=20260320-project-save"></script>
+  <script src="js/core/sw-register.js?v=20260320-project-save"></script>
 </body>
 </html>
