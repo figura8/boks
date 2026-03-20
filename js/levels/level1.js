@@ -16,30 +16,32 @@
     return `<svg width="100%" height="100%" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
       <g transform="rotate(${deg} 36 36)">
         <defs>
-          <radialGradient id="boks-body" cx="30%" cy="22%" r="78%">
-            <stop offset="0%" stop-color="#d9ffbf"/>
-            <stop offset="52%" stop-color="#a3f19a"/>
-            <stop offset="100%" stop-color="#76d978"/>
+          <linearGradient id="turtle-shell" x1="18%" y1="16%" x2="82%" y2="84%">
+            <stop offset="0%" stop-color="#a7e877"/>
+            <stop offset="100%" stop-color="#5ca84c"/>
           </radialGradient>
-          <linearGradient id="boks-leg" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#79d56e"/>
-            <stop offset="100%" stop-color="#5ab958"/>
+          <linearGradient id="turtle-skin" x1="20%" y1="18%" x2="80%" y2="82%">
+            <stop offset="0%" stop-color="#c2f396"/>
+            <stop offset="100%" stop-color="#79c95f"/>
           </linearGradient>
         </defs>
-        <ellipse cx="36" cy="62" rx="18" ry="4.8" fill="rgba(72,121,54,0.18)"/>
-        <rect x="10" y="8" width="52" height="50" rx="16" fill="url(#boks-body)"/>
-        <rect x="10" y="8" width="52" height="50" rx="16" fill="none" stroke="#88cf7a" stroke-width="1.4"/>
-        <ellipse cx="24" cy="18" rx="11" ry="7" fill="rgba(255,255,255,0.26)" transform="rotate(-24 24 18)"/>
-        <ellipse cx="40" cy="13" rx="12" ry="5" fill="rgba(255,255,255,0.08)"/>
-        <rect x="19" y="54" width="11" height="11" rx="5.5" fill="url(#boks-leg)"/>
-        <rect x="42" y="54" width="11" height="11" rx="5.5" fill="url(#boks-leg)"/>
-        <circle cx="26" cy="31" r="3.7" fill="#2f2d2b"/>
-        <circle cx="46" cy="31" r="3.7" fill="#2f2d2b"/>
-        <circle cx="27.1" cy="29.8" r="1" fill="rgba(255,255,255,0.78)"/>
-        <circle cx="47.1" cy="29.8" r="1" fill="rgba(255,255,255,0.78)"/>
-        <circle cx="18.5" cy="39" r="3.3" fill="#efd8a1" opacity="0.95"/>
-        <circle cx="53.5" cy="39" r="3.3" fill="#efd8a1" opacity="0.95"/>
-        <path d="M31 39 C33.2 42 38.8 42 41 39" fill="none" stroke="#2f2d2b" stroke-width="2.2" stroke-linecap="round"/>
+        <ellipse cx="35" cy="60" rx="18" ry="5" fill="rgba(68,107,50,0.18)"/>
+        <ellipse cx="34" cy="36" rx="19" ry="15" fill="url(#turtle-shell)" stroke="#4c8b3d" stroke-width="2.2"/>
+        <path d="M24 27c5-4 14-6 22-3 4 2 7 5 10 9-6-2-11-4-17-4-6 0-11 1-17 5 0-3 1-5 2-7Z" fill="rgba(255,255,255,0.34)"/>
+        <circle cx="56" cy="36" r="8" fill="url(#turtle-skin)" stroke="#4c8b3d" stroke-width="2"/>
+        <circle cx="58.5" cy="34" r="1.5" fill="#24311f"/>
+        <circle cx="58.3" cy="38.7" r="1.2" fill="#24311f" opacity="0.82"/>
+        <path d="M52 41c2.5 2.3 6 2.3 8.3 0" fill="none" stroke="#24311f" stroke-width="1.7" stroke-linecap="round"/>
+        <ellipse cx="22" cy="24" rx="4.4" ry="5.4" fill="url(#turtle-skin)" stroke="#4c8b3d" stroke-width="1.8"/>
+        <ellipse cx="18" cy="35" rx="4.6" ry="5.6" fill="url(#turtle-skin)" stroke="#4c8b3d" stroke-width="1.8"/>
+        <ellipse cx="23" cy="48" rx="4.6" ry="5.6" fill="url(#turtle-skin)" stroke="#4c8b3d" stroke-width="1.8"/>
+        <ellipse cx="41" cy="49" rx="4.6" ry="5.6" fill="url(#turtle-skin)" stroke="#4c8b3d" stroke-width="1.8"/>
+        <path d="M14 36 8 40 14 43" fill="none" stroke="#4c8b3d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="28" cy="31" r="3.4" fill="#7fc95f"/>
+        <circle cx="40.5" cy="29.5" r="3.2" fill="#7fc95f"/>
+        <circle cx="45" cy="38" r="3.1" fill="#7fc95f"/>
+        <circle cx="31" cy="41.5" r="3.1" fill="#7fc95f"/>
+        <circle cx="39" cy="46" r="3" fill="#7fc95f"/>
       </g>
     </svg>`;
   }

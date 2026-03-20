@@ -275,10 +275,11 @@
       position: absolute;
       z-index: 20;
       touch-action: none;
-      cursor: grab;
+      cursor: default;
       filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18));
     }
-    #sprite:active { cursor: grabbing; }
+    body.editor-mode #sprite { cursor: grab; }
+    body.editor-mode #sprite:active { cursor: grabbing; }
     #sprite.moving { animation: wg .18s linear infinite; }
     @keyframes wg {
       0%,100% { transform: rotate(0deg); }

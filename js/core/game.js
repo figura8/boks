@@ -513,7 +513,7 @@ async function animTo(tx, ty) {
 function setupSpriteDrag() {
   const s = document.getElementById('sprite');
   function start(cx,cy) {
-    if(running||animating||!playerPlaced) return false;
+    if(!editorMode||running||animating||!playerPlaced) return false;
     const g = document.getElementById('ghost');
     const w = s.offsetWidth;
     g.innerHTML = svgRobot(ori);
@@ -1976,6 +1976,10 @@ async function run() {
   if(!gameStarted || running || animating) return;
   if (!playerPlaced || !goalPlaced) return;
   const runStartState = editorMode ? { pos: { ...pos }, ori } : null;
+  const runStartPrograms = editorMode ? {
+    prog: prog.map(block => block ? { ...block } : null),
+    fnProg: fnProg.map(block => block ? { ...block } : null)
+  } : null;
   requestAppFullscreen();
   sizeGrid();
   drawBackground();
@@ -2029,13 +2033,16 @@ async function run() {
   document.querySelectorAll('.pslot[data-zone="main"]').forEach(s=>s.classList.remove('active','done'));
   document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
   btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12 L12 7.5 A4.5 4.5 0 0 1 16.5 12 Z" fill="#2B8FD4"/><path d="M12 12 L16.5 12 A4.5 4.5 0 0 1 12 16.5 Z" fill="#FFD31A"/><path d="M12 12 L12 16.5 A4.5 4.5 0 0 1 7.5 12 Z" fill="#FF3B3B"/><path d="M12 12 L7.5 12 A4.5 4.5 0 0 1 12 7.5 Z" fill="#3F9A62"/></svg>'; running=false;
-  resetPrograms();
+  if (!editorMode) resetPrograms();
 
   if(won) {
     playWinSfx();
     if (editorMode) {
       await sleep(900);
-      resetPrograms();
+      if (runStartPrograms) {
+        prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
+        fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
+      }
       if (runStartState) {
         pos = { ...runStartState.pos };
         ori = runStartState.ori;
@@ -2067,6 +2074,10 @@ async function run() {
     renderBoard(); renderFn();
   } else {
     await sleep(400);
+    if (editorMode && runStartPrograms) {
+      prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
+      fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
+    }
     if (editorMode && runStartState) {
       pos = { ...runStartState.pos };
       ori = runStartState.ori;
