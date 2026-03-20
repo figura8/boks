@@ -747,7 +747,7 @@ function editorLevelToTutorialStep(level) {
 }
 
 function buildInitialEditorLevels() {
-  const steps = LEVELS.level1?.tutorialSteps || [];
+  const steps = getOfficialTutorialSteps();
   return steps.map((step, idx) => tutorialStepToEditorLevel(step, idx));
 }
 
@@ -765,6 +765,9 @@ function getLevel() {
     return LEVELS[baseId] || LEVELS.level1 || null;
   }
   return LEVELS[currentLevel] || LEVELS.level1 || null;
+}
+function getOfficialTutorialSteps() {
+  return LEVELS.level1?.tutorialSteps || [];
 }
 function applyLevelSceneVars() {
   const lv = getLevel();
@@ -958,7 +961,7 @@ function toggleEditorSlot(zone, idx) {
 function getTutorialSteps() {
   if (currentCustomLevel) return [];
   if (currentLevel === 'level1') {
-    return readCustomLevels().map(editorLevelToTutorialStep);
+    return getOfficialTutorialSteps();
   }
   const lv = getLevel();
   return lv?.tutorialSteps || [];
@@ -2238,5 +2241,3 @@ document.addEventListener('visibilitychange', () => {
     pausePizzicatoBgm();
   }
 });
-
-
