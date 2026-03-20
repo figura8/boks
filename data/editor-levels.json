@@ -1,18 +1,600 @@
 {
   "version": 1,
+  "exportedAt": "2026-03-20T19:49:21.364Z",
   "levels": [
-    { "id": "level1-step-1", "number": 1, "baseStepIndex": 0, "name": "Livello 1", "icon": "leaf", "baseLevel": "level1", "start": { "x": 2, "y": 3 }, "goal": { "x": 3, "y": 3 }, "startOri": "right", "obstacles": [], "mainSlotEnabled": [true, false, false, false, false, false, false, false], "fnSlotEnabled": [false, false, false, false], "enabledBlocks": { "forward": true, "left": false, "right": false, "function": false } },
-    { "id": "level1-step-2", "number": 2, "baseStepIndex": 1, "name": "Livello 2", "icon": "star", "baseLevel": "level1", "start": { "x": 1, "y": 3 }, "goal": { "x": 3, "y": 3 }, "startOri": "right", "obstacles": [], "mainSlotEnabled": [true, true, false, false, false, false, false, false], "fnSlotEnabled": [false, false, false, false], "enabledBlocks": { "forward": true, "left": false, "right": false, "function": false } },
-    { "id": "level1-step-3", "number": 3, "baseStepIndex": 2, "name": "Livello 3", "icon": "turtle", "baseLevel": "level1", "start": { "x": 1, "y": 3 }, "goal": { "x": 3, "y": 3 }, "startOri": "up", "obstacles": [{ "x": 1, "y": 2 }], "mainSlotEnabled": [true, true, true, false, false, false, false, false], "fnSlotEnabled": [false, false, false, false], "enabledBlocks": { "forward": true, "left": false, "right": true, "function": false } },
-    { "id": "level1-step-4", "number": 4, "baseStepIndex": 3, "name": "Livello 4", "icon": "sun", "baseLevel": "level1", "start": { "x": 4, "y": 3 }, "goal": { "x": 2, "y": 3 }, "startOri": "up", "obstacles": [{ "x": 4, "y": 2 }], "mainSlotEnabled": [true, true, true, false, false, false, false, false], "fnSlotEnabled": [false, false, false, false], "enabledBlocks": { "forward": true, "left": true, "right": false, "function": false } },
-    { "id": "level1-step-5", "number": 5, "baseStepIndex": 4, "name": "Livello 5", "icon": "moon", "baseLevel": "level1", "start": { "x": 1, "y": 4 }, "goal": { "x": 2, "y": 3 }, "startOri": "up", "obstacles": [{ "x": 1, "y": 3 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [false, false, false, false], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": false } },
-    { "id": "level1-step-6", "number": 6, "baseStepIndex": 5, "name": "Livello 6", "icon": "flower", "baseLevel": "level1", "start": { "x": 0, "y": 3 }, "goal": { "x": 5, "y": 3 }, "startOri": "right", "obstacles": [], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, false, false], "enabledBlocks": { "forward": true, "left": false, "right": false, "function": true } },
-    { "id": "level1-step-7", "number": 7, "baseStepIndex": 6, "name": "Livello 7", "icon": "leaf", "baseLevel": "level1", "start": { "x": 1, "y": 4 }, "goal": { "x": 3, "y": 4 }, "startOri": "up", "obstacles": [{ "x": 1, "y": 3 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, false, false], "enabledBlocks": { "forward": true, "left": false, "right": true, "function": true } },
-    { "id": "level1-step-8", "number": 8, "baseStepIndex": 7, "name": "Livello 8", "icon": "star", "baseLevel": "level1", "start": { "x": 4, "y": 4 }, "goal": { "x": 2, "y": 4 }, "startOri": "up", "obstacles": [{ "x": 4, "y": 3 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, false, false], "enabledBlocks": { "forward": true, "left": true, "right": false, "function": true } },
-    { "id": "level1-step-9", "number": 9, "baseStepIndex": 8, "name": "Livello 9", "icon": "turtle", "baseLevel": "level1", "start": { "x": 1, "y": 4 }, "goal": { "x": 4, "y": 2 }, "startOri": "up", "obstacles": [{ "x": 1, "y": 3 }, { "x": 3, "y": 3 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, true, false], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": true } },
-    { "id": "level1-step-10", "number": 10, "baseStepIndex": 9, "name": "Livello 10", "icon": "sun", "baseLevel": "level1", "start": { "x": 1, "y": 4 }, "goal": { "x": 3, "y": 1 }, "startOri": "up", "obstacles": [{ "x": 1, "y": 3 }, { "x": 2, "y": 2 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, true, false], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": true } },
-    { "id": "level1-step-11", "number": 11, "baseStepIndex": 10, "name": "Livello 11", "icon": "moon", "baseLevel": "level1", "start": { "x": 4, "y": 4 }, "goal": { "x": 1, "y": 1 }, "startOri": "up", "obstacles": [{ "x": 4, "y": 3 }, { "x": 3, "y": 2 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, true, false], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": true } },
-    { "id": "level1-step-12", "number": 12, "baseStepIndex": 11, "name": "Livello 12", "icon": "flower", "baseLevel": "level1", "start": { "x": 4, "y": 4 }, "goal": { "x": 0, "y": 2 }, "startOri": "up", "obstacles": [{ "x": 3, "y": 4 }, { "x": 2, "y": 3 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, true, true], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": true } },
-    { "id": "level1-step-13", "number": 13, "baseStepIndex": 12, "name": "Livello 13", "icon": "leaf", "baseLevel": "level1", "start": { "x": 1, "y": 4 }, "goal": { "x": 4, "y": 0 }, "startOri": "up", "obstacles": [{ "x": 4, "y": 4 }, { "x": 3, "y": 2 }, { "x": 3, "y": 0 }], "mainSlotEnabled": [true, true, true, true, false, false, false, false], "fnSlotEnabled": [true, true, true, true], "enabledBlocks": { "forward": true, "left": true, "right": true, "function": true } }
+    {
+      "id": "level1-step-1",
+      "number": 1,
+      "baseStepIndex": 0,
+      "name": "Livello 1",
+      "icon": "leaf",
+      "baseLevel": "level1",
+      "start": {
+        "x": 2,
+        "y": 3
+      },
+      "goal": {
+        "x": 3,
+        "y": 3
+      },
+      "startOri": "right",
+      "obstacles": [],
+      "mainSlotEnabled": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": false,
+        "right": false,
+        "function": false
+      }
+    },
+    {
+      "id": "level1-step-2",
+      "number": 2,
+      "baseStepIndex": 1,
+      "name": "Livello 2",
+      "icon": "star",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 3
+      },
+      "goal": {
+        "x": 3,
+        "y": 3
+      },
+      "startOri": "right",
+      "obstacles": [],
+      "mainSlotEnabled": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": false,
+        "right": false,
+        "function": false
+      }
+    },
+    {
+      "id": "level1-step-3",
+      "number": 3,
+      "baseStepIndex": 2,
+      "name": "Livello 3",
+      "icon": "turtle",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 3
+      },
+      "goal": {
+        "x": 3,
+        "y": 3
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 1,
+          "y": 2
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": false,
+        "right": true,
+        "function": false
+      }
+    },
+    {
+      "id": "level1-step-4",
+      "number": 4,
+      "baseStepIndex": 3,
+      "name": "Livello 4",
+      "icon": "sun",
+      "baseLevel": "level1",
+      "start": {
+        "x": 4,
+        "y": 3
+      },
+      "goal": {
+        "x": 2,
+        "y": 3
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 4,
+          "y": 2
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": false,
+        "function": false
+      }
+    },
+    {
+      "id": "level1-step-5",
+      "number": 5,
+      "baseStepIndex": 4,
+      "name": "Livello 5",
+      "icon": "moon",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 4
+      },
+      "goal": {
+        "x": 2,
+        "y": 3
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 1,
+          "y": 3
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": false
+      }
+    },
+    {
+      "id": "level1-step-6",
+      "number": 6,
+      "baseStepIndex": 5,
+      "name": "Livello 6",
+      "icon": "flower",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 3
+      },
+      "goal": {
+        "x": 5,
+        "y": 3
+      },
+      "startOri": "right",
+      "obstacles": [],
+      "mainSlotEnabled": [
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": false,
+        "right": false,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-7",
+      "number": 7,
+      "baseStepIndex": 6,
+      "name": "Livello 7",
+      "icon": "leaf",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 4
+      },
+      "goal": {
+        "x": 3,
+        "y": 4
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 1,
+          "y": 3
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": false,
+        "right": true,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-8",
+      "number": 8,
+      "baseStepIndex": 7,
+      "name": "Livello 8",
+      "icon": "star",
+      "baseLevel": "level1",
+      "start": {
+        "x": 4,
+        "y": 4
+      },
+      "goal": {
+        "x": 2,
+        "y": 4
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 4,
+          "y": 3
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": false,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-9",
+      "number": 9,
+      "baseStepIndex": 8,
+      "name": "Livello 9",
+      "icon": "turtle",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 4
+      },
+      "goal": {
+        "x": 4,
+        "y": 2
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 1,
+          "y": 3
+        },
+        {
+          "x": 3,
+          "y": 3
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-10",
+      "number": 10,
+      "baseStepIndex": 9,
+      "name": "Livello 10",
+      "icon": "sun",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 4
+      },
+      "goal": {
+        "x": 3,
+        "y": 1
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 1,
+          "y": 3
+        },
+        {
+          "x": 2,
+          "y": 2
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-11",
+      "number": 11,
+      "baseStepIndex": 10,
+      "name": "Livello 11",
+      "icon": "moon",
+      "baseLevel": "level1",
+      "start": {
+        "x": 4,
+        "y": 4
+      },
+      "goal": {
+        "x": 1,
+        "y": 1
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 4,
+          "y": 3
+        },
+        {
+          "x": 3,
+          "y": 2
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        true,
+        false
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-12",
+      "number": 12,
+      "baseStepIndex": 11,
+      "name": "Livello 12",
+      "icon": "flower",
+      "baseLevel": "level1",
+      "start": {
+        "x": 4,
+        "y": 4
+      },
+      "goal": {
+        "x": 0,
+        "y": 2
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 3,
+          "y": 4
+        },
+        {
+          "x": 2,
+          "y": 3
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": true
+      }
+    },
+    {
+      "id": "level1-step-13",
+      "number": 13,
+      "baseStepIndex": 12,
+      "name": "Livello 13",
+      "icon": "leaf",
+      "baseLevel": "level1",
+      "start": {
+        "x": 1,
+        "y": 4
+      },
+      "goal": {
+        "x": 4,
+        "y": 0
+      },
+      "startOri": "up",
+      "obstacles": [
+        {
+          "x": 4,
+          "y": 4
+        },
+        {
+          "x": 3,
+          "y": 2
+        },
+        {
+          "x": 3,
+          "y": 0
+        }
+      ],
+      "mainSlotEnabled": [
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false
+      ],
+      "fnSlotEnabled": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "enabledBlocks": {
+        "forward": true,
+        "left": true,
+        "right": true,
+        "function": true
+      }
+    }
   ]
 }
