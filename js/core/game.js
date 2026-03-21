@@ -2461,7 +2461,7 @@ function exitEditorMode() {
 }
 
 // ── Splash dismiss ──
-setTimeout(dismissSplash, 2200);
+setTimeout(dismissSplash, 1600);
 
 // tap to skip
 document.getElementById('splash')?.addEventListener('pointerdown', dismissSplash);
