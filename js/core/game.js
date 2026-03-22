@@ -2416,7 +2416,7 @@ function dismissSplash() {
   if (!splash) return;
   showStartGate();
   splash.classList.add('hide');
-  setTimeout(() => splash.remove(), 500);
+  setTimeout(() => splash.remove(), 900);
 }
 function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
   if (gameStarted) return;
@@ -2461,10 +2461,9 @@ function exitEditorMode() {
 }
 
 // ── Splash dismiss ──
-setTimeout(dismissSplash, 1600);
+setTimeout(dismissSplash, 3000);
 
 // tap to skip
-document.getElementById('splash')?.addEventListener('pointerdown', dismissSplash);
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
