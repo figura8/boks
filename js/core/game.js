@@ -43,6 +43,8 @@ const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
+const LEVEL_EDITOR_ENABLED = false;
+const DEBUG_TOOLS_ENABLED = false;
 
 // ═══ STATE ═══
 let pos = {...START};
@@ -66,7 +68,7 @@ let editorBlockEnabled = {
 let fnUnlockHintActive = false;
 let stepStartHintActive = false;
 let gameStarted = false;
-let debugVisible = true;
+let debugVisible = DEBUG_TOOLS_ENABLED;
 let editorMode = false;
 let currentCustomLevel = null;
 let selectedSaveIcon = CUSTOM_ICONS[0];
@@ -79,7 +81,7 @@ let goalPlaced = true;
 let selectedElementTool = null;
 let editorLevelsCache = [];
 document.body?.classList.add('prestart');
-document.body?.classList.add('debug-visible');
+if (DEBUG_TOOLS_ENABLED) document.body?.classList.add('debug-visible');
 
 // ═══ UTILS ═══
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1078,11 +1080,13 @@ function setSlotMasks(mainCount = SLOTS, fnCount = FSLOTS) {
   fnSlotEnabled = Array.from({ length: FSLOTS }, (_, i) => i < fnCount);
 }
 function toggleDebugBadge() {
+  if (!DEBUG_TOOLS_ENABLED) return;
   debugVisible = !debugVisible;
   document.body.classList.toggle('debug-visible', debugVisible);
   if (debugVisible) updateDebugBadge();
 }
 function debugStepJump(delta) {
+  if (!DEBUG_TOOLS_ENABLED) return;
   if (running || animating) return;
   if (editorMode) return;
   if (currentLevel !== 'level1') return;
@@ -1196,6 +1200,7 @@ function toggleEditorBlock(dir) {
 }
 
 function setEditorMode(enabled) {
+  if (!LEVEL_EDITOR_ENABLED && enabled) return;
   levelEditor.setEditorMode(enabled);
   if (enabled) {
     refreshEditorDebug();
@@ -1213,7 +1218,9 @@ function toggleEditorSlot(zone, idx) {
 function getTutorialSteps() {
   if (currentCustomLevel) return [];
   if (currentLevel === 'level1') {
-    return readCustomLevels().map(editorLevelToTutorialStep);
+    return LEVEL_EDITOR_ENABLED
+      ? readCustomLevels().map(editorLevelToTutorialStep)
+      : getOfficialTutorialSteps();
   }
   const lv = getLevel();
   return lv?.tutorialSteps || [];
@@ -1634,6 +1641,7 @@ function renderIconPicker() {
 }
 
 function openSaveLevelModal() {
+  if (!LEVEL_EDITOR_ENABLED) return;
   void saveCurrentEditorLevel();
 }
 
@@ -1644,7 +1652,7 @@ function closeSaveLevelModal() {
 }
 
 async function saveCurrentEditorLevel() {
-  if (!editorMode) return;
+  if (!LEVEL_EDITOR_ENABLED || !editorMode) return;
   const levelId = currentCustomLevel?.id
     || selectedEditorLevelId
     || (currentLevel === 'level1' ? getEditorLevelIdForTutorialStep(tutorialStepIndex) : null);
@@ -1711,7 +1719,7 @@ async function saveCurrentEditorLevel() {
 
 function renderCustomLevels() {
   const list = document.getElementById('customLevelsList');
-  if (!list) return;
+  if (!list || !LEVEL_EDITOR_ENABLED) return;
   const levels = readCustomLevels();
   list.innerHTML = '';
   if (!levels.length) return;
@@ -2366,7 +2374,7 @@ async function run() {
 
 // ═══ INIT ═══
 async function init() {
-  await loadEditorLevelsSource();
+  if (LEVEL_EDITOR_ENABLED) await loadEditorLevelsSource();
   syncViewportHeight();
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
@@ -2397,18 +2405,20 @@ async function init() {
   updateDebugBadge();
   refreshEditorValues();
   updateRunAvailability();
-  const initialLevels = readCustomLevels();
-  if (!selectedEditorLevelId && initialLevels.length) selectedEditorLevelId = initialLevels[0].id;
-  renderCustomLevels();
-  renderElementPalette();
-  renderIconPicker();
+  if (LEVEL_EDITOR_ENABLED) {
+    const initialLevels = readCustomLevels();
+    if (!selectedEditorLevelId && initialLevels.length) selectedEditorLevelId = initialLevels[0].id;
+    renderCustomLevels();
+    renderElementPalette();
+    renderIconPicker();
+  }
 }
 
 void init();
 
 function showStartGate() {
   document.body.classList.add('prestart');
-  renderCustomLevels();
+  if (LEVEL_EDITOR_ENABLED) renderCustomLevels();
   document.getElementById('startGate')?.classList.add('show');
 }
 function dismissSplash() {
@@ -2421,6 +2431,7 @@ function dismissSplash() {
 function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
   if (gameStarted) return;
   gameStarted = true;
+  const shouldOpenEditor = LEVEL_EDITOR_ENABLED && openEditor;
   const gate = document.getElementById('startGate');
   const gateFadeMs = 1100;
   const backgroundHoldMs = 500;
@@ -2430,7 +2441,7 @@ function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
   setTimeout(() => {
     document.body.classList.remove('prestart');
     if (onOpen) onOpen();
-    else setEditorMode(openEditor);
+    else setEditorMode(shouldOpenEditor);
     fadeInPizzicatoBgm(2200);
   }, gateFadeMs + backgroundHoldMs);
 }
@@ -2438,6 +2449,7 @@ function startGameFromGate() {
   openAppFromGate({ openEditor: false });
 }
 function startEditorFromGate() {
+  if (!LEVEL_EDITOR_ENABLED) return;
   openAppFromGate({ openEditor: true });
 }
 function exitEditorMode() {
