@@ -1,6 +1,6 @@
 // "dev" = network-first (testing fast updates), "prod" = cache-first (better offline).
 const SW_MODE = "dev";
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const CACHE_NAME = `cubetto-${SW_MODE}-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -10,6 +10,8 @@ const PRECACHE_URLS = [
   "./data/editor-levels.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon-192-maskable.png",
+  "./icons/icon-512-maskable.png",
   "./icons/boks-apple-touch-icon.png"
 ];
 

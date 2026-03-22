@@ -35,6 +35,15 @@ Obiettivo della sessione:
 - `background_color` e `theme_color` in `manifest.webmanifest` impostati a nero.
 - Obiettivo: rendere piu coerente la splash nativa del sistema con la schermata nera custom dell'app.
 
+4. Preparazione icone Android maskable
+- Aggiunte nuove icone Android `maskable`:
+  - `icons/icon-192-maskable.png`
+  - `icons/icon-512-maskable.png`
+- Le nuove icone usano solo il personaggio centrale con piu margine, senza il riquadro bianco arrotondato originale.
+- `manifest.webmanifest` aggiornato per dichiararle con `purpose: "maskable"`.
+- `service-worker.js` aggiornato per includerle nel precache e portare `CACHE_VERSION` a `v7`.
+- Obiettivo: ridurre l'effetto di icona troppo ingrandita nella splash di sistema Android e migliorare l'adaptive icon.
+
 ## Commit fatti
 
 - `6d2523b` `Add controlled black launch screen`
@@ -67,6 +76,7 @@ Oppure:
 
 ## Prossimi step possibili
 
+- verificare sul telefono se Android usa la nuova icona `maskable` nella splash iniziale
+- verificare se l'effetto di icona "ingrandita" e diminuito dopo aggiornamento o reinstallazione della PWA
 - verificare sul telefono se il nero di sistema e quello custom ora risultano piu uniformi
-- decidere se cambiare anche l'icona per evitare l'effetto "ingrandita"
 - eventualmente separare in futuro il comportamento di `main` da quello del branch live
