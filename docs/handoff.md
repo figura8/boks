@@ -10,7 +10,8 @@ Obiettivo della sessione:
 - capire il progetto
 - controllare con precisione il flusso di apertura della PWA sul telefono
 - mantenere il level editor su `main`
-- modificare solo la fase di avvio dell'app
+- portare temporaneamente la produzione su GitHub Pages
+- rendere verificabile subito dal telefono quale build e online
 
 ## Cosa abbiamo fatto
 
@@ -22,11 +23,10 @@ Obiettivo della sessione:
 - Editor livelli in `js/editor/level-editor.js`.
 - Solver editor in `js/editor/solver.js`.
 
-2. Modifica del launch flow
-- All'apertura da icona, l'app ora mostra una schermata nera per 3 secondi.
-- Dopo i 3 secondi, il nero sfuma e appare il menu iniziale.
-- Rimosso il tap-to-skip della splash.
-- Queste modifiche sono state fatte in:
+2. Prima modifica del launch flow
+- All'apertura da icona, l'app mostrava una schermata nera custom per alcuni secondi.
+- L'obiettivo era uniformare la splash nativa del sistema con l'avvio dell'app.
+- Queste modifiche erano state fatte in:
   - `js/core/game.js`
   - `styles/app.css`
 
@@ -44,16 +44,50 @@ Obiettivo della sessione:
 - `service-worker.js` aggiornato per includerle nel precache e portare `CACHE_VERSION` a `v7`.
 - Obiettivo: ridurre l'effetto di icona troppo ingrandita nella splash di sistema Android e migliorare l'adaptive icon.
 
+5. Rilascio su GitHub Pages
+- Netlify e stato sospeso per esaurimento crediti.
+- Il repository GitHub era gia presente: `figura8/cubetto-pwa`.
+- E stato ricostruito il branch `live` partendo da `main` con una variante player-only.
+- Poi si e deciso di pubblicare direttamente `main` su GitHub Pages.
+- GitHub Pages ora deve puntare a:
+  - branch `main`
+  - cartella `/(root)`
+
+6. Rimozione del nero custom e della splash intermedia
+- Dopo i test su telefono, il nero custom da 3 secondi non serviva piu.
+- E stato rimosso l'override nero iniziale.
+- E stata rimossa anche la splash intermedia con loader che compariva tra la splash di sistema e il menu iniziale.
+- Stato attuale del flow:
+  - splash di sistema del telefono con icona piccola su nero
+  - transizione molto rapida
+  - menu iniziale
+
+7. Build badge per verifica rapida da telefono
+- Il badge build e stato mantenuto visibile all'avvio.
+- Ora mostra:
+  - numero build
+  - data e ora della build
+- La build corrente e centralizzata in `index.html` tramite `data-build`.
+- Gli script dell'app vengono caricati tramite `js/core/app-loader.js` usando lo stesso build id per il cache-busting.
+- E stato aggiunto lo script:
+  - `scripts/stamp-build.ps1`
+- Comando utile per aggiornare il numero build prima di pubblicare:
+  - `powershell -ExecutionPolicy Bypass -File scripts\stamp-build.ps1`
+
 ## Commit fatti
 
 - `6d2523b` `Add controlled black launch screen`
 - `1f8b6e5` `Align launch colors with black startup screen`
+- `1902713` `Add maskable Android app icons`
+- `5e33f46` `Remove launch hold and add build stamp badge`
+- `146258f` `Show build date and time in badge`
+- `046b45c` `Remove intermediate splash loading state`
 
-Entrambi sono stati pushati su `origin/main`.
+Sono stati pushati su `origin/main`.
 
 ## Nota importante sulla splash iniziale con icona ingrandita
 
-Prima della schermata nera custom compare una schermata di avvio di sistema con l'icona dell'app ingrandita.
+Prima delle modifiche finali compariva una schermata di avvio di sistema con l'icona dell'app ingrandita.
 
 Questa parte:
 - non dipende da Netlify
@@ -63,6 +97,10 @@ Questa parte:
 Conclusione pratica:
 - non si puo controllare completamente da JS
 - si puo solo cercare di armonizzarla tramite manifest, icone e colori
+
+Aggiornamento:
+- con le icone `maskable` l'icona iniziale di sistema risulta piu piccola e piu accettabile
+- il problema principale non e piu la splash nativa, ma era la splash custom intermedia, che ora e stata rimossa
 
 ## Come riprendere la prossima volta
 
@@ -74,9 +112,13 @@ Oppure:
 
 - `continuiamo dal launch flow della PWA`
 
+Oppure:
+
+- `leggi docs/handoff.md e riprendiamo da GitHub Pages e build badge`
+
 ## Prossimi step possibili
 
-- verificare sul telefono se Android usa la nuova icona `maskable` nella splash iniziale
-- verificare se l'effetto di icona "ingrandita" e diminuito dopo aggiornamento o reinstallazione della PWA
-- verificare sul telefono se il nero di sistema e quello custom ora risultano piu uniformi
-- eventualmente separare in futuro il comportamento di `main` da quello del branch live
+- verificare dal telefono che GitHub Pages stia servendo davvero `main`
+- controllare che il badge mostri sempre la build nuova dopo ogni push
+- decidere in seguito se tornare a Netlify oppure restare su GitHub Pages
+- decidere se tenere `main` come branch pubblicato o tornare a usare `live` come branch release
