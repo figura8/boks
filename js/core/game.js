@@ -2416,7 +2416,7 @@ function dismissSplash() {
   if (!splash) return;
   showStartGate();
   splash.classList.add('hide');
-  setTimeout(() => splash.remove(), 900);
+  setTimeout(() => splash.remove(), 250);
 }
 function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
   if (gameStarted) return;
@@ -2461,7 +2461,7 @@ function exitEditorMode() {
 }
 
 // ── Splash dismiss ──
-setTimeout(dismissSplash, 3000);
+setTimeout(dismissSplash, 0);
 
 // tap to skip
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);

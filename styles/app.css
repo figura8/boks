@@ -735,22 +735,6 @@
       animation: splashLoad 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
 
-    /* Override per branch di test: schermata nera all'avvio */
-    #splash {
-      display: block;
-      background: #000;
-      opacity: 1;
-      pointer-events: auto;
-      transition: opacity 0.9s ease;
-    }
-    #splash.hide {
-      opacity: 0;
-      pointer-events: none;
-    }
-    #splash > * {
-      display: none !important;
-    }
-
     #startGate {
       position: fixed;
       inset: 0;
