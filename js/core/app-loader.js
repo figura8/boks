@@ -1,7 +1,20 @@
 (() => {
   const build = document.body?.dataset.build || 'dev';
   const badge = document.getElementById('buildBadge');
-  if (badge) badge.textContent = `build ${build}`;
+
+  function formatBuildStamp(value) {
+    const match = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/.exec(value);
+    if (!match) return null;
+    const [, year, month, day, hour, minute, second] = match;
+    return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
+  }
+
+  if (badge) {
+    const formattedStamp = formatBuildStamp(build);
+    badge.textContent = formattedStamp
+      ? `build ${build}\n${formattedStamp}`
+      : `build ${build}`;
+  }
 
   const files = [
     'js/levels/level1.js',
