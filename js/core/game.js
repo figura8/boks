@@ -2337,6 +2337,11 @@ function startEditorFromGate() {
   if (!LEVEL_EDITOR_ENABLED) return;
   openAppFromGate({ openEditor: true });
 }
+function openSpritePreviewTool() {
+  const targetUrl = new URL('tools/sprite-preview.html', window.location.href).toString();
+  const opened = window.open(targetUrl, '_blank', 'noopener');
+  if (!opened) window.location.href = targetUrl;
+}
 function updateQuickEditorButton() {
   const btn = document.getElementById('quickEditorBtn');
   if (!btn) return;
@@ -2409,6 +2414,7 @@ setTimeout(dismissSplash, 0);
 // tap to skip
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
+document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
 document.getElementById('exportLevelsBtn')?.addEventListener('click', exportEditorLevels);

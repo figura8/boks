@@ -691,6 +691,9 @@
     body.editor-disabled #elementPalettePanel {
       display: none !important;
     }
+    body.debug-tools-disabled #openSpritePreviewBtn {
+      display: none !important;
+    }
 
     #rotateNotice {
       position: fixed;
@@ -1121,6 +1124,7 @@
       outline-offset: 4px;
     }
     #startEditorBtn,
+    #openSpritePreviewBtn,
     #exitEditorBtn,
     #editorToolbar button {
       border: 2px solid var(--panel-edge);
@@ -1133,11 +1137,15 @@
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
-    #startEditorBtn {
+    #startEditorBtn,
+    #openSpritePreviewBtn {
       min-width: 148px;
       min-height: 42px;
       padding: 0 16px;
       font-size: 0.96rem;
+    }
+    #openSpritePreviewBtn {
+      min-width: 172px;
     }
     #editorToolbar {
       width: 100%;
@@ -1183,6 +1191,7 @@
     }
     #editorToolbar button:active,
     #startEditorBtn:active,
+    #openSpritePreviewBtn:active,
     #exitEditorBtn:active,
     .custom-level-actions button:active,
     #cancelSaveLevelBtn:active,

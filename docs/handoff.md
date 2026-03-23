@@ -258,6 +258,95 @@ Se vuoi ripartire da qui, puoi dire:
 
 - `leggi docs/handoff.md e riprendiamo dal character system`
 - `leggi docs/handoff.md e continuiamo dal personaggio 2D`
+
+---
+
+# Aggiornamento
+
+Data: 2026-03-24
+
+## Contesto della sessione
+
+Obiettivo della sessione:
+- usare uno sprite sheet come base del personaggio di gioco
+- creare un tool locale per ispezionare e correggere sprite sheet prima di integrarli
+- rendere il tool raggiungibile dal menu iniziale
+- aggiungere una diagnosi automatica per capire se uno sheet e adatto al progetto
+
+## Cosa abbiamo fatto
+
+1. Focus sul personaggio in gioco
+- E stato verificato il rendering attuale del personaggio e il modo in cui il gioco lo posiziona sulla cella.
+- Il contenitore runtime del personaggio resta sostanzialmente quasi quadrato e viene scalato dal gioco in:
+  - `js/core/game.js`
+- Il livello base continua a passare al renderer uno stato esplicito del personaggio in:
+  - `js/levels/level1.js`
+
+2. Tool standalone per sprite sheet
+- E stato creato un tool locale dedicato in:
+  - `tools/sprite-preview.html`
+- Il tool permette di:
+  - caricare uno sprite sheet dal progetto
+  - caricare uno sprite sheet dal disco
+  - impostare righe, colonne, intervallo frame, fps, scala e loop
+  - vedere il frame animato e l'overview completa dello sheet
+
+3. Spostamento del tool in cartella dedicata
+- Il preview tool e stato tenuto fuori dalla root per non confonderlo con l'app principale.
+- La posizione finale e:
+  - `tools/sprite-preview.html`
+- Il caricamento dei path del progetto e stato corretto in modo che valori come:
+  - `icons/...`
+  continuino a funzionare anche se la pagina vive sotto `tools/`.
+
+4. Accesso dal menu iniziale
+- E stato aggiunto un bottone nel gate iniziale dell'app per aprire direttamente il tool.
+- I file toccati per questo sono:
+  - `index.html`
+  - `js/core/game.js`
+  - `styles/app.css`
+- Il bottone apre il preview tool in una nuova scheda, con fallback alla navigazione normale.
+
+5. Modalita manuale per correggere sprite sheet imperfetti
+- Il tool ora non si limita piu alla griglia uniforme.
+- E stata aggiunta una modalita manuale con:
+  - `offset X/Y`
+  - `cell width/height`
+  - `gap X/Y`
+- E stato aggiunto anche il drag diretto sul riquadro attivo dentro l'overview dello sheet per:
+  - spostare il crop
+  - ridimensionare la cella
+- Questo serve soprattutto per sheet generati male o con padding incoerente.
+
+6. Analisi automatica di compatibilita col progetto
+- Il tool ora prova a spiegare se uno sheet e sensato per questo gioco, non solo come ritagliarlo.
+- L'analisi guarda:
+  - proporzione del frame
+  - frame vuoti
+  - occupazione utile dello spazio
+  - stabilita della baseline
+  - drift orizzontale del soggetto
+  - rischio clipping sui bordi
+  - variazione di volume tra i frame
+- L'obiettivo pratico e capire se:
+  - lo sheet e gia pronto
+  - va corretto col ritaglio manuale
+  - conviene rigenerarlo
+
+## Stato attuale
+
+- il progetto ha ora un tool locale per validare sprite sheet prima di integrarli
+- il menu iniziale dell'app puo aprire direttamente il tool
+- il tool puo sia correggere manualmente i crop sia dare un giudizio tecnico di compatibilita
+- resta ancora da decidere quale sprite sheet finale usare davvero per il personaggio in gioco
+
+## Come riprendere la prossima volta
+
+Se vuoi ripartire da qui, puoi dire:
+
+- `leggi docs/handoff.md e riprendiamo dal tool sprite sheet`
+- `leggi docs/handoff.md e valutiamo lo sprite del personaggio`
+- `leggi docs/handoff.md e integriamo lo sheet finale nel renderer`
 - `leggi docs/handoff.md e riprendiamo dal flusso di salvataggio editor`
 
 ## Prossimi step consigliati
