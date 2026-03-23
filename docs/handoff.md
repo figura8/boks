@@ -145,3 +145,127 @@ Oppure:
 - decidere se tenere `main` come branch pubblicato o tornare a usare `live` come branch release
 - rifinire ancora scala, animazione e feeling del personaggio principale
 - decidere se il toggle rapido `Editor/Gioco` deve restare solo locale o diventare parte del flusso normale
+
+---
+
+# Aggiornamento
+
+Data: 2026-03-23
+
+## Contesto della sessione
+
+Obiettivo della sessione:
+- preparare il progetto per un nuovo personaggio 2D animato
+- evitare che la struttura delle cartelle confondesse art e stati runtime
+- rendere piu chiaro il flusso di salvataggio livelli dall'editor
+- alleggerire `js/core/game.js` spostando fuori la persistenza livelli
+
+## Cosa abbiamo fatto
+
+1. Architettura personaggio
+- E stato introdotto un renderer dedicato del personaggio in:
+  - `js/core/character/character-renderer.js`
+- E stato aggiunto un CSS dedicato del personaggio in:
+  - `styles/character.css`
+- Il gioco ora passa al renderer uno stato esplicito con:
+  - `direction`
+  - `action`
+- Le azioni gestite attualmente sono:
+  - `idle`
+  - `move`
+  - `turn`
+
+2. Preparazione per animazioni future
+- Anche senza avere ancora il personaggio finale o le animazioni definitive, il progetto ora e pronto a:
+  - cambiare asset senza riscrivere il gameplay
+  - aggiungere stati direzionali
+  - aggiungere manifest e timing di animazione
+- Il placeholder attuale resta solo come appoggio temporaneo.
+
+3. Riorganizzazione cartelle asset
+- E stata chiarita la convenzione:
+  - `assets/characters/` contiene solo art dei personaggi
+  - `assets/animations/` contiene stati, manifest e logica runtime delle animazioni
+  - `assets/props/` contiene art dei prop
+  - `assets/animations/props/` e pensata per animazioni dei prop
+- Per `boks` ora la cartella personaggio contiene solo:
+  - `assets/characters/boks/placeholder.png`
+- Gli stati `idle/move/turn` non vivono piu dentro `assets/characters/`.
+
+4. Manifest animazioni del personaggio
+- E stato introdotto un manifest dedicato in:
+  - `assets/animations/characters/boks/manifest.js`
+- Questo manifest mappa gli stati runtime verso l'art del personaggio e i fallback temporanei.
+
+5. Refactor della persistenza livelli editor
+- La logica di persistenza livelli e stata estratta da `js/core/game.js` in:
+  - `js/editor/level-storage.js`
+- Dentro questo modulo ora vivono:
+  - normalizzazione livelli custom
+  - lettura/scrittura localStorage
+  - import/export JSON
+  - supporto File System Access API
+  - persistenza file progetto
+- `js/core/game.js` resta responsabile del flusso editor e tutorial, ma non della parte storage.
+
+6. Verifica del salvataggio livelli reale nel progetto
+- Durante la sessione e stato verificato il salvataggio manuale del file livelli nel progetto.
+- Il file corretto da usare e:
+  - `data/editor-levels.json`
+- E stato confermato che, salvando li, Git vede davvero la modifica.
+- E stato poi fatto commit e push del file livelli aggiornato.
+
+## Flusso corretto per salvare un livello dall'editor
+
+Per l'utente il flusso giusto e:
+- aprire l'editor
+- modificare il livello
+- premere `Salva`
+- se compare il file picker, selezionare il file progetto:
+  - `data/editor-levels.json`
+- controllare il messaggio finale
+
+Interpretazione dei messaggi:
+- `Livello salvato nel progetto: ora puoi fare commit`
+  - il livello e davvero nel repo
+- `Livello salvato solo in questa sessione`
+  - il livello e solo locale nel browser e non ancora nel progetto
+
+Conclusione pratica:
+- se il salvataggio e nel progetto, dopo basta fare `git commit` e `git push`
+- non servono modifiche manuali al codice per ogni livello
+
+## Commit fatti in questa sessione
+
+- `910ae42` `Prepare character animation architecture`
+- `50e7801` `Extract editor level storage module`
+- `bf6c94a` `Update editor levels`
+- `a12179d` `Simplify character asset structure`
+
+Sono stati pushati su `origin/main`.
+
+## Stato attuale
+
+- `main` e allineato a `origin/main`
+- working tree pulito
+- salvataggio livelli funzionante e verificato nel file progetto
+- architettura personaggio pronta per asset e animazioni future
+- separazione semantica piu chiara tra art (`characters`) e runtime animation (`animations`)
+
+## Come riprendere la prossima volta
+
+Se vuoi ripartire da qui, puoi dire:
+
+- `leggi docs/handoff.md e riprendiamo dal character system`
+- `leggi docs/handoff.md e continuiamo dal personaggio 2D`
+- `leggi docs/handoff.md e riprendiamo dal flusso di salvataggio editor`
+
+## Prossimi step consigliati
+
+- decidere il formato reale delle animazioni del personaggio:
+  - frame sciolti
+  - sprite sheet
+  - animazioni CSS su singolo asset
+- aggiungere una convenzione stabile di naming per stati e direzioni del character
+- estrarre da `js/core/game.js` anche la parte stato tutorial/custom/editor
+- pulire gli eventuali controlli UI editor non presenti nel markup
