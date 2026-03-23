@@ -1,6 +1,11 @@
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+[CmdletBinding()]
+param(
+  [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot)
+)
+
+$repoRoot = (Resolve-Path $RepoRoot).Path
 $indexPath = Join-Path $repoRoot 'index.html'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 

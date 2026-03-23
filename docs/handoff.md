@@ -269,3 +269,121 @@ Se vuoi ripartire da qui, puoi dire:
 - aggiungere una convenzione stabile di naming per stati e direzioni del character
 - estrarre da `js/core/game.js` anche la parte stato tutorial/custom/editor
 - pulire gli eventuali controlli UI editor non presenti nel markup
+
+---
+
+# Aggiornamento
+
+Data: 2026-03-23
+
+## Contesto della sessione
+
+Obiettivo della sessione:
+- chiarire il rapporto tra `main` e `live`
+- verificare quale branch stesse servendo GitHub Pages
+- automatizzare il rilascio di `live` partendo da `main`
+
+## Cosa abbiamo chiarito
+
+1. Stato branch
+- Sul repository esistono ancora due branch:
+  - `main`
+  - `live`
+- In locale esistono ancora due worktree separati:
+  - `C:\Users\maurizio\Documents\cubetto-pwa-main` per `main`
+  - `C:\Users\maurizio\Documents\cubetto-pwa` per `live`
+
+2. Stato GitHub Pages
+- E stato verificato che GitHub Pages stava servendo `live`, non `main`.
+- Il contenuto pubblico corrispondeva alla variante player-only del branch `live`.
+
+3. Regola operativa fissata
+- `main` resta il branch di sviluppo quotidiano.
+- `live` resta il branch di release pubblica per GitHub Pages.
+- Quindi fare push su `main` da solo non aggiorna la produzione.
+
+## Automazione introdotta
+
+1. Flag di release nel markup
+- In `index.html` sono stati aggiunti flag runtime tramite `data-*` per controllare:
+  - canale release
+  - editor abilitato/disabilitato
+  - debug tools abilitati/disabilitati
+  - build badge visibile/nascosto
+
+2. Bootstrap runtime
+- `js/core/app-loader.js` ora legge i flag runtime dal `body`.
+- In base ai flag applica classi CSS e imposta `window.BOKS_RUNTIME_CONFIG`.
+- In modalita `live` aggiorna anche il sottotitolo iniziale in versione player-only.
+
+3. Guard rail nel gioco
+- `js/core/game.js` ora legge i flag runtime e supporta:
+  - `LEVEL_EDITOR_ENABLED`
+  - `DEBUG_TOOLS_ENABLED`
+- In modalita `live` vengono disattivati:
+  - apertura editor
+  - quick editor toggle
+  - scorciatoie debug
+  - caricamento iniziale dei livelli editor
+- Se l'editor e disabilitato, il tutorial usa gli step ufficiali invece dei livelli custom.
+
+4. Nascondimento UI release
+- `styles/app.css` ora nasconde automaticamente in modalita `live`:
+  - `startEditorBtn`
+  - `quickEditorBtn`
+  - toolbar editor
+  - pannelli livelli/elementi
+  - debug badge
+  - build badge
+
+5. Script nuovi
+- E stato aggiunto:
+  - `scripts/set-release-mode.ps1`
+- Questo script imposta `main` o `live` aggiornando i flag in `index.html`.
+
+- E stato aggiunto:
+  - `scripts/release-live.ps1`
+- Questo script:
+  - controlla che `main` e `live` siano puliti
+  - verifica che `main` sia gia pushato su `origin/main`
+  - aggiorna il worktree `live`
+  - mergea `origin/main` dentro `live`
+  - esegue il build stamp
+  - imposta la modalita `live`
+  - crea il commit release
+  - opzionalmente fa push su `origin/live`
+
+- E stato esteso anche:
+  - `scripts/stamp-build.ps1`
+- Ora puo timbrare anche un repo/worktree passato via parametro `-RepoRoot`.
+
+## Flusso corretto da ora in poi
+
+Quando vuoi pubblicare una versione di `main` su `live`:
+
+1. lavorare in `main`
+2. fare commit su `main`
+3. fare push su `origin/main`
+4. lanciare:
+  - `powershell -ExecutionPolicy Bypass -File scripts\release-live.ps1 -Push`
+
+Se invece vuoi solo preparare `live` localmente senza pubblicarlo ancora:
+- `powershell -ExecutionPolicy Bypass -File scripts\release-live.ps1`
+
+## Nota pratica importante
+
+Lo script di release si ferma apposta se:
+- `main` ha modifiche locali
+- `live` ha modifiche locali
+- `main` non e ancora stato pushato su `origin/main`
+- il worktree non e sul branch giusto
+
+Questo serve a evitare release incoerenti o pubblicazioni accidentali di codice non ancora sincronizzato.
+
+## Come riprendere la prossima volta
+
+Se vuoi ripartire da qui, puoi dire:
+
+- `leggi docs/handoff.md e riprendiamo dal rilascio live`
+- `leggi docs/handoff.md e verifichiamo il flusso main -> live`
+- `leggi docs/handoff.md e continuiamo da GitHub Pages`
