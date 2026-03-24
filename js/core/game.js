@@ -475,14 +475,11 @@ function cellPos(x, y) {
 }
 
 function spriteRectFromCellRect(r) {
-  const scale = 1.42;
-  const width = r.w * scale;
-  const height = r.h * scale;
   return {
-    l: r.l - ((width - r.w) / 2),
-    t: r.t - ((height - r.h) / 2) - (r.h * 0.04),
-    w: width,
-    h: height
+    l: r.l,
+    t: r.t,
+    w: r.w,
+    h: r.h
   };
 }
 

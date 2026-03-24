@@ -34,6 +34,23 @@
     return `${action}:${direction}`;
   }
 
+  function buildFitStyle(state) {
+    const scale = Number(state?.fit?.scale);
+    const offsetX = Number(state?.fit?.offsetX);
+    const offsetY = Number(state?.fit?.offsetY);
+    const parts = [];
+    if (Number.isFinite(scale) && scale > 0) {
+      parts.push(`--hero-fit-scale:${scale}`);
+    }
+    if (Number.isFinite(offsetX)) {
+      parts.push(`--hero-fit-offset-x:${offsetX}px`);
+    }
+    if (Number.isFinite(offsetY)) {
+      parts.push(`--hero-fit-offset-y:${offsetY}px`);
+    }
+    return parts.join('; ');
+  }
+
   function resolveState(characterId, action, direction) {
     const manifest = getCharacterManifest(characterId);
     if (!manifest) return null;
@@ -72,11 +89,14 @@
     const cacheBustedSrc = `${resolved.state.src}?v=${encodeURIComponent(build)}`;
     const requestedKey = getStateKey(state.action, state.direction);
     const resolvedKey = resolved.key;
+    const fitStyle = buildFitStyle(resolved.state);
 
     return `
       <div class="boks-hero" data-character="${characterId}" data-direction="${state.direction}" data-action="${state.action}" data-state="${requestedKey}" data-resolved-state="${resolvedKey}" data-transform-fallback="${resolved.state.transformFallback || 'none'}" data-fallback="${resolved.usesFallback ? 'true' : 'false'}">
         <span class="boks-hero__art" aria-hidden="true">
-          <img class="boks-hero__img" src="${cacheBustedSrc}" alt=""/>
+          <span class="boks-hero__fit" style="${fitStyle}">
+            <img class="boks-hero__img" src="${cacheBustedSrc}" alt=""/>
+          </span>
         </span>
       </div>
     `;

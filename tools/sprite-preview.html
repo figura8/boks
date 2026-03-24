@@ -188,7 +188,7 @@
 
     .preview-wrap {
       position: relative;
-      min-height: 420px;
+      height: clamp(360px, 52vh, 520px);
       border-radius: 24px;
       overflow: hidden;
       background: rgba(255,255,255,0.36);
@@ -199,6 +199,17 @@
       display: block;
       width: 100%;
       height: 100%;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .preview-wrap--game {
+      height: clamp(360px, 52vh, 520px);
     }
 
     .hud {
@@ -284,11 +295,57 @@
       color: var(--muted);
     }
 
+    .analysis-verdict {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(120, 96, 66, 0.14);
+      background: rgba(255,255,255,0.68);
+      color: var(--ink);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
+    .analysis-verdict strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .analysis-verdict--good {
+      border-color: rgba(71, 140, 85, 0.3);
+      background: rgba(231, 247, 234, 0.95);
+    }
+
+    .analysis-verdict--warn {
+      border-color: rgba(189, 139, 51, 0.28);
+      background: rgba(255, 247, 224, 0.95);
+    }
+
+    .analysis-verdict--bad {
+      border-color: rgba(178, 75, 60, 0.28);
+      background: rgba(255, 238, 235, 0.95);
+    }
+
     .analysis-list {
       margin-top: 12px;
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .analysis-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .analysis-section__title {
+      margin: 2px 0 0;
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
     .analysis-item {
@@ -328,6 +385,15 @@
 
       .sheet-area {
         grid-template-columns: 1fr;
+      }
+
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-wrap,
+      .preview-wrap--game {
+        height: 360px;
       }
     }
   </style>
@@ -474,17 +540,43 @@
     </section>
 
     <section class="panel stage">
-      <div class="preview-wrap">
-        <canvas id="previewCanvas"></canvas>
-        <div class="hud">
-          <div id="frameBadge" class="pill">Frame 0</div>
-          <div id="sourceBadge" class="pill">Nessuna immagine</div>
+      <div class="preview-grid">
+        <div class="preview-wrap">
+          <canvas id="previewCanvas"></canvas>
+          <div class="hud">
+            <div id="frameBadge" class="pill">Frame 0</div>
+            <div id="sourceBadge" class="pill">Nessuna immagine</div>
+          </div>
+        </div>
+        <div class="preview-wrap preview-wrap--game">
+          <canvas id="gamePreviewCanvas"></canvas>
+          <div class="hud">
+            <div class="pill">Come nel gioco</div>
+            <div id="gamePreviewBadge" class="pill">Cella centrale</div>
+          </div>
         </div>
       </div>
 
       <div class="sheet-area">
         <div class="sheet-card">
           <canvas id="sheetCanvas"></canvas>
+          <div class="group" style="margin-top:14px;">
+            <p class="group-title">Fit gioco</p>
+            <div class="row">
+              <label>
+                Scala gioco
+                <input id="gameScaleInput" type="number" min="0.3" max="2" step="0.01" value="1" />
+              </label>
+              <label>
+                Offset Y gioco
+                <input id="gameOffsetYInput" type="number" min="-400" max="400" step="1" value="0" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="autoFitGameBtn" class="secondary" type="button">Auto fit gioco</button>
+            </div>
+            <div id="gameFitHint" class="hint">Usa questa sezione per vedere se uno sprite quasi buono puo essere riposizionato meglio nella cella del gioco.</div>
+          </div>
         </div>
         <div class="info-card">
           <div class="info-grid">
@@ -523,26 +615,32 @@
         gapYInput: document.getElementById('gapYInput'),
         fpsInput: document.getElementById('fpsInput'),
         scaleInput: document.getElementById('scaleInput'),
+        gameScaleInput: document.getElementById('gameScaleInput'),
+        gameOffsetYInput: document.getElementById('gameOffsetYInput'),
         loopModeInput: document.getElementById('loopModeInput'),
         autoplayInput: document.getElementById('autoplayInput'),
         backgroundInput: document.getElementById('backgroundInput'),
         loadPathBtn: document.getElementById('loadPathBtn'),
         reloadBtn: document.getElementById('reloadBtn'),
         copyAutoGridBtn: document.getElementById('copyAutoGridBtn'),
+        autoFitGameBtn: document.getElementById('autoFitGameBtn'),
         playPauseBtn: document.getElementById('playPauseBtn'),
         prevFrameBtn: document.getElementById('prevFrameBtn'),
         nextFrameBtn: document.getElementById('nextFrameBtn'),
         resetBtn: document.getElementById('resetBtn'),
         status: document.getElementById('status'),
         previewCanvas: document.getElementById('previewCanvas'),
+        gamePreviewCanvas: document.getElementById('gamePreviewCanvas'),
         sheetCanvas: document.getElementById('sheetCanvas'),
         frameBadge: document.getElementById('frameBadge'),
         sourceBadge: document.getElementById('sourceBadge'),
+        gamePreviewBadge: document.getElementById('gamePreviewBadge'),
         infoSource: document.getElementById('infoSource'),
         infoSheet: document.getElementById('infoSheet'),
         infoFrame: document.getElementById('infoFrame'),
         infoActive: document.getElementById('infoActive'),
         infoRange: document.getElementById('infoRange'),
+        gameFitHint: document.getElementById('gameFitHint'),
         analysisSummary: document.getElementById('analysisSummary'),
         analysisList: document.getElementById('analysisList')
       };
@@ -559,7 +657,9 @@
         dragState: null,
         analysisKey: '',
         analysisHtml: '',
-        analysisSummaryHtml: ''
+        analysisSummaryHtml: '',
+        analysisFrames: [],
+        analysisMetrics: null
       };
 
       function readStoredSettings() {
@@ -587,6 +687,8 @@
           gapY: clampFloat(els.gapYInput.value, -10000, 10000, 0),
           fps: clampInt(els.fpsInput.value, 1, 60, 8),
           scale: clampFloat(els.scaleInput.value, 0.4, 4, 1.7),
+          gameScale: clampFloat(els.gameScaleInput.value, 0.3, 2, 1),
+          gameOffsetY: clampFloat(els.gameOffsetYInput.value, -400, 400, 0),
           loopMode: els.loopModeInput.value,
           autoplay: !!els.autoplayInput.checked,
           background: els.backgroundInput.value
@@ -660,6 +762,8 @@
         els.gapYInput.value = pick(params.get('gapY'), saved.gapY, 0);
         els.fpsInput.value = pick(params.get('fps'), saved.fps, 8);
         els.scaleInput.value = pick(params.get('scale'), saved.scale, 1.7);
+        els.gameScaleInput.value = pick(params.get('gameScale'), saved.gameScale, 1);
+        els.gameOffsetYInput.value = pick(params.get('gameOffsetY'), saved.gameOffsetY, 0);
         els.loopModeInput.value = pick(params.get('loop'), saved.loopMode, 'forward');
         els.autoplayInput.checked = params.get('autoplay')
           ? params.get('autoplay') !== '0'
@@ -938,7 +1042,101 @@
       }
 
       function pushAnalysisItem(items, tone, title, detail) {
-        items.push(`<div class="analysis-item analysis-item--${tone}"><strong>${title}</strong><span>${detail}</span></div>`);
+        items.push({ tone, title, detail });
+      }
+
+      function toneRank(tone) {
+        return tone === 'bad' ? 3 : tone === 'warn' ? 2 : 1;
+      }
+
+      function worstTone(items) {
+        return items.reduce((worst, item) => toneRank(item.tone) > toneRank(worst) ? item.tone : worst, 'good');
+      }
+
+      function renderAnalysisItems(items) {
+        return items.map((item) => `<div class="analysis-item analysis-item--${item.tone}"><strong>${item.title}</strong><span>${item.detail}</span></div>`).join('');
+      }
+
+      function renderAnalysisSection(title, items) {
+        if (!items.length) return '';
+        return `<section class="analysis-section"><div class="analysis-section__title">${title}</div>${renderAnalysisItems(items)}</section>`;
+      }
+
+      function computeGameFitSuggestion(cell, rect, frameAnalysis) {
+        if (!rect || !frameAnalysis?.stats || frameAnalysis.stats.empty) return null;
+        const stats = frameAnalysis.stats;
+        const spriteBox = cell * 1.42;
+        const fit = Math.min(spriteBox / rect.frameW, spriteBox / rect.frameH);
+        const previewScale = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
+        const currentGameScale = clampFloat(els.gameScaleInput.value, 0.3, 2, 1);
+        const baseScale = fit * previewScale * 0.78;
+        const currentDrawH = rect.frameH * baseScale * currentGameScale;
+        const currentDrawW = rect.frameW * baseScale * currentGameScale;
+        const currentBBoxH = currentDrawH * (stats.bboxHeight / rect.frameH);
+        const currentBBoxW = currentDrawW * (stats.bboxWidth / rect.frameW);
+        const targetBBoxH = cell * 0.54;
+        const targetBBoxW = cell * 0.58;
+        const scaleForHeight = targetBBoxH / Math.max(1, currentBBoxH);
+        const scaleForWidth = targetBBoxW / Math.max(1, currentBBoxW);
+        const suggestedGameScale = Math.max(0.3, Math.min(2, currentGameScale * Math.min(scaleForHeight, scaleForWidth)));
+        const suggestedDrawH = rect.frameH * baseScale * suggestedGameScale;
+        const bboxBottomInFrame = (stats.topGap + stats.bboxHeight) / rect.frameH;
+        const suggestedBBoxBottom = suggestedDrawH * bboxBottomInFrame;
+        const targetBottomGap = cell * 0.08;
+        const suggestedOffsetY = Math.round((cell - targetBottomGap) - suggestedBBoxBottom);
+
+        return {
+          scale: Number(suggestedGameScale.toFixed(2)),
+          offsetY: suggestedOffsetY
+        };
+      }
+
+      function buildFinalVerdict(transparencyItems, stabilityItems, compatibilityItems) {
+        const transparencyTone = worstTone(transparencyItems);
+        const stabilityTone = worstTone(stabilityItems);
+        const compatibilityTone = worstTone(compatibilityItems);
+
+        if (compatibilityTone === 'bad') {
+          return {
+            tone: 'bad',
+            title: 'NO: non adatto al player',
+            detail: 'Lo sheet puo anche essere leggibile o carino, ma non entra bene nella cella del gioco oppure comunica un ancoraggio/prospettiva sbagliati.'
+          };
+        }
+
+        if (transparencyTone === 'bad' || stabilityTone === 'bad') {
+          return {
+            tone: 'warn',
+            title: 'OK per test tecnico',
+            detail: 'Lo sheet puo servire per capire il feeling o validare il parser, ma non e ancora pronto da integrare come personaggio del gioco.'
+          };
+        }
+
+        if (transparencyTone === 'warn' || stabilityTone === 'warn' || compatibilityTone === 'warn') {
+          return {
+            tone: 'warn',
+            title: 'OK per test tecnico',
+            detail: 'La base e utilizzabile per prototipi e confronti, ma ci sono ancora aspetti da sistemare prima di usarla davvero nel gioco.'
+          };
+        }
+
+        return {
+          tone: 'good',
+          title: 'OK per integrazione',
+          detail: 'Trasparenza, stabilita e compatibilita col gioco sono abbastanza sane da provare un aggancio reale nel runtime.'
+        };
+      }
+
+      function getFrameAnalysis(frameIndex) {
+        return state.analysisFrames.find((entry) => entry.rect?.frameIndex === frameIndex) || null;
+      }
+
+      function isLikelyCheckerColor(r, g, b) {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const chroma = max - min;
+        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return chroma <= 24 && luma >= 120 && luma <= 252;
       }
 
       function collectFrameStats(rect, imageData, imageWidth, imageHeight) {
@@ -959,10 +1157,23 @@
         let maxX = -Infinity;
         let maxY = -Infinity;
         const threshold = 12;
+        const borderThickness = Math.max(1, Math.round(Math.min(frameWidth, frameHeight) * 0.04));
+        let borderPixels = 0;
+        let borderOpaque = 0;
 
         for (let y = visibleY0; y < visibleY1; y++) {
           for (let x = visibleX0; x < visibleX1; x++) {
             const alpha = imageData[(y * imageWidth + x) * 4 + 3];
+            const localX = x - sx;
+            const localY = y - sy;
+            const isBorder = localX < borderThickness
+              || localY < borderThickness
+              || localX >= frameWidth - borderThickness
+              || localY >= frameHeight - borderThickness;
+            if (isBorder) {
+              borderPixels += 1;
+              if (alpha > threshold) borderOpaque += 1;
+            }
             if (alpha <= threshold) continue;
             opaque += 1;
             if (x < minX) minX = x;
@@ -981,7 +1192,11 @@
             bboxHeight: 0,
             centerX: 0,
             centerY: 0,
-            bottomGap: frameHeight
+            bottomGap: frameHeight,
+            topGap: frameHeight,
+            leftGap: frameWidth,
+            rightGap: frameWidth,
+            edgeOpaqueRatio: borderPixels ? borderOpaque / borderPixels : 0
           };
         }
 
@@ -991,6 +1206,37 @@
         const localTop = minY - sy;
         const localRight = ex - (maxX + 1);
         const localBottom = ey - (maxY + 1);
+        const safeInset = Math.max(2, Math.round(Math.min(frameWidth, frameHeight) * 0.02));
+        const bgLeft = Math.max(0, localLeft - safeInset);
+        const bgTop = Math.max(0, localTop - safeInset);
+        const bgRight = Math.min(frameWidth, localLeft + bboxWidth + safeInset);
+        const bgBottom = Math.min(frameHeight, localTop + bboxHeight + safeInset);
+        let outsidePixels = 0;
+        let outsideOpaque = 0;
+        let outsideCheckerLike = 0;
+
+        for (let y = visibleY0; y < visibleY1; y++) {
+          for (let x = visibleX0; x < visibleX1; x++) {
+            const localX = x - sx;
+            const localY = y - sy;
+            const insideExpandedBox = localX >= bgLeft
+              && localX < bgRight
+              && localY >= bgTop
+              && localY < bgBottom;
+            if (insideExpandedBox) continue;
+            outsidePixels += 1;
+            const idx = (y * imageWidth + x) * 4;
+            const alpha = imageData[idx + 3];
+            if (alpha <= threshold) continue;
+            outsideOpaque += 1;
+            const r = imageData[idx];
+            const g = imageData[idx + 1];
+            const b = imageData[idx + 2];
+            if (isLikelyCheckerColor(r, g, b)) {
+              outsideCheckerLike += 1;
+            }
+          }
+        }
 
         return {
           empty: false,
@@ -1003,7 +1249,10 @@
           bottomGap: localBottom,
           leftGap: localLeft,
           topGap: localTop,
-          rightGap: localRight
+          rightGap: localRight,
+          edgeOpaqueRatio: borderPixels ? borderOpaque / borderPixels : 0,
+          outsideOpaqueRatio: outsidePixels ? outsideOpaque / outsidePixels : 0,
+          outsideCheckerRatio: outsideOpaque ? outsideCheckerLike / outsideOpaque : 0
         };
       }
 
@@ -1013,13 +1262,15 @@
 
         if (!state.image) {
           const summary = [
-            '<div><strong>Target progetto:</strong> il personaggio viene renderizzato in un contenitore quasi quadrato, con immagine `contain` e animazioni leggere di idle/move.</div>',
-            '<div><strong>Range consigliato:</strong> frame con trasparenza pulita, soggetto centrato, baseline stabile e poco spazio vuoto sopra/sotto.</div>'
+            '<div><strong>Target progetto:</strong> preview dentro una cella quasi quadrata, ancorata in basso e letta in prospettiva leggera come nel gioco.</div>',
+            '<div><strong>Range consigliato:</strong> vera trasparenza, piedi o base vicini al fondo della cella, poco drift laterale e volume stabile.</div>'
           ].join('');
-          const empty = '<div class="analysis-item"><strong>Analisi in attesa</strong><span>Carica uno sprite sheet per vedere se e compatibile con il progetto.</span></div>';
+          const empty = '<section class="analysis-section"><div class="analysis-section__title">Analisi</div><div class="analysis-item"><strong>Analisi in attesa</strong><span>Carica uno sprite sheet per vedere se e compatibile con il progetto.</span></div></section>';
           state.analysisKey = signature;
           state.analysisSummaryHtml = summary;
           state.analysisHtml = empty;
+          state.analysisFrames = [];
+          state.analysisMetrics = null;
           els.analysisSummary.innerHTML = summary;
           els.analysisList.innerHTML = empty;
           return;
@@ -1044,7 +1295,9 @@
           });
         }
 
-        const items = [];
+        const transparencyItems = [];
+        const stabilityItems = [];
+        const compatibilityItems = [];
         const active = currentFrameRect();
         const activeAspect = active ? active.frameW / Math.max(1, active.frameH) : 0;
         const emptyFrames = frames.filter((entry) => entry.stats.empty).length;
@@ -1052,13 +1305,22 @@
         const bboxHeights = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bboxHeight);
         const bboxWidths = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bboxWidth);
         const bottomGaps = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bottomGap);
+        const topGaps = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.topGap);
         const centersX = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.centerX);
+        const edgeOpaqueRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.edgeOpaqueRatio);
+        const outsideOpaqueRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.outsideOpaqueRatio);
+        const outsideCheckerRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.outsideCheckerRatio);
         const touchesEdgeCount = frames.filter((entry) => entry.stats.touchesEdge).length;
 
         const avg = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
         const spread = (values) => values.length ? Math.max(...values) - Math.min(...values) : 0;
 
         const avgOccupancy = avg(occupancies);
+        const avgBottomGap = avg(bottomGaps);
+        const avgTopGap = avg(topGaps);
+        const avgEdgeOpaqueRatio = avg(edgeOpaqueRatios);
+        const avgOutsideOpaqueRatio = avg(outsideOpaqueRatios);
+        const avgOutsideCheckerRatio = avg(outsideCheckerRatios);
         const bottomDrift = spread(bottomGaps);
         const centerDrift = spread(centersX);
         const widthDrift = spread(bboxWidths);
@@ -1070,65 +1332,112 @@
           && Number.isInteger(state.image.height / clampInt(els.rowsInput.value, 1, 64, 1));
 
         if (uniformFrameSize || isManualGridEnabled()) {
-          pushAnalysisItem(items, 'good', 'Compatibilita base', 'La griglia e leggibile dal tool. Il progetto puo usare questo sheet se baseline, padding e coerenza dei frame restano sotto controllo.');
+          pushAnalysisItem(compatibilityItems, 'good', 'Compatibilita base', 'La griglia e leggibile dal tool. Il progetto puo usare questo sheet se baseline, padding e coerenza dei frame restano sotto controllo.');
         } else {
-          pushAnalysisItem(items, 'warn', 'Griglia non divisibile perfettamente', 'Con la griglia automatica il file non si divide in celle intere. Attiva il ritaglio manuale oppure correggi lo sheet all\'origine.');
+          pushAnalysisItem(compatibilityItems, 'warn', 'Griglia non divisibile perfettamente', 'Con la griglia automatica il file non si divide in celle intere. Attiva il ritaglio manuale oppure correggi lo sheet all\'origine.');
         }
 
         if (activeAspect >= 0.9 && activeAspect <= 1.8) {
-          pushAnalysisItem(items, 'good', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1, dentro una zona comoda per il renderer del progetto.`);
+          pushAnalysisItem(compatibilityItems, 'good', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1, dentro una zona comoda per il renderer del progetto.`);
         } else {
-          pushAnalysisItem(items, activeAspect < 0.65 || activeAspect > 2.1 ? 'bad' : 'warn', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1. Nel progetto funzionano meglio frame non troppo alti o troppo larghi, con soggetto ben centrato.`);
+          pushAnalysisItem(compatibilityItems, activeAspect < 0.65 || activeAspect > 2.1 ? 'bad' : 'warn', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1. Nel progetto funzionano meglio frame non troppo alti o troppo larghi, con soggetto ben centrato.`);
         }
 
         if (emptyFrames === 0) {
-          pushAnalysisItem(items, 'good', 'Frame popolati', 'Nel range selezionato ogni frame contiene pixel utili.');
+          pushAnalysisItem(stabilityItems, 'good', 'Frame popolati', 'Nel range selezionato ogni frame contiene pixel utili.');
         } else {
-          pushAnalysisItem(items, emptyFrames === frames.length ? 'bad' : 'warn', 'Frame vuoti', `${emptyFrames} frame nel range selezionato risultano vuoti o quasi trasparenti. Questo rompe l\'animazione.`);
+          pushAnalysisItem(stabilityItems, emptyFrames === frames.length ? 'bad' : 'warn', 'Frame vuoti', `${emptyFrames} frame nel range selezionato risultano vuoti o quasi trasparenti. Questo rompe l\'animazione.`);
+        }
+
+        if (avgOutsideOpaqueRatio <= 0.03) {
+          pushAnalysisItem(transparencyItems, 'good', 'Trasparenza valida', `Fuori dal soggetto quasi tutto e davvero trasparente (${Math.round(avgOutsideOpaqueRatio * 100)}% opaco). Questo e il segnale piu forte che il PNG e scontornato bene.`);
+        } else if (avgOutsideOpaqueRatio <= 0.12) {
+          pushAnalysisItem(transparencyItems, 'warn', 'Trasparenza dubbia', `Fuori dal soggetto resta circa ${Math.round(avgOutsideOpaqueRatio * 100)}% di pixel opachi. Potrebbe esserci fondo residuo, alone o crop poco pulito.`);
+        } else {
+          const checkerHint = avgOutsideCheckerRatio >= 0.45
+            ? ' La maggior parte di quei pixel assomiglia a un checker chiaro: sembra uno sfondo incorporato nel PNG.'
+            : '';
+          pushAnalysisItem(transparencyItems, 'bad', 'Finto sfondo trasparente', `Fuori dal soggetto resta circa ${Math.round(avgOutsideOpaqueRatio * 100)}% di pixel opachi.${checkerHint}`);
+        }
+
+        if (avgEdgeOpaqueRatio <= 0.18) {
+          pushAnalysisItem(transparencyItems, 'good', 'Bordi del frame', `I bordi dei frame restano per lo piu puliti (${Math.round(avgEdgeOpaqueRatio * 100)}% opachi).`);
+        } else if (avgEdgeOpaqueRatio <= 0.45) {
+          pushAnalysisItem(transparencyItems, 'warn', 'Bordi del frame', `I bordi risultano opachi per circa ${Math.round(avgEdgeOpaqueRatio * 100)}%. Va bene solo se il crop e molto stretto per scelta.`);
+        } else {
+          pushAnalysisItem(transparencyItems, 'warn', 'Bordi del frame', `I bordi risultano opachi per circa ${Math.round(avgEdgeOpaqueRatio * 100)}%. Se non e un crop strettissimo, il file e probabilmente troppo pieno o sporco.`);
         }
 
         if (avgOccupancy >= 0.14 && avgOccupancy <= 0.68) {
-          pushAnalysisItem(items, 'good', 'Uso dello spazio', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Il personaggio non sembra ne troppo piccolo ne troppo schiacciato dentro la cella.`);
+          pushAnalysisItem(compatibilityItems, 'good', 'Uso dello spazio', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Il personaggio non sembra ne troppo piccolo ne troppo schiacciato dentro la cella.`);
         } else if (avgOccupancy < 0.14) {
-          pushAnalysisItem(items, 'warn', 'Troppo spazio vuoto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite rischia di apparire minuscolo: conviene stringere Cell W/H o rigenerare lo sheet con meno padding.`);
+          pushAnalysisItem(compatibilityItems, 'warn', 'Troppo spazio vuoto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite rischia di apparire minuscolo: conviene stringere Cell W/H o rigenerare lo sheet con meno padding.`);
         } else {
-          pushAnalysisItem(items, 'warn', 'Crop molto stretto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite e molto vicino ai bordi e rischia clipping in animazione.`);
+          pushAnalysisItem(compatibilityItems, 'warn', 'Crop molto stretto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite e molto vicino ai bordi e rischia clipping in animazione.`);
+        }
+
+        if (avgBottomGap <= frameHeight * 0.08) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Ancoraggio nella cella', `Il soggetto resta vicino al pavimento della cella (${Math.round(avgBottomGap)}px medi sotto). Questo aiuta la lettura prospettica.`);
+        } else if (avgBottomGap <= frameHeight * 0.18) {
+          pushAnalysisItem(compatibilityItems, 'warn', 'Ancoraggio alto', `Il soggetto lascia circa ${Math.round(avgBottomGap)}px sotto di se. In gioco puo sembrare un po piu sospeso del previsto.`);
+        } else {
+          pushAnalysisItem(compatibilityItems, 'bad', 'Soggetto sospeso', `Il soggetto lascia circa ${Math.round(avgBottomGap)}px sotto di se, contro ${Math.round(avgTopGap)}px sopra. In gioco sembrera galleggiare invece di appoggiarsi alla cella.`);
         }
 
         if (bottomDrift <= frameHeight * 0.06) {
-          pushAnalysisItem(items, 'good', 'Baseline stabile', `Deriva verticale contenuta (${Math.round(bottomDrift)}px nel range). Questo e importante per non far “saltare” il personaggio.`);
+          pushAnalysisItem(stabilityItems, 'good', 'Baseline stabile', `Deriva verticale contenuta (${Math.round(bottomDrift)}px nel range). Questo e importante per non far “saltare” il personaggio.`);
         } else {
-          pushAnalysisItem(items, bottomDrift > frameHeight * 0.14 ? 'bad' : 'warn', 'Baseline instabile', `La deriva verticale e di circa ${Math.round(bottomDrift)}px tra i frame. Nel gioco questa animazione sembrera tremare o galleggiare.`);
+          pushAnalysisItem(stabilityItems, bottomDrift > frameHeight * 0.14 ? 'bad' : 'warn', 'Baseline instabile', `La deriva verticale e di circa ${Math.round(bottomDrift)}px tra i frame. Nel gioco questa animazione sembrera tremare o galleggiare.`);
         }
 
         if (centerDrift <= frameWidth * 0.08) {
-          pushAnalysisItem(items, 'good', 'Centro coerente', `Spostamento orizzontale limitato (${Math.round(centerDrift)}px).`);
+          pushAnalysisItem(stabilityItems, 'good', 'Centro coerente', `Spostamento orizzontale limitato (${Math.round(centerDrift)}px).`);
         } else {
-          pushAnalysisItem(items, centerDrift > frameWidth * 0.18 ? 'bad' : 'warn', 'Centro instabile', `Il personaggio cambia posizione orizzontale di circa ${Math.round(centerDrift)}px. Potresti percepire jitter laterale.`);
+          pushAnalysisItem(stabilityItems, centerDrift > frameWidth * 0.18 ? 'bad' : 'warn', 'Centro instabile', `Il personaggio cambia posizione orizzontale di circa ${Math.round(centerDrift)}px. Potresti percepire jitter laterale.`);
         }
 
         if (touchesEdgeCount === 0) {
-          pushAnalysisItem(items, 'good', 'Margine di sicurezza', 'Nessun frame tocca i bordi del crop: buon margine per usare lo sprite senza tagli evidenti.');
+          pushAnalysisItem(compatibilityItems, 'good', 'Margine di sicurezza', 'Nessun frame tocca i bordi del crop: buon margine per usare lo sprite senza tagli evidenti.');
         } else {
-          pushAnalysisItem(items, touchesEdgeCount > Math.ceil(frames.length / 2) ? 'bad' : 'warn', 'Rischio clipping', `${touchesEdgeCount} frame toccano il bordo del crop. Se l\'illustrazione continua fuori dalla cella, lo sheet va corretto o ritagliato meglio.`);
+          pushAnalysisItem(compatibilityItems, touchesEdgeCount > Math.ceil(frames.length / 2) ? 'bad' : 'warn', 'Rischio clipping', `${touchesEdgeCount} frame toccano il bordo del crop. Se l\'illustrazione continua fuori dalla cella, lo sheet va corretto o ritagliato meglio.`);
         }
 
         if (widthDrift <= frameWidth * 0.1 && heightDrift <= frameHeight * 0.1) {
-          pushAnalysisItem(items, 'good', 'Volume coerente', 'Le dimensioni utili del personaggio restano abbastanza stabili tra i frame.');
+          pushAnalysisItem(stabilityItems, 'good', 'Volume coerente', 'Le dimensioni utili del personaggio restano abbastanza stabili tra i frame.');
         } else {
-          pushAnalysisItem(items, 'warn', 'Volume irregolare', `La variazione utile e circa ${Math.round(widthDrift)}px in larghezza e ${Math.round(heightDrift)}px in altezza. Potrebbe sembrare un resize involontario, non un\'animazione.`);
+          pushAnalysisItem(stabilityItems, 'warn', 'Volume irregolare', `La variazione utile e circa ${Math.round(widthDrift)}px in larghezza e ${Math.round(heightDrift)}px in altezza. Potrebbe sembrare un resize involontario, non un\'animazione.`);
         }
 
+        const verdict = buildFinalVerdict(transparencyItems, stabilityItems, compatibilityItems);
+        const fitSuggestion = computeGameFitSuggestion(100, active, frames.find((entry) => entry.rect?.frameIndex === active?.frameIndex));
         const summary = [
-          '<div><strong>Target progetto:</strong> contenitore quasi quadrato, `object-fit: contain`, animazioni leggere e sprite con baseline stabile.</div>',
-          `<div><strong>Diagnosi veloce:</strong> frame ${Math.round(active?.frameW || 0)} x ${Math.round(active?.frameH || 0)}px, rapporto ${formatRatio(activeAspect)}:1, occupazione media ${Math.round(avgOccupancy * 100)}%.</div>`
+          '<div><strong>Target progetto:</strong> contenitore quasi quadrato, sprite appoggiato in basso nella cella e lettura chiara in prospettiva.</div>',
+          `<div><strong>Diagnosi veloce:</strong> frame ${Math.round(active?.frameW || 0)} x ${Math.round(active?.frameH || 0)}px, rapporto ${formatRatio(activeAspect)}:1, occupazione media ${Math.round(avgOccupancy * 100)}%, opaco fuori sagoma ${Math.round(avgOutsideOpaqueRatio * 100)}%.</div>`,
+          fitSuggestion ? `<div><strong>Suggerimento fit:</strong> scala gioco ${fitSuggestion.scale}, offset Y ${fitSuggestion.offsetY > 0 ? '+' : ''}${fitSuggestion.offsetY}px.</div>` : ''
+        ].join('');
+        const analysisHtml = [
+          `<div class="analysis-verdict analysis-verdict--${verdict.tone}"><strong>${verdict.title}</strong><span>${verdict.detail}</span></div>`,
+          renderAnalysisSection('Trasparenza', transparencyItems),
+          renderAnalysisSection('Stabilita animazione', stabilityItems),
+          renderAnalysisSection('Compatibilita col gioco', compatibilityItems)
         ].join('');
 
         state.analysisKey = signature;
         state.analysisSummaryHtml = summary;
-        state.analysisHtml = items.join('');
+        state.analysisHtml = analysisHtml;
+        state.analysisFrames = frames;
+        state.analysisMetrics = {
+          avgOccupancy,
+          avgBottomGap,
+          avgTopGap,
+          avgEdgeOpaqueRatio,
+          avgOutsideOpaqueRatio,
+          avgOutsideCheckerRatio,
+          bottomDrift,
+          centerDrift
+        };
         els.analysisSummary.innerHTML = summary;
-        els.analysisList.innerHTML = state.analysisHtml;
+        els.analysisList.innerHTML = analysisHtml;
       }
 
       function resizeCanvasToBox(canvas) {
@@ -1200,17 +1509,67 @@
         if (!state.image) return;
         const rect = currentFrameRect();
         if (!rect) return;
+        const frameAnalysis = getFrameAnalysis(rect.frameIndex);
 
         const scaleFactor = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
-        const baseFit = Math.min((width * 0.72) / rect.frameW, (height * 0.58) / rect.frameH);
+        const cellSize = Math.min(width * 0.42, height * 0.54);
+        const cellX = (width - cellSize) / 2;
+        const cellY = height - cellSize - Math.max(28, height * 0.12);
+        const baseFit = Math.min(cellSize / rect.frameW, cellSize / rect.frameH);
         const drawW = rect.frameW * baseFit * scaleFactor;
         const drawH = rect.frameH * baseFit * scaleFactor;
-        const dx = (width - drawW) / 2;
-        const dy = height - drawH - Math.max(24, height * 0.09);
+        const dx = cellX + (cellSize - drawW) / 2;
+        const dy = cellY + cellSize - drawH;
+        const recommendedInsetX = cellSize * 0.16;
+        const recommendedInsetTop = cellSize * 0.12;
+        const recommendedInsetBottom = cellSize * 0.16;
+        const recommendedZone = {
+          x: cellX + recommendedInsetX,
+          y: cellY + recommendedInsetTop,
+          w: cellSize - recommendedInsetX * 2,
+          h: cellSize - recommendedInsetTop - recommendedInsetBottom
+        };
+        const floorBand = {
+          x: cellX,
+          y: cellY + cellSize * 0.82,
+          w: cellSize,
+          h: cellSize * 0.18
+        };
+
+        ctx.fillStyle = 'rgba(118, 97, 65, 0.12)';
+        ctx.beginPath();
+        ctx.moveTo(width / 2, cellY + cellSize * 0.58);
+        ctx.lineTo(cellX + cellSize * 0.94, cellY + cellSize * 0.78);
+        ctx.lineTo(width / 2, cellY + cellSize * 0.98);
+        ctx.lineTo(cellX + cellSize * 0.06, cellY + cellSize * 0.78);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(120, 96, 66, 0.26)';
+        ctx.lineWidth = Math.max(2, width * 0.0026);
+        ctx.strokeRect(cellX, cellY, cellSize, cellSize);
+
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.08)';
+        ctx.fillRect(floorBand.x, floorBand.y, floorBand.w, floorBand.h);
+
+        ctx.save();
+        ctx.setLineDash([10, 8]);
+        ctx.strokeStyle = 'rgba(207, 155, 74, 0.45)';
+        ctx.lineWidth = Math.max(1.5, width * 0.002);
+        ctx.strokeRect(recommendedZone.x, recommendedZone.y, recommendedZone.w, recommendedZone.h);
+        ctx.restore();
+
+        ctx.strokeStyle = 'rgba(58, 143, 82, 0.28)';
+        ctx.beginPath();
+        ctx.moveTo(cellX, cellY + cellSize);
+        ctx.lineTo(cellX + cellSize, cellY + cellSize);
+        ctx.stroke();
 
         ctx.fillStyle = 'rgba(0,0,0,0.14)';
         ctx.beginPath();
-        ctx.ellipse(width / 2, dy + drawH * 0.92, drawW * 0.28, drawH * 0.08, 0, 0, Math.PI * 2);
+        const shadowWidth = Math.min(cellSize * 0.34, drawW * 0.34);
+        const shadowHeight = Math.max(10, drawH * 0.06);
+        ctx.ellipse(width / 2, cellY + cellSize * 0.94, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.imageSmoothingEnabled = true;
@@ -1219,6 +1578,127 @@
           rect.sx, rect.sy, rect.frameW, rect.frameH,
           dx, dy, drawW, drawH
         );
+
+        if (frameAnalysis?.stats && !frameAnalysis.stats.empty) {
+          const bboxX = dx + drawW * (frameAnalysis.stats.leftGap / rect.frameW);
+          const bboxY = dy + drawH * (frameAnalysis.stats.topGap / rect.frameH);
+          const bboxW = drawW * (frameAnalysis.stats.bboxWidth / rect.frameW);
+          const bboxH = drawH * (frameAnalysis.stats.bboxHeight / rect.frameH);
+
+          ctx.save();
+          ctx.setLineDash([7, 5]);
+          ctx.strokeStyle = 'rgba(54, 138, 183, 0.6)';
+          ctx.lineWidth = Math.max(1.5, width * 0.002);
+          ctx.strokeRect(bboxX, bboxY, bboxW, bboxH);
+          ctx.restore();
+
+          const anchorY = dy + drawH * ((frameAnalysis.stats.topGap + frameAnalysis.stats.bboxHeight) / rect.frameH);
+          ctx.strokeStyle = 'rgba(216, 114, 54, 0.48)';
+          ctx.lineWidth = Math.max(1, width * 0.002);
+          ctx.beginPath();
+          ctx.moveTo(cellX, anchorY);
+          ctx.lineTo(cellX + cellSize, anchorY);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(46, 36, 25, 0.65)';
+        ctx.font = `${Math.max(11, Math.round(width * 0.012))}px "Trebuchet MS", "Segoe UI", sans-serif`;
+        ctx.fillText('zona consigliata', recommendedZone.x + 8, recommendedZone.y - 8);
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.74)';
+        ctx.fillText('pavimento cella', floorBand.x + 8, floorBand.y - 8);
+      }
+
+      function drawGamePreview() {
+        resizeCanvasToBox(els.gamePreviewCanvas);
+        const canvas = els.gamePreviewCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        drawBackground(ctx, width, height);
+
+        const cols = 3;
+        const rows = 3;
+        const boardSize = Math.min(width * 0.84, height * 0.7);
+        const cell = boardSize / cols;
+        const boardX = (width - boardSize) / 2;
+        const boardY = height - boardSize - Math.max(28, height * 0.12);
+        const activeCol = 1;
+        const activeRow = 1;
+
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const x = boardX + col * cell;
+            const y = boardY + row * cell;
+            const odd = (row + col) % 2 === 0;
+            ctx.fillStyle = odd ? 'rgba(244, 237, 225, 0.96)' : 'rgba(229, 217, 198, 0.96)';
+            ctx.fillRect(x, y, cell, cell);
+            ctx.strokeStyle = 'rgba(120, 96, 66, 0.18)';
+            ctx.lineWidth = Math.max(1, width * 0.0018);
+            ctx.strokeRect(x, y, cell, cell);
+          }
+        }
+
+        const activeX = boardX + activeCol * cell;
+        const activeY = boardY + activeRow * cell;
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.10)';
+        ctx.fillRect(activeX, activeY, cell, cell);
+        ctx.strokeStyle = 'rgba(58, 143, 82, 0.35)';
+        ctx.lineWidth = Math.max(2, width * 0.0024);
+        ctx.strokeRect(activeX, activeY, cell, cell);
+
+        if (!state.image) {
+          els.gamePreviewBadge.textContent = 'Cella centrale';
+          return;
+        }
+
+        const rect = currentFrameRect();
+        if (!rect) {
+          els.gamePreviewBadge.textContent = 'Cella centrale';
+          return;
+        }
+        const frameAnalysis = getFrameAnalysis(rect.frameIndex);
+
+        const spriteScale = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
+        const gameScale = clampFloat(els.gameScaleInput.value, 0.3, 2, 1);
+        const gameOffsetY = clampFloat(els.gameOffsetYInput.value, -400, 400, 0);
+        const spriteBox = cell * 1.42;
+        const fit = Math.min(spriteBox / rect.frameW, spriteBox / rect.frameH);
+        const drawW = rect.frameW * fit * spriteScale * 0.78 * gameScale;
+        const drawH = rect.frameH * fit * spriteScale * 0.78 * gameScale;
+        const drawX = activeX + (cell - drawW) / 2;
+        const drawY = activeY + gameOffsetY + cell - drawH;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(activeX + cell / 2, activeY + cell * 0.92, Math.min(cell * 0.28, drawW * 0.26), Math.max(8, drawH * 0.05), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          state.image,
+          rect.sx, rect.sy, rect.frameW, rect.frameH,
+          drawX, drawY, drawW, drawH
+        );
+
+        if (frameAnalysis?.stats && !frameAnalysis.stats.empty) {
+          const bboxX = drawX + drawW * (frameAnalysis.stats.leftGap / rect.frameW);
+          const bboxY = drawY + drawH * (frameAnalysis.stats.topGap / rect.frameH);
+          const bboxW = drawW * (frameAnalysis.stats.bboxWidth / rect.frameW);
+          const bboxH = drawH * (frameAnalysis.stats.bboxHeight / rect.frameH);
+          ctx.save();
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = 'rgba(54, 138, 183, 0.58)';
+          ctx.lineWidth = Math.max(1.2, width * 0.002);
+          ctx.strokeRect(bboxX, bboxY, bboxW, bboxH);
+          ctx.restore();
+        }
+
+        els.gamePreviewBadge.textContent = `${Math.round(drawW)}x${Math.round(drawH)} in cella | scala ${gameScale.toFixed(2)} | y ${gameOffsetY > 0 ? '+' : ''}${Math.round(gameOffsetY)}`;
+        const suggestion = computeGameFitSuggestion(cell, rect, frameAnalysis);
+        els.gameFitHint.textContent = suggestion
+          ? `Suggerito per questa cella: scala gioco ${suggestion.scale}, offset Y ${suggestion.offsetY > 0 ? '+' : ''}${suggestion.offsetY}px.`
+          : 'Usa questa sezione per vedere se uno sprite quasi buono puo essere riposizionato meglio nella cella del gioco.';
       }
 
       function drawSheetOverview() {
@@ -1301,6 +1781,7 @@
 
       function renderAll() {
         drawPreview();
+        drawGamePreview();
         drawSheetOverview();
         updateUiText();
         updateSheetCanvasCursor();
@@ -1390,6 +1871,8 @@
         els.gapYInput.value = 0;
         els.fpsInput.value = 8;
         els.scaleInput.value = 1.7;
+        els.gameScaleInput.value = 1;
+        els.gameOffsetYInput.value = 0;
         els.loopModeInput.value = 'forward';
         els.autoplayInput.checked = true;
         els.backgroundInput.value = 'checker';
@@ -1422,6 +1905,16 @@
         syncFrameBounds();
         writeStoredSettings();
         updateAnalysis();
+        renderAll();
+      });
+      els.autoFitGameBtn.addEventListener('click', () => {
+        if (!state.image) return;
+        const rect = currentFrameRect();
+        const suggestion = computeGameFitSuggestion(100, rect, getFrameAnalysis(rect?.frameIndex));
+        if (!suggestion) return;
+        els.gameScaleInput.value = suggestion.scale;
+        els.gameOffsetYInput.value = suggestion.offsetY;
+        writeStoredSettings();
         renderAll();
       });
       els.prevFrameBtn.addEventListener('click', () => {
@@ -1463,6 +1956,8 @@
         els.gapYInput,
         els.fpsInput,
         els.scaleInput,
+        els.gameScaleInput,
+        els.gameOffsetYInput,
         els.loopModeInput,
         els.backgroundInput
       ].forEach((el) => {

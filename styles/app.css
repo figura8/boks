@@ -345,7 +345,6 @@
       z-index: 20;
       touch-action: none;
       cursor: default;
-      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18));
     }
     body.editor-mode #sprite { cursor: grab; }
     body.editor-mode #sprite:active { cursor: grabbing; }
