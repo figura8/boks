@@ -11,6 +11,6 @@ Gli stati del runtime non vivono qui.
 
 Per ora le direzioni `left/up/down` e le azioni `idle/move/turn` usano un fallback temporaneo definito in:
 
-- `assets/animations/characters/boks/manifest.js`
+- `assets/animations/characters/boks_black/manifest.js`
 - `js/core/character/character-renderer.js`
 - `styles/character.css`

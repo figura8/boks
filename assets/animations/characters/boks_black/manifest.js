@@ -1,7 +1,7 @@
 (() => {
   window.BOKS_CHARACTER_DEFS = window.BOKS_CHARACTER_DEFS || {};
   const blueState = {
-    src: 'assets/characters/boks/block-placeholder-blue.svg',
+    src: 'assets/characters/boks_black/block-placeholder-blue.svg',
     fit: {
       scale: 1,
       offsetX: 0,
@@ -9,20 +9,22 @@
     }
   };
   const redState = {
-    src: 'assets/characters/boks/block-placeholder-red.svg',
+    src: 'assets/characters/boks_black/block-placeholder-red.svg',
     fit: { ...blueState.fit }
   };
   const yellowState = {
-    src: 'assets/characters/boks/block-placeholder-yellow.svg',
+    src: 'assets/characters/boks_black/block-placeholder-yellow.svg',
     fit: { ...blueState.fit }
   };
   const greenState = {
-    src: 'assets/characters/boks/block-placeholder-green.svg',
+    src: 'assets/characters/boks_black/block-placeholder-green.svg',
     fit: { ...blueState.fit }
   };
 
   window.BOKS_CHARACTER_DEFS.boks = {
     id: 'boks',
+    label: 'Boks',
+    hint: 'Personaggio base',
     defaultAction: 'idle',
     defaultDirection: 'right',
     states: {

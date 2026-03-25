@@ -27,7 +27,7 @@ function moveGoal() {
   }
 }
 let ori = 'right';
-const MOVE_MS = 650, TURN_MS = 320, STEP_MS = 380;
+const MOVE_MS = 650, TURN_MS = 520, STEP_MS = 380;
 const POOL = {
   forward:  {dir:'forward',  color:'#5BC85A', dark:'#3a8a39', light:'#8de88c'},
   left:     {dir:'left',     color:'#F5C842', dark:'#b8920a', light:'#ffe87a'},
@@ -43,6 +43,7 @@ const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
+const DEFAULT_CHARACTER_ID = 'boks';
 const LOCKED_THEME_SCENE_VAR_KEYS = ['--scene-body-bg', '--bg-base'];
 const EDITOR_THEME_COLOR_CONTROLS = [
   { key: '--panel-bg', label: 'Pannelli' },
@@ -106,6 +107,9 @@ let goalPlaced = true;
 let selectedElementTool = null;
 let editorStylePanelOpen = false;
 let pendingNewLevelThemeOverrides = {};
+let pendingNewLevelCharacterId = DEFAULT_CHARACTER_ID;
+let emptyRunHintTimers = [];
+let lastEmptyRunHintAt = 0;
 document.body?.classList.add('prestart');
 if (DEBUG_TOOLS_ENABLED) document.body?.classList.add('debug-visible');
 
@@ -513,6 +517,7 @@ function spriteRectFromCellRect(r) {
 
 function getCharacterRenderState(overrides = {}) {
   return {
+    characterId: resolveCharacterId(overrides.characterId || getActiveCharacterId()),
     direction: overrides.direction || ori,
     action: overrides.action || characterAction
   };
@@ -522,19 +527,62 @@ function setCharacterAction(action = 'idle') {
   characterAction = action;
 }
 
+function clearSpriteSwapTimer(spriteEl) {
+  if (!spriteEl || !spriteEl._heroSwapTimer) return;
+  clearTimeout(spriteEl._heroSwapTimer);
+  spriteEl._heroSwapTimer = null;
+}
+
+function pruneSpriteHeroes(spriteEl) {
+  if (!spriteEl) return null;
+  const heroes = Array.from(spriteEl.querySelectorAll('.boks-hero'));
+  if (heroes.length <= 1) return heroes[0] || null;
+  const keep = heroes[heroes.length - 1];
+  heroes.slice(0, -1).forEach(hero => {
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(hero);
+    hero.remove();
+  });
+  return keep;
+}
+
+function applySpriteMarkup(spriteEl, markup, renderToken, { animate = true } = {}) {
+  if (!spriteEl) return;
+  clearSpriteSwapTimer(spriteEl);
+  const currentHero = pruneSpriteHeroes(spriteEl);
+  const playbackSnapshot = currentHero
+    ? window.BOKS_CHARACTER_RENDERER?.getPlaybackSnapshot?.(currentHero) || null
+    : null;
+
+  window.BOKS_CHARACTER_RENDERER?.destroyIn?.(spriteEl);
+  spriteEl.innerHTML = markup;
+  spriteEl.dataset.heroRenderToken = renderToken;
+  window.BOKS_CHARACTER_RENDERER?.applyPlaybackSnapshot?.(spriteEl, playbackSnapshot);
+  window.BOKS_CHARACTER_RENDERER?.mountIn?.(spriteEl);
+}
+
 function resetSpritePresentation() {
   const sprite = document.getElementById('sprite');
   setCharacterAction('idle');
   if (sprite) {
+    clearSpriteSwapTimer(sprite);
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(sprite);
+    delete sprite.dataset.heroRenderToken;
     sprite.getAnimations().forEach(a => a.cancel());
+  }
+  const ghost = document.getElementById('ghost');
+  if (ghost) {
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(ghost);
   }
   return sprite;
 }
 
-function syncSprite() {
+function syncSprite(overrides = null) {
   const s = document.getElementById('sprite');
   if (!s) return;
   if (!playerPlaced) {
+    clearSpriteSwapTimer(s);
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(s);
+    delete s.dataset.heroRenderToken;
     s.innerHTML = '';
     s.style.width = '0px';
     s.style.height = '0px';
@@ -547,7 +595,37 @@ function syncSprite() {
   s.style.opacity = '1';
   s.style.left = sr.l+'px'; s.style.top = sr.t+'px';
   s.style.width = sr.w+'px'; s.style.height = sr.h+'px';
-  s.innerHTML = svgRobot(getCharacterRenderState());
+  const renderState = overrides ? getCharacterRenderState(overrides) : getCharacterRenderState();
+  const renderToken = window.BOKS_CHARACTER_RENDERER?.getRenderToken?.(renderState) || '';
+  if (renderToken && s.dataset.heroRenderToken === renderToken && s.innerHTML) {
+    window.BOKS_CHARACTER_RENDERER?.mountIn?.(s);
+    return;
+  }
+  const markup = svgRobot(renderState);
+  if (!markup) {
+    clearSpriteSwapTimer(s);
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(s);
+    delete s.dataset.heroRenderToken;
+    s.innerHTML = '';
+    return;
+  }
+  applySpriteMarkup(s, markup, renderToken, { animate: true });
+}
+
+function orientationAngle(orientation = 'right') {
+  return ({
+    right: 0,
+    down: 90,
+    left: 180,
+    up: -90
+  })[orientation] ?? 0;
+}
+
+function orientationDelta(fromOri = 'right', toOri = 'right') {
+  let delta = orientationAngle(toOri) - orientationAngle(fromOri);
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
 }
 
 async function animTo(tx, ty) {
@@ -577,6 +655,9 @@ async function animTo(tx, ty) {
     {duration:MOVE_MS, easing:'cubic-bezier(.2,.9,.2,1)', fill:'forwards'}
   );
   await a.finished.catch(()=>{});
+  if (typeof a.commitStyles === 'function') {
+    try { a.commitStyles(); } catch (_) {}
+  }
   s.style.left=sto.l+'px'; s.style.top=sto.t+'px';
   a.cancel();
   pos={x:tx,y:ty};
@@ -593,6 +674,7 @@ function setupSpriteDrag() {
     const g = document.getElementById('ghost');
     const w = s.offsetWidth;
     const h = s.offsetHeight;
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(g);
     g.innerHTML = svgRobot(getCharacterRenderState());
     g.style.cssText = `display:block;width:${w}px;height:${h}px;left:${cx}px;top:${cy}px;`;
     s.style.opacity = '0.3'; return true;
@@ -608,6 +690,7 @@ function setupSpriteDrag() {
   }
   async function end(cx,cy) {
     document.getElementById('ghost').style.display='none';
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(document.getElementById('ghost'));
     s.style.opacity='1';
     document.querySelectorAll('.cell.hi').forEach(c=>c.classList.remove('hi'));
     const u = document.elementFromPoint(cx,cy);
@@ -651,6 +734,30 @@ function normalizeLevelName(name = '') {
 
 function cloneCustomLevel(level) {
   return JSON.parse(JSON.stringify(level));
+}
+
+function getCharacterDefs() {
+  const defs = window.BOKS_CHARACTER_DEFS || {};
+  return defs && typeof defs === 'object' ? defs : {};
+}
+
+function getCharacterIds() {
+  const ids = Object.keys(getCharacterDefs()).filter(id => typeof id === 'string' && id.trim());
+  if (!ids.includes(DEFAULT_CHARACTER_ID)) ids.unshift(DEFAULT_CHARACTER_ID);
+  return [...new Set(ids)];
+}
+
+function resolveCharacterId(characterId) {
+  const raw = typeof characterId === 'string' ? characterId.trim() : '';
+  const ids = getCharacterIds();
+  if (raw && ids.includes(raw)) return raw;
+  return ids[0] || DEFAULT_CHARACTER_ID;
+}
+
+function getCharacterLabel(characterId) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId] || {};
+  return manifest.label || manifest.name || resolvedId;
 }
 
 function normalizePoint(point, fallback = null) {
@@ -797,6 +904,7 @@ async function applyCurrentStyleToSelectedLevel() {
   const updated = normalizeCustomLevel({
     ...current,
     baseLevel: getCurrentEditorThemeId(),
+    characterId: getCurrentEditorCharacterId(),
     themeOverrides: getCurrentEditorThemeOverrides()
   });
   levels[idx] = updated;
@@ -806,6 +914,7 @@ async function applyCurrentStyleToSelectedLevel() {
     currentCustomLevel = cloneCustomLevel({
       ...currentCustomLevel,
       baseLevel: updated.baseLevel,
+      characterId: updated.characterId,
       themeOverrides: updated.themeOverrides
     });
     applyLevelSceneVars();
@@ -854,6 +963,51 @@ function getCurrentEditorThemeId() {
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return resolveThemeLevelId(tutorialSceneLevelId);
   if (editorMode && currentLevel === 'level1') return resolveThemeLevelId(tutorialSceneLevelId);
   return resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+}
+
+function getActiveCharacterId() {
+  if (currentCustomLevel?.characterId) return resolveCharacterId(currentCustomLevel.characterId);
+  if (currentLevel === 'level1') {
+    const stepLevel = findCustomLevel(getEditorLevelIdForTutorialStep(tutorialStepIndex));
+    if (stepLevel?.characterId) return resolveCharacterId(stepLevel.characterId);
+    const step = getCurrentTutorialStep();
+    if (step?.characterId) return resolveCharacterId(step.characterId);
+  }
+  const level = getLevel();
+  return resolveCharacterId(level?.characterId);
+}
+
+function getCurrentEditorCharacterId() {
+  if (currentCustomLevel?.characterId) return resolveCharacterId(currentCustomLevel.characterId);
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return resolveCharacterId(pendingNewLevelCharacterId);
+  const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+  if (selectedLevel?.characterId) return resolveCharacterId(selectedLevel.characterId);
+  return getActiveCharacterId();
+}
+
+function setCurrentEditorCharacterId(characterId) {
+  const resolved = resolveCharacterId(characterId);
+  if (currentCustomLevel) {
+    currentCustomLevel.characterId = resolved;
+    return true;
+  }
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    pendingNewLevelCharacterId = resolved;
+    return true;
+  }
+  const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+  if (!selectedLevel) return false;
+  const draft = collectCurrentEditorLevel();
+  currentCustomLevel = normalizeCustomLevel({
+    ...selectedLevel,
+    ...draft,
+    id: selectedLevel.id,
+    number: selectedLevel.number,
+    baseStepIndex: selectedLevel.baseStepIndex,
+    name: selectedLevel.name,
+    characterId: resolved
+  });
+  return true;
 }
 
 function buildThemePreviewSVG(themeId) {
@@ -1034,6 +1188,7 @@ const levelStorage = window.BOKS_LEVEL_STORAGE({
   getOfficialTutorialSteps,
   getTutorialStepIndex: () => tutorialStepIndex,
   pool: POOL,
+  resolveCharacterId,
   slots: SLOTS
 });
 
@@ -1572,6 +1727,7 @@ function collectCurrentEditorLevel() {
     name: currentCustomLevel?.name || 'Livello custom',
     icon: currentCustomLevel?.icon || selectedSaveIcon,
     baseLevel: getCurrentEditorThemeId(),
+    characterId: getCurrentEditorCharacterId(),
     start: playerPlaced ? { ...pos } : null,
     goal: goalPlaced ? { ...GOAL } : null,
     startOri: ori,
@@ -1691,6 +1847,65 @@ function renderThemePicker() {
   });
 }
 
+function getCharacterOptions() {
+  return getCharacterIds().map(id => {
+    const manifest = getCharacterDefs()[id] || {};
+    return {
+      id,
+      label: getCharacterLabel(id),
+      hint: manifest.hint || ''
+    };
+  });
+}
+
+function buildCharacterPreviewMarkup(characterId) {
+  const markup = window.BOKS_CHARACTER_RENDERER?.render({
+    characterId: resolveCharacterId(characterId),
+    action: 'idle',
+    direction: 'right'
+  }) || '';
+  if (markup) return markup;
+  return `<span class="character-choice-title">${getCharacterLabel(characterId)}</span>`;
+}
+
+function renderCharacterPicker() {
+  const picker = document.getElementById('characterPicker');
+  if (!picker) return;
+  if (!editorMode || !editorStylePanelOpen) {
+    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(picker);
+    picker.innerHTML = '';
+    return;
+  }
+
+  window.BOKS_CHARACTER_RENDERER?.destroyIn?.(picker);
+  const selectedCharacterId = getCurrentEditorCharacterId();
+  const options = getCharacterOptions();
+  picker.innerHTML = '';
+
+  options.forEach(option => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'character-choice' + (selectedCharacterId === option.id ? ' active' : '');
+    btn.dataset.characterId = option.id;
+    btn.innerHTML = `
+      <span class="character-choice-art">${buildCharacterPreviewMarkup(option.id)}</span>
+      <span class="character-choice-copy">
+        <span class="character-choice-title">${option.label}</span>
+        <span class="character-choice-hint">${option.hint || `ID: ${option.id}`}</span>
+      </span>
+    `;
+    btn.addEventListener('click', () => {
+      if (!setCurrentEditorCharacterId(option.id)) return;
+      applyEditorBoardChanges();
+      renderThemeEditorPanel();
+      renderCustomLevels();
+    });
+    picker.appendChild(btn);
+  });
+
+  window.BOKS_CHARACTER_RENDERER?.mountIn?.(picker);
+}
+
 function renderThemeColorControls() {
   const controls = document.getElementById('themeColorControls');
   if (!controls) return;
@@ -1767,6 +1982,7 @@ function renderThemeEditorPanel() {
     applyBtn.title = canApply ? `Applica stile a ${resolveStyleTargetLabel()}` : 'Seleziona un livello salvato';
   }
   renderThemePicker();
+  renderCharacterPicker();
   renderThemeColorControls();
 }
 
@@ -1783,6 +1999,7 @@ function startBlankEditorLevel() {
   pendingNewLevelThemeOverrides = {};
   currentLevel = resolveThemeLevelId(CUSTOM_LEVEL_THEME);
   tutorialSceneLevelId = currentLevel;
+  pendingNewLevelCharacterId = resolveCharacterId(getLevel()?.characterId);
   applyLevelSceneVars();
   playerPlaced = false;
   goalPlaced = false;
@@ -2585,6 +2802,36 @@ function hlSlot(i, zone='main') {
   }
   // no SVG track to redraw
 }
+
+function clearEmptyRunHintTimers() {
+  emptyRunHintTimers.forEach(timer => clearTimeout(timer));
+  emptyRunHintTimers = [];
+  document.querySelectorAll('#blocksRow .ablock.empty-play-block-hint')
+    .forEach(block => block.classList.remove('empty-play-block-hint'));
+}
+
+function triggerEmptyRunHint() {
+  const now = Date.now();
+  if (now - lastEmptyRunHintAt < 800) return;
+  lastEmptyRunHintAt = now;
+  clearEmptyRunHintTimers();
+
+  const blocks = Array.from(document.querySelectorAll('#blocksRow .ablock'))
+    .filter(block => !block.classList.contains('disabled'));
+  if (!blocks.length) return;
+
+  blocks.forEach((block, idx) => {
+    const startMs = idx * 85;
+    const startTimer = setTimeout(() => {
+      block.classList.add('empty-play-block-hint');
+    }, startMs);
+    const endTimer = setTimeout(() => {
+      block.classList.remove('empty-play-block-hint');
+    }, startMs + 540);
+    emptyRunHintTimers.push(startTimer, endTimer);
+  });
+}
+
 async function moveChar(dir) {
   syncSprite();
   if(dir==='forward') {
@@ -2603,13 +2850,33 @@ async function moveChar(dir) {
     await animTo(p.x,p.y); await sleep(80);
   } else {
     playTurnSfx(dir);
+    const previousOri = ori;
     const newOri = dir==='left'
       ? {up:'left',left:'down',down:'right',right:'up'}[ori]
       : {up:'right',right:'down',down:'left',left:'up'}[ori];
-    ori = newOri;
     setCharacterAction('turn');
-    syncSprite();
-    await sleep(TURN_MS);
+    // Render subito lo stato target e interpola la rotazione dal vecchio orientamento.
+    syncSprite({ direction: newOri, action: 'turn' });
+    const spriteEl = document.getElementById('sprite');
+    if (spriteEl) {
+      const delta = orientationDelta(previousOri, newOri);
+      const turnAnim = spriteEl.animate(
+        [
+          { transform: `translateZ(0) rotate(${-delta}deg)` },
+          { transform: 'translateZ(0) rotate(0deg)' }
+        ],
+        { duration: TURN_MS, easing: 'cubic-bezier(.2,.9,.2,1)', fill: 'forwards' }
+      );
+      await turnAnim.finished.catch(()=>{});
+      if (typeof turnAnim.commitStyles === 'function') {
+        try { turnAnim.commitStyles(); } catch (_) {}
+      }
+      turnAnim.cancel();
+      spriteEl.style.transform = 'translateZ(0)';
+    } else {
+      await sleep(TURN_MS);
+    }
+    ori = newOri;
     setCharacterAction('idle');
     syncSprite();
   }
@@ -2636,7 +2903,10 @@ async function run() {
     .map((enabled, idx) => enabled ? idx : -1)
     .filter(idx => idx !== -1);
   for (const i of activeMainIndexes) if (prog[i]) last = i;
-  if(last===-1){return;}
+  if(last===-1){
+    triggerEmptyRunHint();
+    return;
+  }
   running=true;
   playRunPressSfx();
   const btn=document.getElementById('runBtn');
@@ -2814,6 +3084,21 @@ function startEditorFromGate() {
   if (!LEVEL_EDITOR_ENABLED) return;
   openAppFromGate({ openEditor: true });
 }
+function returnToMainMenu() {
+  if (document.body.classList.contains('prestart')) return;
+  if (running || animating) {
+    toast('Aspetta che il movimento finisca');
+    return;
+  }
+  closeSaveLevelModal();
+  if (editorMode) exitEditorMode();
+  setEditorStylePanelOpen(false);
+  gameStarted = false;
+  const gate = document.getElementById('startGate');
+  gate?.classList.remove('hiding');
+  showStartGate();
+  updateQuickEditorButton();
+}
 function openSpritePreviewTool() {
   const targetUrl = new URL('tools/sprite-preview.html', window.location.href).toString();
   const opened = window.open(targetUrl, '_blank', 'noopener');
@@ -2896,6 +3181,12 @@ setTimeout(dismissSplash, 0);
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
+document.getElementById('header')?.addEventListener('click', returnToMainMenu);
+document.getElementById('header')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  returnToMainMenu();
+});
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
 document.getElementById('openStyleEditorBtn')?.addEventListener('click', toggleStyleEditorPanel);

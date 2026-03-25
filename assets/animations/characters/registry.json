@@ -1,0 +1,7 @@
+{
+  "manifests": [
+    "assets/animations/characters/boks_black/manifest.js",
+    "assets/animations/characters/bock_base/manifest.js",
+    "assets/animations/characters/ae-idle/manifest.js"
+  ]
+}

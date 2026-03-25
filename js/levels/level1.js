@@ -38,8 +38,11 @@
     const resolvedState = typeof state === 'string'
       ? { direction: state, action: 'idle' }
       : { action: 'idle', ...(state || {}) };
+    const characterId = typeof resolvedState.characterId === 'string' && resolvedState.characterId.trim()
+      ? resolvedState.characterId.trim()
+      : 'boks';
     return window.BOKS_CHARACTER_RENDERER?.render({
-      characterId: 'boks',
+      characterId,
       action: resolvedState.action,
       direction: resolvedState.direction
     }) || '';
@@ -382,6 +385,7 @@
 
   window.BOKS_LEVELS.level1 = {
     id: 'level1',
+    characterId: 'boks',
     name: 'Prato Base',
     themeSelectable: true,
     themeLabel: 'Prato',
@@ -538,6 +542,7 @@
 
   window.BOKS_LEVELS['level-city'] = {
     id: 'level-city',
+    characterId: 'boks',
     name: 'Citta',
     themeSelectable: true,
     themeLabel: 'Citta',
@@ -583,6 +588,7 @@
 
   window.BOKS_LEVELS['level-universe'] = {
     id: 'level-universe',
+    characterId: 'boks',
     name: 'Universo',
     themeSelectable: true,
     themeLabel: 'Universo',
@@ -628,6 +634,7 @@
 
   window.BOKS_LEVELS['level-thomas'] = {
     id: 'level-thomas',
+    characterId: 'boks',
     name: 'Thomas',
     themeSelectable: true,
     themeLabel: 'Thomas',
