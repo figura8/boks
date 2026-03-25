@@ -1,5 +1,25 @@
 (() => {
   window.BOKS_CHARACTER_DEFS = window.BOKS_CHARACTER_DEFS || {};
+  const blueState = {
+    src: 'assets/characters/boks/block-placeholder-blue.svg',
+    fit: {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0
+    }
+  };
+  const redState = {
+    src: 'assets/characters/boks/block-placeholder-red.svg',
+    fit: { ...blueState.fit }
+  };
+  const yellowState = {
+    src: 'assets/characters/boks/block-placeholder-yellow.svg',
+    fit: { ...blueState.fit }
+  };
+  const greenState = {
+    src: 'assets/characters/boks/block-placeholder-green.svg',
+    fit: { ...blueState.fit }
+  };
 
   window.BOKS_CHARACTER_DEFS.boks = {
     id: 'boks',
@@ -7,50 +27,40 @@
     defaultDirection: 'right',
     states: {
       'idle:right': {
-        src: 'assets/characters/boks/placeholder.png'
+        ...blueState
       },
       'idle:left': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'mirror-x'
+        ...redState
       },
       'idle:up': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-left'
+        ...yellowState
       },
       'idle:down': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-right'
+        ...greenState
       },
       'move:right': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'none'
+        ...blueState
       },
       'move:left': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'mirror-x'
+        ...redState
       },
       'move:up': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-left'
+        ...yellowState
       },
       'move:down': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-right'
+        ...greenState
       },
       'turn:right': {
-        src: 'assets/characters/boks/placeholder.png'
+        ...blueState
       },
       'turn:left': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'mirror-x'
+        ...redState
       },
       'turn:up': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-left'
+        ...yellowState
       },
       'turn:down': {
-        src: 'assets/characters/boks/placeholder.png',
-        transformFallback: 'rotate-right'
+        ...greenState
       }
     }
   };

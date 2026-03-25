@@ -1,4 +1,13 @@
   if ('serviceWorker' in navigator) {
+    const host = window.location.hostname;
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    if (isLocalhost) {
+      navigator.serviceWorker.getRegistrations()
+        .then(regs => Promise.all(regs.map(reg => reg.unregister())))
+        .catch(() => {});
+      return;
+    }
+
     window.addEventListener('load', async () => {
       try {
         const reg = await navigator.serviceWorker.register('service-worker.js', {

@@ -1,0 +1,2004 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sprite Sheet Preview</title>
+  <style>
+    :root {
+      --bg: #f4efe4;
+      --panel: rgba(255, 251, 244, 0.94);
+      --panel-edge: #d0c2ad;
+      --ink: #2e2419;
+      --muted: #6a5a45;
+      --accent: #3a8f52;
+      --accent-2: #245e36;
+      --shadow: rgba(58, 38, 15, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,0.75), transparent 28%),
+        linear-gradient(180deg, #f7f3ea 0%, #eadfce 100%);
+    }
+
+    .shell {
+      width: min(1240px, calc(100vw - 28px));
+      margin: 20px auto;
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 2px solid var(--panel-edge);
+      border-radius: 22px;
+      box-shadow: 0 16px 34px var(--shadow);
+    }
+
+    .controls {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.96rem;
+      line-height: 1.4;
+    }
+
+    .group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(108, 86, 59, 0.16);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.38);
+    }
+
+    .group-title {
+      margin: 0;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    input,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="range"],
+    select {
+      width: 100%;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid #cdbda6;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.92);
+      color: var(--ink);
+    }
+
+    input[type="file"] {
+      width: 100%;
+      color: var(--ink);
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .row-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      min-height: 40px;
+      padding: 8px 14px;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+      color: #fffdf8;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(36, 94, 54, 0.18);
+    }
+
+    button.secondary {
+      background: linear-gradient(180deg, #fffdf7 0%, #ede3d3 100%);
+      color: var(--ink);
+      border: 1px solid rgba(120, 96, 66, 0.16);
+      box-shadow: none;
+    }
+
+    .checkbox {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink);
+    }
+
+    .status {
+      min-height: 22px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .status.error {
+      color: #a0382a;
+    }
+
+    .stage {
+      padding: 18px;
+      display: grid;
+      grid-template-rows: minmax(420px, 1fr) auto;
+      gap: 16px;
+    }
+
+    .preview-wrap {
+      position: relative;
+      height: clamp(360px, 52vh, 520px);
+      border-radius: 24px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.36);
+      border: 1px solid rgba(120, 96, 66, 0.16);
+    }
+
+    .preview-wrap canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .preview-wrap--game {
+      height: clamp(360px, 52vh, 520px);
+    }
+
+    .hud {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(42, 31, 20, 0.66);
+      color: #fff9f0;
+      font-size: 0.84rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .sheet-area {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .sheet-card,
+    .info-card {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(120, 96, 66, 0.16);
+      background: rgba(255,255,255,0.46);
+    }
+
+    .sheet-card canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      cursor: default;
+      background:
+        linear-gradient(45deg, rgba(0,0,0,0.04) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.04) 75%),
+        linear-gradient(45deg, rgba(0,0,0,0.04) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.04) 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .info-grid strong {
+      color: var(--ink);
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9em;
+    }
+
+    .hint {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .analysis-summary {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(120, 96, 66, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .analysis-verdict {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(120, 96, 66, 0.14);
+      background: rgba(255,255,255,0.68);
+      color: var(--ink);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
+    .analysis-verdict strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .analysis-verdict--good {
+      border-color: rgba(71, 140, 85, 0.3);
+      background: rgba(231, 247, 234, 0.95);
+    }
+
+    .analysis-verdict--warn {
+      border-color: rgba(189, 139, 51, 0.28);
+      background: rgba(255, 247, 224, 0.95);
+    }
+
+    .analysis-verdict--bad {
+      border-color: rgba(178, 75, 60, 0.28);
+      background: rgba(255, 238, 235, 0.95);
+    }
+
+    .analysis-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .analysis-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .analysis-section__title {
+      margin: 2px 0 0;
+      font-size: 0.84rem;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .analysis-item {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      line-height: 1.35;
+      border: 1px solid rgba(120, 96, 66, 0.14);
+      background: rgba(255,255,255,0.52);
+      color: var(--ink);
+    }
+
+    .analysis-item strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .analysis-item--good {
+      border-color: rgba(71, 140, 85, 0.3);
+      background: rgba(231, 247, 234, 0.9);
+    }
+
+    .analysis-item--warn {
+      border-color: rgba(189, 139, 51, 0.28);
+      background: rgba(255, 247, 224, 0.92);
+    }
+
+    .analysis-item--bad {
+      border-color: rgba(178, 75, 60, 0.28);
+      background: rgba(255, 238, 235, 0.92);
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sheet-area {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-wrap,
+      .preview-wrap--game {
+        height: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel controls">
+      <div class="hero">
+        <h1>Sprite Sheet Preview</h1>
+        <p class="subtitle">Carica uno sprite sheet dal progetto o dal disco e prova frame, velocita, scala e loop senza toccare il gioco.</p>
+      </div>
+
+      <div class="group">
+        <p class="group-title">Sorgente</p>
+        <label>
+          Path del progetto
+          <input id="srcPath" type="text" placeholder="icons/idle_right.png" />
+        </label>
+        <div class="actions">
+          <button id="loadPathBtn" type="button">Carica path</button>
+          <button id="reloadBtn" class="secondary" type="button">Ricarica</button>
+        </div>
+        <label>
+          Oppure scegli un file locale
+          <input id="fileInput" type="file" accept="image/*" />
+        </label>
+        <div id="status" class="status">In attesa di uno sprite sheet.</div>
+      </div>
+
+      <div class="group">
+        <p class="group-title">Griglia</p>
+        <div class="row">
+          <label>
+            Colonne
+            <input id="colsInput" type="number" min="1" max="64" step="1" value="3" />
+          </label>
+          <label>
+            Righe
+            <input id="rowsInput" type="number" min="1" max="64" step="1" value="3" />
+          </label>
+        </div>
+        <div class="row-3">
+          <label>
+            Frame start
+            <input id="startFrameInput" type="number" min="0" step="1" value="0" />
+          </label>
+          <label>
+            Frame end
+            <input id="endFrameInput" type="number" min="0" step="1" value="8" />
+          </label>
+          <label>
+            Frame attuale
+            <input id="frameInput" type="number" min="0" step="1" value="0" />
+          </label>
+        </div>
+        <label>
+          Scrub frame
+          <input id="frameSlider" type="range" min="0" max="8" step="1" value="0" />
+        </label>
+        <label class="checkbox">
+          <input id="manualGridInput" type="checkbox" />
+          Usa ritaglio manuale
+        </label>
+        <div class="row">
+          <label>
+            Offset X
+            <input id="offsetXInput" type="number" step="1" value="0" />
+          </label>
+          <label>
+            Offset Y
+            <input id="offsetYInput" type="number" step="1" value="0" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Cell W
+            <input id="cellWidthInput" type="number" min="1" step="1" value="0" />
+          </label>
+          <label>
+            Cell H
+            <input id="cellHeightInput" type="number" min="1" step="1" value="0" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Gap X
+            <input id="gapXInput" type="number" step="1" value="0" />
+          </label>
+          <label>
+            Gap Y
+            <input id="gapYInput" type="number" step="1" value="0" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="copyAutoGridBtn" class="secondary" type="button">Copia auto</button>
+        </div>
+        <div class="hint">Con il ritaglio manuale attivo puoi trascinare il frame giallo sulla miniatura dello sheet. Trascina l'angolo in basso a destra per ridimensionare la cella.</div>
+      </div>
+
+      <div class="group">
+        <p class="group-title">Animazione</p>
+        <div class="row">
+          <label>
+            FPS
+            <input id="fpsInput" type="number" min="1" max="60" step="1" value="8" />
+          </label>
+          <label>
+            Loop
+            <select id="loopModeInput">
+              <option value="forward">Forward</option>
+              <option value="pingpong">Ping pong</option>
+              <option value="once">Once</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Scala preview
+          <input id="scaleInput" type="range" min="0.4" max="4" step="0.05" value="1.7" />
+        </label>
+        <label class="checkbox">
+          <input id="autoplayInput" type="checkbox" checked />
+          Riproduci in automatico
+        </label>
+        <div class="actions">
+          <button id="playPauseBtn" type="button">Pausa</button>
+          <button id="prevFrameBtn" class="secondary" type="button">Prev</button>
+          <button id="nextFrameBtn" class="secondary" type="button">Next</button>
+          <button id="resetBtn" class="secondary" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <p class="group-title">Scena</p>
+        <label>
+          Sfondo
+          <select id="backgroundInput">
+            <option value="checker">Checker trasparenza</option>
+            <option value="dark">Scuro</option>
+            <option value="paper">Chiaro</option>
+            <option value="grass">Prato</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="panel stage">
+      <div class="preview-grid">
+        <div class="preview-wrap">
+          <canvas id="previewCanvas"></canvas>
+          <div class="hud">
+            <div id="frameBadge" class="pill">Frame 0</div>
+            <div id="sourceBadge" class="pill">Nessuna immagine</div>
+          </div>
+        </div>
+        <div class="preview-wrap preview-wrap--game">
+          <canvas id="gamePreviewCanvas"></canvas>
+          <div class="hud">
+            <div class="pill">Come nel gioco</div>
+            <div id="gamePreviewBadge" class="pill">Cella centrale</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet-area">
+        <div class="sheet-card">
+          <canvas id="sheetCanvas"></canvas>
+          <div class="group" style="margin-top:14px;">
+            <p class="group-title">Fit gioco</p>
+            <div class="row">
+              <label>
+                Scala gioco
+                <input id="gameScaleInput" type="number" min="0.3" max="2" step="0.01" value="1" />
+              </label>
+              <label>
+                Offset Y gioco
+                <input id="gameOffsetYInput" type="number" min="-400" max="400" step="1" value="0" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="autoFitGameBtn" class="secondary" type="button">Auto fit gioco</button>
+            </div>
+            <div id="gameFitHint" class="hint">Usa questa sezione per vedere se uno sprite quasi buono puo essere riposizionato meglio nella cella del gioco.</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-grid">
+            <div><strong>Sorgente:</strong> <span id="infoSource">-</span></div>
+            <div><strong>Dimensione sheet:</strong> <span id="infoSheet">-</span></div>
+            <div><strong>Dimensione frame:</strong> <span id="infoFrame">-</span></div>
+            <div><strong>Frame attivo:</strong> <span id="infoActive">-</span></div>
+            <div><strong>Intervallo:</strong> <span id="infoRange">-</span></div>
+            <div><strong>Nota:</strong> puoi aprire anche un file non ancora presente nel repo usando il selettore locale.</div>
+          </div>
+          <div id="analysisSummary" class="analysis-summary"></div>
+          <div id="analysisList" class="analysis-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const STORAGE_KEY = 'cubetto-sprite-preview';
+      const els = {
+        srcPath: document.getElementById('srcPath'),
+        fileInput: document.getElementById('fileInput'),
+        colsInput: document.getElementById('colsInput'),
+        rowsInput: document.getElementById('rowsInput'),
+        startFrameInput: document.getElementById('startFrameInput'),
+        endFrameInput: document.getElementById('endFrameInput'),
+        frameInput: document.getElementById('frameInput'),
+        frameSlider: document.getElementById('frameSlider'),
+        manualGridInput: document.getElementById('manualGridInput'),
+        offsetXInput: document.getElementById('offsetXInput'),
+        offsetYInput: document.getElementById('offsetYInput'),
+        cellWidthInput: document.getElementById('cellWidthInput'),
+        cellHeightInput: document.getElementById('cellHeightInput'),
+        gapXInput: document.getElementById('gapXInput'),
+        gapYInput: document.getElementById('gapYInput'),
+        fpsInput: document.getElementById('fpsInput'),
+        scaleInput: document.getElementById('scaleInput'),
+        gameScaleInput: document.getElementById('gameScaleInput'),
+        gameOffsetYInput: document.getElementById('gameOffsetYInput'),
+        loopModeInput: document.getElementById('loopModeInput'),
+        autoplayInput: document.getElementById('autoplayInput'),
+        backgroundInput: document.getElementById('backgroundInput'),
+        loadPathBtn: document.getElementById('loadPathBtn'),
+        reloadBtn: document.getElementById('reloadBtn'),
+        copyAutoGridBtn: document.getElementById('copyAutoGridBtn'),
+        autoFitGameBtn: document.getElementById('autoFitGameBtn'),
+        playPauseBtn: document.getElementById('playPauseBtn'),
+        prevFrameBtn: document.getElementById('prevFrameBtn'),
+        nextFrameBtn: document.getElementById('nextFrameBtn'),
+        resetBtn: document.getElementById('resetBtn'),
+        status: document.getElementById('status'),
+        previewCanvas: document.getElementById('previewCanvas'),
+        gamePreviewCanvas: document.getElementById('gamePreviewCanvas'),
+        sheetCanvas: document.getElementById('sheetCanvas'),
+        frameBadge: document.getElementById('frameBadge'),
+        sourceBadge: document.getElementById('sourceBadge'),
+        gamePreviewBadge: document.getElementById('gamePreviewBadge'),
+        infoSource: document.getElementById('infoSource'),
+        infoSheet: document.getElementById('infoSheet'),
+        infoFrame: document.getElementById('infoFrame'),
+        infoActive: document.getElementById('infoActive'),
+        infoRange: document.getElementById('infoRange'),
+        gameFitHint: document.getElementById('gameFitHint'),
+        analysisSummary: document.getElementById('analysisSummary'),
+        analysisList: document.getElementById('analysisList')
+      };
+
+      const state = {
+        image: null,
+        sourceLabel: '',
+        objectUrl: '',
+        playing: true,
+        currentFrame: 0,
+        direction: 1,
+        lastAdvanceAt: 0,
+        sheetViewport: null,
+        dragState: null,
+        analysisKey: '',
+        analysisHtml: '',
+        analysisSummaryHtml: '',
+        analysisFrames: [],
+        analysisMetrics: null
+      };
+
+      function readStoredSettings() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : {};
+        } catch {
+          return {};
+        }
+      }
+
+      function writeStoredSettings() {
+        const data = {
+          srcPath: els.srcPath.value.trim(),
+          cols: clampInt(els.colsInput.value, 1, 64, 3),
+          rows: clampInt(els.rowsInput.value, 1, 64, 3),
+          startFrame: clampInt(els.startFrameInput.value, 0, 9999, 0),
+          endFrame: clampInt(els.endFrameInput.value, 0, 9999, 8),
+          manualGrid: !!els.manualGridInput.checked,
+          offsetX: clampFloat(els.offsetXInput.value, -10000, 10000, 0),
+          offsetY: clampFloat(els.offsetYInput.value, -10000, 10000, 0),
+          cellWidth: clampFloat(els.cellWidthInput.value, 0, 10000, 0),
+          cellHeight: clampFloat(els.cellHeightInput.value, 0, 10000, 0),
+          gapX: clampFloat(els.gapXInput.value, -10000, 10000, 0),
+          gapY: clampFloat(els.gapYInput.value, -10000, 10000, 0),
+          fps: clampInt(els.fpsInput.value, 1, 60, 8),
+          scale: clampFloat(els.scaleInput.value, 0.4, 4, 1.7),
+          gameScale: clampFloat(els.gameScaleInput.value, 0.3, 2, 1),
+          gameOffsetY: clampFloat(els.gameOffsetYInput.value, -400, 400, 0),
+          loopMode: els.loopModeInput.value,
+          autoplay: !!els.autoplayInput.checked,
+          background: els.backgroundInput.value
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      }
+
+      function clampInt(value, min, max, fallback) {
+        const n = Number.parseInt(value, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      }
+
+      function clampFloat(value, min, max, fallback) {
+        const n = Number.parseFloat(value);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      }
+
+      function frameCount() {
+        return clampInt(els.colsInput.value, 1, 64, 1) * clampInt(els.rowsInput.value, 1, 64, 1);
+      }
+
+      function sanitizeText(value) {
+        if (value === undefined || value === null) return '';
+        const text = String(value).trim();
+        if (!text || text === 'undefined' || text === 'null') return '';
+        return text;
+      }
+
+      function isManualGridEnabled() {
+        return !!els.manualGridInput.checked;
+      }
+
+      function setInputValue(input, value) {
+        input.value = String(Math.round(value));
+      }
+
+      function copyUniformGridToManual() {
+        if (!state.image) return;
+        const cols = clampInt(els.colsInput.value, 1, 64, 1);
+        const rows = clampInt(els.rowsInput.value, 1, 64, 1);
+        setInputValue(els.offsetXInput, 0);
+        setInputValue(els.offsetYInput, 0);
+        setInputValue(els.cellWidthInput, state.image.width / cols);
+        setInputValue(els.cellHeightInput, state.image.height / rows);
+        setInputValue(els.gapXInput, 0);
+        setInputValue(els.gapYInput, 0);
+      }
+
+      function applyStoredSettings() {
+        const saved = readStoredSettings();
+        const params = new URLSearchParams(window.location.search);
+        const pick = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+
+        els.srcPath.value = sanitizeText(pick(params.get('src'), saved.srcPath, ''));
+        els.colsInput.value = pick(params.get('cols'), saved.cols, 3);
+        els.rowsInput.value = pick(params.get('rows'), saved.rows, 3);
+        els.startFrameInput.value = pick(params.get('start'), saved.startFrame, 0);
+        els.endFrameInput.value = pick(params.get('end'), saved.endFrame, 8);
+        els.frameInput.value = pick(params.get('frame'), 0);
+        els.frameSlider.value = pick(params.get('frame'), 0);
+        els.manualGridInput.checked = params.get('manual') != null
+          ? params.get('manual') !== '0'
+          : !!saved.manualGrid;
+        els.offsetXInput.value = pick(params.get('offsetX'), saved.offsetX, 0);
+        els.offsetYInput.value = pick(params.get('offsetY'), saved.offsetY, 0);
+        els.cellWidthInput.value = pick(params.get('cellW'), saved.cellWidth, 0);
+        els.cellHeightInput.value = pick(params.get('cellH'), saved.cellHeight, 0);
+        els.gapXInput.value = pick(params.get('gapX'), saved.gapX, 0);
+        els.gapYInput.value = pick(params.get('gapY'), saved.gapY, 0);
+        els.fpsInput.value = pick(params.get('fps'), saved.fps, 8);
+        els.scaleInput.value = pick(params.get('scale'), saved.scale, 1.7);
+        els.gameScaleInput.value = pick(params.get('gameScale'), saved.gameScale, 1);
+        els.gameOffsetYInput.value = pick(params.get('gameOffsetY'), saved.gameOffsetY, 0);
+        els.loopModeInput.value = pick(params.get('loop'), saved.loopMode, 'forward');
+        els.autoplayInput.checked = params.get('autoplay')
+          ? params.get('autoplay') !== '0'
+          : saved.autoplay !== undefined ? !!saved.autoplay : true;
+        els.backgroundInput.value = pick(params.get('bg'), saved.background, 'checker');
+        state.playing = !!els.autoplayInput.checked;
+        syncFrameBounds();
+      }
+
+      function setStatus(message, isError = false) {
+        els.status.textContent = message;
+        els.status.classList.toggle('error', !!isError);
+      }
+
+      function revokeObjectUrlIfNeeded() {
+        if (state.objectUrl) {
+          URL.revokeObjectURL(state.objectUrl);
+          state.objectUrl = '';
+        }
+      }
+
+      function resolveProjectPath(path) {
+        if (/^(?:[a-z]+:|\/\/|\.{1,2}\/|\/)/i.test(path)) return path;
+        return new URL(path, new URL('../', window.location.href)).toString();
+      }
+
+      function loadImage(src, label) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Impossibile caricare l\'immagine.'));
+          img.src = src;
+        }).then((img) => {
+          state.image = img;
+          state.sourceLabel = label;
+          if (Number(els.cellWidthInput.value) <= 0 || Number(els.cellHeightInput.value) <= 0) {
+            copyUniformGridToManual();
+          }
+          state.currentFrame = clampInt(els.startFrameInput.value, 0, frameCount() - 1, 0);
+          state.direction = 1;
+          els.frameInput.value = state.currentFrame;
+          els.frameSlider.value = state.currentFrame;
+          syncFrameBounds();
+          updateAnalysis();
+          renderAll();
+          updateUiText();
+          writeStoredSettings();
+          return img;
+        });
+      }
+
+      async function loadFromProjectPath() {
+        const path = els.srcPath.value.trim();
+        if (!path) {
+          setStatus('Inserisci un path del progetto oppure seleziona un file locale.', true);
+          return;
+        }
+        setStatus('Caricamento in corso...');
+        revokeObjectUrlIfNeeded();
+        try {
+          await loadImage(resolveProjectPath(path), path);
+          setStatus('Sprite sheet caricato dal progetto.');
+        } catch (error) {
+          setStatus(error.message + ' Controlla il path relativo alla root del progetto.', true);
+        }
+      }
+
+      async function loadFromFile(file) {
+        if (!file) return;
+        revokeObjectUrlIfNeeded();
+        state.objectUrl = URL.createObjectURL(file);
+        els.srcPath.value = '';
+        setStatus('Caricamento file locale in corso...');
+        try {
+          await loadImage(state.objectUrl, file.name);
+          setStatus('Sprite sheet caricato dal disco.');
+        } catch (error) {
+          setStatus(error.message, true);
+        }
+      }
+
+      function syncFrameBounds() {
+        const total = Math.max(1, frameCount());
+        const maxFrame = total - 1;
+        const start = clampInt(els.startFrameInput.value, 0, maxFrame, 0);
+        const end = clampInt(els.endFrameInput.value, start, maxFrame, maxFrame);
+        const frame = clampInt(els.frameInput.value, start, end, start);
+
+        els.startFrameInput.value = start;
+        els.endFrameInput.value = end;
+        els.frameInput.value = frame;
+        els.frameSlider.min = start;
+        els.frameSlider.max = end;
+        els.frameSlider.value = frame;
+
+        state.currentFrame = frame;
+      }
+
+      function frameRectForIndex(frameIndex) {
+        if (!state.image) return null;
+        const cols = clampInt(els.colsInput.value, 1, 64, 1);
+        const rows = clampInt(els.rowsInput.value, 1, 64, 1);
+        const safeFrameIndex = clampInt(frameIndex, 0, frameCount() - 1, 0);
+        let frameW = state.image.width / cols;
+        let frameH = state.image.height / rows;
+        const col = safeFrameIndex % cols;
+        const row = Math.floor(safeFrameIndex / cols);
+        let sx = col * frameW;
+        let sy = row * frameH;
+
+        if (isManualGridEnabled()) {
+          frameW = clampFloat(els.cellWidthInput.value, 1, 10000, frameW);
+          frameH = clampFloat(els.cellHeightInput.value, 1, 10000, frameH);
+          const offsetX = clampFloat(els.offsetXInput.value, -10000, 10000, 0);
+          const offsetY = clampFloat(els.offsetYInput.value, -10000, 10000, 0);
+          const gapX = clampFloat(els.gapXInput.value, -10000, 10000, 0);
+          const gapY = clampFloat(els.gapYInput.value, -10000, 10000, 0);
+          sx = offsetX + col * (frameW + gapX);
+          sy = offsetY + row * (frameH + gapY);
+        }
+
+        return {
+          frameIndex: safeFrameIndex,
+          col,
+          row,
+          frameW,
+          frameH,
+          sx,
+          sy
+        };
+      }
+
+      function currentFrameRect() {
+        return frameRectForIndex(clampInt(els.frameInput.value, 0, frameCount() - 1, 0));
+      }
+
+      function sheetPointerToImagePoint(event) {
+        if (!state.sheetViewport) return null;
+        const canvasRect = els.sheetCanvas.getBoundingClientRect();
+        if (!canvasRect.width || !canvasRect.height) return null;
+        const scaleX = els.sheetCanvas.width / canvasRect.width;
+        const scaleY = els.sheetCanvas.height / canvasRect.height;
+        const x = (event.clientX - canvasRect.left) * scaleX;
+        const y = (event.clientY - canvasRect.top) * scaleY;
+        const { dx, dy, fit } = state.sheetViewport;
+        if (!fit) return null;
+        return {
+          x: (x - dx) / fit,
+          y: (y - dy) / fit
+        };
+      }
+
+      function updateSheetCanvasCursor(event = null) {
+        if (!state.image || !isManualGridEnabled()) {
+          els.sheetCanvas.style.cursor = 'default';
+          return;
+        }
+        if (state.dragState?.mode === 'move') {
+          els.sheetCanvas.style.cursor = 'grabbing';
+          return;
+        }
+        if (state.dragState?.mode === 'resize') {
+          els.sheetCanvas.style.cursor = 'nwse-resize';
+          return;
+        }
+
+        const point = event ? sheetPointerToImagePoint(event) : null;
+        const rect = currentFrameRect();
+        if (!point || !rect) {
+          els.sheetCanvas.style.cursor = 'grab';
+          return;
+        }
+
+        const handleRadius = 16 / Math.max(0.0001, state.sheetViewport?.fit || 1);
+        const nearHandle = Math.abs(point.x - (rect.sx + rect.frameW)) <= handleRadius
+          && Math.abs(point.y - (rect.sy + rect.frameH)) <= handleRadius;
+        const inside = point.x >= rect.sx && point.x <= rect.sx + rect.frameW
+          && point.y >= rect.sy && point.y <= rect.sy + rect.frameH;
+        els.sheetCanvas.style.cursor = nearHandle ? 'nwse-resize' : (inside ? 'grab' : 'crosshair');
+      }
+
+      function beginSheetDrag(event) {
+        if (!state.image || !isManualGridEnabled()) return;
+        const point = sheetPointerToImagePoint(event);
+        const rect = currentFrameRect();
+        if (!point || !rect) return;
+
+        const handleRadius = 16 / Math.max(0.0001, state.sheetViewport?.fit || 1);
+        const nearHandle = Math.abs(point.x - (rect.sx + rect.frameW)) <= handleRadius
+          && Math.abs(point.y - (rect.sy + rect.frameH)) <= handleRadius;
+        const inside = point.x >= rect.sx && point.x <= rect.sx + rect.frameW
+          && point.y >= rect.sy && point.y <= rect.sy + rect.frameH;
+
+        state.dragState = {
+          mode: nearHandle ? 'resize' : 'move',
+          col: rect.col,
+          row: rect.row,
+          frameLeft: rect.sx,
+          frameTop: rect.sy,
+          grabOffsetX: point.x - rect.sx,
+          grabOffsetY: point.y - rect.sy,
+          cellWidth: rect.frameW,
+          cellHeight: rect.frameH
+        };
+
+        if (!inside && !nearHandle) {
+          state.dragState.grabOffsetX = rect.frameW / 2;
+          state.dragState.grabOffsetY = rect.frameH / 2;
+        }
+
+        els.sheetCanvas.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+        updateSheetCanvasCursor();
+      }
+
+      function moveSheetDrag(event) {
+        if (!state.dragState || !state.image || !isManualGridEnabled()) {
+          updateSheetCanvasCursor(event);
+          return;
+        }
+        const point = sheetPointerToImagePoint(event);
+        if (!point) return;
+
+        if (state.dragState.mode === 'move') {
+          const cellW = clampFloat(els.cellWidthInput.value, 1, 10000, state.dragState.cellWidth);
+          const cellH = clampFloat(els.cellHeightInput.value, 1, 10000, state.dragState.cellHeight);
+          const gapX = clampFloat(els.gapXInput.value, -10000, 10000, 0);
+          const gapY = clampFloat(els.gapYInput.value, -10000, 10000, 0);
+          const nextLeft = point.x - state.dragState.grabOffsetX;
+          const nextTop = point.y - state.dragState.grabOffsetY;
+          setInputValue(els.offsetXInput, nextLeft - state.dragState.col * (cellW + gapX));
+          setInputValue(els.offsetYInput, nextTop - state.dragState.row * (cellH + gapY));
+        } else {
+          setInputValue(els.cellWidthInput, Math.max(1, point.x - state.dragState.frameLeft));
+          setInputValue(els.cellHeightInput, Math.max(1, point.y - state.dragState.frameTop));
+        }
+
+        syncFrameBounds();
+        writeStoredSettings();
+        renderAll();
+        event.preventDefault();
+      }
+
+      function endSheetDrag(event) {
+        if (!state.dragState) return;
+        state.dragState = null;
+        if (event) {
+          els.sheetCanvas.releasePointerCapture?.(event.pointerId);
+        }
+        updateAnalysis();
+        updateSheetCanvasCursor(event || null);
+      }
+
+      function analysisSignature() {
+        return JSON.stringify({
+          hasImage: !!state.image,
+          source: state.sourceLabel,
+          width: state.image?.width || 0,
+          height: state.image?.height || 0,
+          cols: els.colsInput.value,
+          rows: els.rowsInput.value,
+          start: els.startFrameInput.value,
+          end: els.endFrameInput.value,
+          manual: isManualGridEnabled(),
+          offsetX: els.offsetXInput.value,
+          offsetY: els.offsetYInput.value,
+          cellW: els.cellWidthInput.value,
+          cellH: els.cellHeightInput.value,
+          gapX: els.gapXInput.value,
+          gapY: els.gapYInput.value
+        });
+      }
+
+      function formatRatio(value) {
+        return Number.isFinite(value) ? value.toFixed(2) : '-';
+      }
+
+      function pushAnalysisItem(items, tone, title, detail) {
+        items.push({ tone, title, detail });
+      }
+
+      function toneRank(tone) {
+        return tone === 'bad' ? 3 : tone === 'warn' ? 2 : 1;
+      }
+
+      function worstTone(items) {
+        return items.reduce((worst, item) => toneRank(item.tone) > toneRank(worst) ? item.tone : worst, 'good');
+      }
+
+      function renderAnalysisItems(items) {
+        return items.map((item) => `<div class="analysis-item analysis-item--${item.tone}"><strong>${item.title}</strong><span>${item.detail}</span></div>`).join('');
+      }
+
+      function renderAnalysisSection(title, items) {
+        if (!items.length) return '';
+        return `<section class="analysis-section"><div class="analysis-section__title">${title}</div>${renderAnalysisItems(items)}</section>`;
+      }
+
+      function computeGameFitSuggestion(cell, rect, frameAnalysis) {
+        if (!rect || !frameAnalysis?.stats || frameAnalysis.stats.empty) return null;
+        const stats = frameAnalysis.stats;
+        const spriteBox = cell * 1.42;
+        const fit = Math.min(spriteBox / rect.frameW, spriteBox / rect.frameH);
+        const previewScale = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
+        const currentGameScale = clampFloat(els.gameScaleInput.value, 0.3, 2, 1);
+        const baseScale = fit * previewScale * 0.78;
+        const currentDrawH = rect.frameH * baseScale * currentGameScale;
+        const currentDrawW = rect.frameW * baseScale * currentGameScale;
+        const currentBBoxH = currentDrawH * (stats.bboxHeight / rect.frameH);
+        const currentBBoxW = currentDrawW * (stats.bboxWidth / rect.frameW);
+        const targetBBoxH = cell * 0.54;
+        const targetBBoxW = cell * 0.58;
+        const scaleForHeight = targetBBoxH / Math.max(1, currentBBoxH);
+        const scaleForWidth = targetBBoxW / Math.max(1, currentBBoxW);
+        const suggestedGameScale = Math.max(0.3, Math.min(2, currentGameScale * Math.min(scaleForHeight, scaleForWidth)));
+        const suggestedDrawH = rect.frameH * baseScale * suggestedGameScale;
+        const bboxBottomInFrame = (stats.topGap + stats.bboxHeight) / rect.frameH;
+        const suggestedBBoxBottom = suggestedDrawH * bboxBottomInFrame;
+        const targetBottomGap = cell * 0.08;
+        const suggestedOffsetY = Math.round((cell - targetBottomGap) - suggestedBBoxBottom);
+
+        return {
+          scale: Number(suggestedGameScale.toFixed(2)),
+          offsetY: suggestedOffsetY
+        };
+      }
+
+      function buildFinalVerdict(transparencyItems, stabilityItems, compatibilityItems) {
+        const transparencyTone = worstTone(transparencyItems);
+        const stabilityTone = worstTone(stabilityItems);
+        const compatibilityTone = worstTone(compatibilityItems);
+
+        if (compatibilityTone === 'bad') {
+          return {
+            tone: 'bad',
+            title: 'NO: non adatto al player',
+            detail: 'Lo sheet puo anche essere leggibile o carino, ma non entra bene nella cella del gioco oppure comunica un ancoraggio/prospettiva sbagliati.'
+          };
+        }
+
+        if (transparencyTone === 'bad' || stabilityTone === 'bad') {
+          return {
+            tone: 'warn',
+            title: 'OK per test tecnico',
+            detail: 'Lo sheet puo servire per capire il feeling o validare il parser, ma non e ancora pronto da integrare come personaggio del gioco.'
+          };
+        }
+
+        if (transparencyTone === 'warn' || stabilityTone === 'warn' || compatibilityTone === 'warn') {
+          return {
+            tone: 'warn',
+            title: 'OK per test tecnico',
+            detail: 'La base e utilizzabile per prototipi e confronti, ma ci sono ancora aspetti da sistemare prima di usarla davvero nel gioco.'
+          };
+        }
+
+        return {
+          tone: 'good',
+          title: 'OK per integrazione',
+          detail: 'Trasparenza, stabilita e compatibilita col gioco sono abbastanza sane da provare un aggancio reale nel runtime.'
+        };
+      }
+
+      function getFrameAnalysis(frameIndex) {
+        return state.analysisFrames.find((entry) => entry.rect?.frameIndex === frameIndex) || null;
+      }
+
+      function isLikelyCheckerColor(r, g, b) {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const chroma = max - min;
+        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return chroma <= 24 && luma >= 120 && luma <= 252;
+      }
+
+      function collectFrameStats(rect, imageData, imageWidth, imageHeight) {
+        const sx = Math.floor(rect.sx);
+        const sy = Math.floor(rect.sy);
+        const ex = Math.ceil(rect.sx + rect.frameW);
+        const ey = Math.ceil(rect.sy + rect.frameH);
+        const frameWidth = Math.max(1, ex - sx);
+        const frameHeight = Math.max(1, ey - sy);
+        const visibleX0 = Math.max(0, sx);
+        const visibleY0 = Math.max(0, sy);
+        const visibleX1 = Math.min(imageWidth, ex);
+        const visibleY1 = Math.min(imageHeight, ey);
+
+        let opaque = 0;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const threshold = 12;
+        const borderThickness = Math.max(1, Math.round(Math.min(frameWidth, frameHeight) * 0.04));
+        let borderPixels = 0;
+        let borderOpaque = 0;
+
+        for (let y = visibleY0; y < visibleY1; y++) {
+          for (let x = visibleX0; x < visibleX1; x++) {
+            const alpha = imageData[(y * imageWidth + x) * 4 + 3];
+            const localX = x - sx;
+            const localY = y - sy;
+            const isBorder = localX < borderThickness
+              || localY < borderThickness
+              || localX >= frameWidth - borderThickness
+              || localY >= frameHeight - borderThickness;
+            if (isBorder) {
+              borderPixels += 1;
+              if (alpha > threshold) borderOpaque += 1;
+            }
+            if (alpha <= threshold) continue;
+            opaque += 1;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+
+        if (!opaque) {
+          return {
+            empty: true,
+            occupancy: 0,
+            touchesEdge: false,
+            bboxWidth: 0,
+            bboxHeight: 0,
+            centerX: 0,
+            centerY: 0,
+            bottomGap: frameHeight,
+            topGap: frameHeight,
+            leftGap: frameWidth,
+            rightGap: frameWidth,
+            edgeOpaqueRatio: borderPixels ? borderOpaque / borderPixels : 0
+          };
+        }
+
+        const bboxWidth = maxX - minX + 1;
+        const bboxHeight = maxY - minY + 1;
+        const localLeft = minX - sx;
+        const localTop = minY - sy;
+        const localRight = ex - (maxX + 1);
+        const localBottom = ey - (maxY + 1);
+        const safeInset = Math.max(2, Math.round(Math.min(frameWidth, frameHeight) * 0.02));
+        const bgLeft = Math.max(0, localLeft - safeInset);
+        const bgTop = Math.max(0, localTop - safeInset);
+        const bgRight = Math.min(frameWidth, localLeft + bboxWidth + safeInset);
+        const bgBottom = Math.min(frameHeight, localTop + bboxHeight + safeInset);
+        let outsidePixels = 0;
+        let outsideOpaque = 0;
+        let outsideCheckerLike = 0;
+
+        for (let y = visibleY0; y < visibleY1; y++) {
+          for (let x = visibleX0; x < visibleX1; x++) {
+            const localX = x - sx;
+            const localY = y - sy;
+            const insideExpandedBox = localX >= bgLeft
+              && localX < bgRight
+              && localY >= bgTop
+              && localY < bgBottom;
+            if (insideExpandedBox) continue;
+            outsidePixels += 1;
+            const idx = (y * imageWidth + x) * 4;
+            const alpha = imageData[idx + 3];
+            if (alpha <= threshold) continue;
+            outsideOpaque += 1;
+            const r = imageData[idx];
+            const g = imageData[idx + 1];
+            const b = imageData[idx + 2];
+            if (isLikelyCheckerColor(r, g, b)) {
+              outsideCheckerLike += 1;
+            }
+          }
+        }
+
+        return {
+          empty: false,
+          occupancy: opaque / (frameWidth * frameHeight),
+          touchesEdge: localLeft <= 1 || localTop <= 1 || localRight <= 1 || localBottom <= 1,
+          bboxWidth,
+          bboxHeight,
+          centerX: localLeft + bboxWidth / 2,
+          centerY: localTop + bboxHeight / 2,
+          bottomGap: localBottom,
+          leftGap: localLeft,
+          topGap: localTop,
+          rightGap: localRight,
+          edgeOpaqueRatio: borderPixels ? borderOpaque / borderPixels : 0,
+          outsideOpaqueRatio: outsidePixels ? outsideOpaque / outsidePixels : 0,
+          outsideCheckerRatio: outsideOpaque ? outsideCheckerLike / outsideOpaque : 0
+        };
+      }
+
+      function updateAnalysis() {
+        const signature = analysisSignature();
+        if (state.analysisKey === signature && state.analysisHtml && state.analysisSummaryHtml) return;
+
+        if (!state.image) {
+          const summary = [
+            '<div><strong>Target progetto:</strong> preview dentro una cella quasi quadrata, ancorata in basso e letta in prospettiva leggera come nel gioco.</div>',
+            '<div><strong>Range consigliato:</strong> vera trasparenza, piedi o base vicini al fondo della cella, poco drift laterale e volume stabile.</div>'
+          ].join('');
+          const empty = '<section class="analysis-section"><div class="analysis-section__title">Analisi</div><div class="analysis-item"><strong>Analisi in attesa</strong><span>Carica uno sprite sheet per vedere se e compatibile con il progetto.</span></div></section>';
+          state.analysisKey = signature;
+          state.analysisSummaryHtml = summary;
+          state.analysisHtml = empty;
+          state.analysisFrames = [];
+          state.analysisMetrics = null;
+          els.analysisSummary.innerHTML = summary;
+          els.analysisList.innerHTML = empty;
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = state.image.width;
+        canvas.height = state.image.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(state.image, 0, 0);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+        const start = clampInt(els.startFrameInput.value, 0, frameCount() - 1, 0);
+        const end = clampInt(els.endFrameInput.value, start, frameCount() - 1, start);
+        const frames = [];
+        for (let i = start; i <= end; i++) {
+          const rect = frameRectForIndex(i);
+          if (!rect) continue;
+          frames.push({
+            rect,
+            stats: collectFrameStats(rect, pixels, canvas.width, canvas.height)
+          });
+        }
+
+        const transparencyItems = [];
+        const stabilityItems = [];
+        const compatibilityItems = [];
+        const active = currentFrameRect();
+        const activeAspect = active ? active.frameW / Math.max(1, active.frameH) : 0;
+        const emptyFrames = frames.filter((entry) => entry.stats.empty).length;
+        const occupancies = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.occupancy);
+        const bboxHeights = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bboxHeight);
+        const bboxWidths = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bboxWidth);
+        const bottomGaps = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.bottomGap);
+        const topGaps = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.topGap);
+        const centersX = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.centerX);
+        const edgeOpaqueRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.edgeOpaqueRatio);
+        const outsideOpaqueRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.outsideOpaqueRatio);
+        const outsideCheckerRatios = frames.filter((entry) => !entry.stats.empty).map((entry) => entry.stats.outsideCheckerRatio);
+        const touchesEdgeCount = frames.filter((entry) => entry.stats.touchesEdge).length;
+
+        const avg = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+        const spread = (values) => values.length ? Math.max(...values) - Math.min(...values) : 0;
+
+        const avgOccupancy = avg(occupancies);
+        const avgBottomGap = avg(bottomGaps);
+        const avgTopGap = avg(topGaps);
+        const avgEdgeOpaqueRatio = avg(edgeOpaqueRatios);
+        const avgOutsideOpaqueRatio = avg(outsideOpaqueRatios);
+        const avgOutsideCheckerRatio = avg(outsideCheckerRatios);
+        const bottomDrift = spread(bottomGaps);
+        const centerDrift = spread(centersX);
+        const widthDrift = spread(bboxWidths);
+        const heightDrift = spread(bboxHeights);
+        const frameHeight = active?.frameH || 1;
+        const frameWidth = active?.frameW || 1;
+        const uniformFrameSize = !isManualGridEnabled()
+          && Number.isInteger(state.image.width / clampInt(els.colsInput.value, 1, 64, 1))
+          && Number.isInteger(state.image.height / clampInt(els.rowsInput.value, 1, 64, 1));
+
+        if (uniformFrameSize || isManualGridEnabled()) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Compatibilita base', 'La griglia e leggibile dal tool. Il progetto puo usare questo sheet se baseline, padding e coerenza dei frame restano sotto controllo.');
+        } else {
+          pushAnalysisItem(compatibilityItems, 'warn', 'Griglia non divisibile perfettamente', 'Con la griglia automatica il file non si divide in celle intere. Attiva il ritaglio manuale oppure correggi lo sheet all\'origine.');
+        }
+
+        if (activeAspect >= 0.9 && activeAspect <= 1.8) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1, dentro una zona comoda per il renderer del progetto.`);
+        } else {
+          pushAnalysisItem(compatibilityItems, activeAspect < 0.65 || activeAspect > 2.1 ? 'bad' : 'warn', 'Proporzione frame', `Il frame attivo ha rapporto ${formatRatio(activeAspect)}:1. Nel progetto funzionano meglio frame non troppo alti o troppo larghi, con soggetto ben centrato.`);
+        }
+
+        if (emptyFrames === 0) {
+          pushAnalysisItem(stabilityItems, 'good', 'Frame popolati', 'Nel range selezionato ogni frame contiene pixel utili.');
+        } else {
+          pushAnalysisItem(stabilityItems, emptyFrames === frames.length ? 'bad' : 'warn', 'Frame vuoti', `${emptyFrames} frame nel range selezionato risultano vuoti o quasi trasparenti. Questo rompe l\'animazione.`);
+        }
+
+        if (avgOutsideOpaqueRatio <= 0.03) {
+          pushAnalysisItem(transparencyItems, 'good', 'Trasparenza valida', `Fuori dal soggetto quasi tutto e davvero trasparente (${Math.round(avgOutsideOpaqueRatio * 100)}% opaco). Questo e il segnale piu forte che il PNG e scontornato bene.`);
+        } else if (avgOutsideOpaqueRatio <= 0.12) {
+          pushAnalysisItem(transparencyItems, 'warn', 'Trasparenza dubbia', `Fuori dal soggetto resta circa ${Math.round(avgOutsideOpaqueRatio * 100)}% di pixel opachi. Potrebbe esserci fondo residuo, alone o crop poco pulito.`);
+        } else {
+          const checkerHint = avgOutsideCheckerRatio >= 0.45
+            ? ' La maggior parte di quei pixel assomiglia a un checker chiaro: sembra uno sfondo incorporato nel PNG.'
+            : '';
+          pushAnalysisItem(transparencyItems, 'bad', 'Finto sfondo trasparente', `Fuori dal soggetto resta circa ${Math.round(avgOutsideOpaqueRatio * 100)}% di pixel opachi.${checkerHint}`);
+        }
+
+        if (avgEdgeOpaqueRatio <= 0.18) {
+          pushAnalysisItem(transparencyItems, 'good', 'Bordi del frame', `I bordi dei frame restano per lo piu puliti (${Math.round(avgEdgeOpaqueRatio * 100)}% opachi).`);
+        } else if (avgEdgeOpaqueRatio <= 0.45) {
+          pushAnalysisItem(transparencyItems, 'warn', 'Bordi del frame', `I bordi risultano opachi per circa ${Math.round(avgEdgeOpaqueRatio * 100)}%. Va bene solo se il crop e molto stretto per scelta.`);
+        } else {
+          pushAnalysisItem(transparencyItems, 'warn', 'Bordi del frame', `I bordi risultano opachi per circa ${Math.round(avgEdgeOpaqueRatio * 100)}%. Se non e un crop strettissimo, il file e probabilmente troppo pieno o sporco.`);
+        }
+
+        if (avgOccupancy >= 0.14 && avgOccupancy <= 0.68) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Uso dello spazio', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Il personaggio non sembra ne troppo piccolo ne troppo schiacciato dentro la cella.`);
+        } else if (avgOccupancy < 0.14) {
+          pushAnalysisItem(compatibilityItems, 'warn', 'Troppo spazio vuoto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite rischia di apparire minuscolo: conviene stringere Cell W/H o rigenerare lo sheet con meno padding.`);
+        } else {
+          pushAnalysisItem(compatibilityItems, 'warn', 'Crop molto stretto', `Occupazione media ${Math.round(avgOccupancy * 100)}%. Lo sprite e molto vicino ai bordi e rischia clipping in animazione.`);
+        }
+
+        if (avgBottomGap <= frameHeight * 0.08) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Ancoraggio nella cella', `Il soggetto resta vicino al pavimento della cella (${Math.round(avgBottomGap)}px medi sotto). Questo aiuta la lettura prospettica.`);
+        } else if (avgBottomGap <= frameHeight * 0.18) {
+          pushAnalysisItem(compatibilityItems, 'warn', 'Ancoraggio alto', `Il soggetto lascia circa ${Math.round(avgBottomGap)}px sotto di se. In gioco puo sembrare un po piu sospeso del previsto.`);
+        } else {
+          pushAnalysisItem(compatibilityItems, 'bad', 'Soggetto sospeso', `Il soggetto lascia circa ${Math.round(avgBottomGap)}px sotto di se, contro ${Math.round(avgTopGap)}px sopra. In gioco sembrera galleggiare invece di appoggiarsi alla cella.`);
+        }
+
+        if (bottomDrift <= frameHeight * 0.06) {
+          pushAnalysisItem(stabilityItems, 'good', 'Baseline stabile', `Deriva verticale contenuta (${Math.round(bottomDrift)}px nel range). Questo e importante per non far “saltare” il personaggio.`);
+        } else {
+          pushAnalysisItem(stabilityItems, bottomDrift > frameHeight * 0.14 ? 'bad' : 'warn', 'Baseline instabile', `La deriva verticale e di circa ${Math.round(bottomDrift)}px tra i frame. Nel gioco questa animazione sembrera tremare o galleggiare.`);
+        }
+
+        if (centerDrift <= frameWidth * 0.08) {
+          pushAnalysisItem(stabilityItems, 'good', 'Centro coerente', `Spostamento orizzontale limitato (${Math.round(centerDrift)}px).`);
+        } else {
+          pushAnalysisItem(stabilityItems, centerDrift > frameWidth * 0.18 ? 'bad' : 'warn', 'Centro instabile', `Il personaggio cambia posizione orizzontale di circa ${Math.round(centerDrift)}px. Potresti percepire jitter laterale.`);
+        }
+
+        if (touchesEdgeCount === 0) {
+          pushAnalysisItem(compatibilityItems, 'good', 'Margine di sicurezza', 'Nessun frame tocca i bordi del crop: buon margine per usare lo sprite senza tagli evidenti.');
+        } else {
+          pushAnalysisItem(compatibilityItems, touchesEdgeCount > Math.ceil(frames.length / 2) ? 'bad' : 'warn', 'Rischio clipping', `${touchesEdgeCount} frame toccano il bordo del crop. Se l\'illustrazione continua fuori dalla cella, lo sheet va corretto o ritagliato meglio.`);
+        }
+
+        if (widthDrift <= frameWidth * 0.1 && heightDrift <= frameHeight * 0.1) {
+          pushAnalysisItem(stabilityItems, 'good', 'Volume coerente', 'Le dimensioni utili del personaggio restano abbastanza stabili tra i frame.');
+        } else {
+          pushAnalysisItem(stabilityItems, 'warn', 'Volume irregolare', `La variazione utile e circa ${Math.round(widthDrift)}px in larghezza e ${Math.round(heightDrift)}px in altezza. Potrebbe sembrare un resize involontario, non un\'animazione.`);
+        }
+
+        const verdict = buildFinalVerdict(transparencyItems, stabilityItems, compatibilityItems);
+        const fitSuggestion = computeGameFitSuggestion(100, active, frames.find((entry) => entry.rect?.frameIndex === active?.frameIndex));
+        const summary = [
+          '<div><strong>Target progetto:</strong> contenitore quasi quadrato, sprite appoggiato in basso nella cella e lettura chiara in prospettiva.</div>',
+          `<div><strong>Diagnosi veloce:</strong> frame ${Math.round(active?.frameW || 0)} x ${Math.round(active?.frameH || 0)}px, rapporto ${formatRatio(activeAspect)}:1, occupazione media ${Math.round(avgOccupancy * 100)}%, opaco fuori sagoma ${Math.round(avgOutsideOpaqueRatio * 100)}%.</div>`,
+          fitSuggestion ? `<div><strong>Suggerimento fit:</strong> scala gioco ${fitSuggestion.scale}, offset Y ${fitSuggestion.offsetY > 0 ? '+' : ''}${fitSuggestion.offsetY}px.</div>` : ''
+        ].join('');
+        const analysisHtml = [
+          `<div class="analysis-verdict analysis-verdict--${verdict.tone}"><strong>${verdict.title}</strong><span>${verdict.detail}</span></div>`,
+          renderAnalysisSection('Trasparenza', transparencyItems),
+          renderAnalysisSection('Stabilita animazione', stabilityItems),
+          renderAnalysisSection('Compatibilita col gioco', compatibilityItems)
+        ].join('');
+
+        state.analysisKey = signature;
+        state.analysisSummaryHtml = summary;
+        state.analysisHtml = analysisHtml;
+        state.analysisFrames = frames;
+        state.analysisMetrics = {
+          avgOccupancy,
+          avgBottomGap,
+          avgTopGap,
+          avgEdgeOpaqueRatio,
+          avgOutsideOpaqueRatio,
+          avgOutsideCheckerRatio,
+          bottomDrift,
+          centerDrift
+        };
+        els.analysisSummary.innerHTML = summary;
+        els.analysisList.innerHTML = analysisHtml;
+      }
+
+      function resizeCanvasToBox(canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.max(1, Math.round(rect.width * dpr));
+        const height = Math.max(1, Math.round(rect.height * dpr));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+      }
+
+      function drawBackground(ctx, width, height) {
+        const mode = els.backgroundInput.value;
+        ctx.clearRect(0, 0, width, height);
+
+        if (mode === 'dark') {
+          const g = ctx.createLinearGradient(0, 0, 0, height);
+          g.addColorStop(0, '#2b2017');
+          g.addColorStop(1, '#120f0c');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, width, height);
+          return;
+        }
+
+        if (mode === 'paper') {
+          const g = ctx.createLinearGradient(0, 0, 0, height);
+          g.addColorStop(0, '#fffdf7');
+          g.addColorStop(1, '#efe4d4');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, width, height);
+          return;
+        }
+
+        if (mode === 'grass') {
+          const g = ctx.createLinearGradient(0, 0, 0, height);
+          g.addColorStop(0, '#c8ee98');
+          g.addColorStop(0.5, '#9fd86b');
+          g.addColorStop(1, '#79b84f');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          for (let i = -1; i < 10; i++) {
+            ctx.fillRect((width / 8) * i, 0, width / 16, height);
+          }
+          return;
+        }
+
+        const tile = Math.max(18, Math.round(Math.min(width, height) / 18));
+        for (let y = 0; y < height; y += tile) {
+          for (let x = 0; x < width; x += tile) {
+            const odd = ((x / tile) + (y / tile)) % 2 === 0;
+            ctx.fillStyle = odd ? '#f6f1e8' : '#e6ddd0';
+            ctx.fillRect(x, y, tile, tile);
+          }
+        }
+      }
+
+      function drawPreview() {
+        resizeCanvasToBox(els.previewCanvas);
+        const canvas = els.previewCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        drawBackground(ctx, width, height);
+
+        if (!state.image) return;
+        const rect = currentFrameRect();
+        if (!rect) return;
+        const frameAnalysis = getFrameAnalysis(rect.frameIndex);
+
+        const scaleFactor = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
+        const cellSize = Math.min(width * 0.42, height * 0.54);
+        const cellX = (width - cellSize) / 2;
+        const cellY = height - cellSize - Math.max(28, height * 0.12);
+        const baseFit = Math.min(cellSize / rect.frameW, cellSize / rect.frameH);
+        const drawW = rect.frameW * baseFit * scaleFactor;
+        const drawH = rect.frameH * baseFit * scaleFactor;
+        const dx = cellX + (cellSize - drawW) / 2;
+        const dy = cellY + cellSize - drawH;
+        const recommendedInsetX = cellSize * 0.16;
+        const recommendedInsetTop = cellSize * 0.12;
+        const recommendedInsetBottom = cellSize * 0.16;
+        const recommendedZone = {
+          x: cellX + recommendedInsetX,
+          y: cellY + recommendedInsetTop,
+          w: cellSize - recommendedInsetX * 2,
+          h: cellSize - recommendedInsetTop - recommendedInsetBottom
+        };
+        const floorBand = {
+          x: cellX,
+          y: cellY + cellSize * 0.82,
+          w: cellSize,
+          h: cellSize * 0.18
+        };
+
+        ctx.fillStyle = 'rgba(118, 97, 65, 0.12)';
+        ctx.beginPath();
+        ctx.moveTo(width / 2, cellY + cellSize * 0.58);
+        ctx.lineTo(cellX + cellSize * 0.94, cellY + cellSize * 0.78);
+        ctx.lineTo(width / 2, cellY + cellSize * 0.98);
+        ctx.lineTo(cellX + cellSize * 0.06, cellY + cellSize * 0.78);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(120, 96, 66, 0.26)';
+        ctx.lineWidth = Math.max(2, width * 0.0026);
+        ctx.strokeRect(cellX, cellY, cellSize, cellSize);
+
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.08)';
+        ctx.fillRect(floorBand.x, floorBand.y, floorBand.w, floorBand.h);
+
+        ctx.save();
+        ctx.setLineDash([10, 8]);
+        ctx.strokeStyle = 'rgba(207, 155, 74, 0.45)';
+        ctx.lineWidth = Math.max(1.5, width * 0.002);
+        ctx.strokeRect(recommendedZone.x, recommendedZone.y, recommendedZone.w, recommendedZone.h);
+        ctx.restore();
+
+        ctx.strokeStyle = 'rgba(58, 143, 82, 0.28)';
+        ctx.beginPath();
+        ctx.moveTo(cellX, cellY + cellSize);
+        ctx.lineTo(cellX + cellSize, cellY + cellSize);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(0,0,0,0.14)';
+        ctx.beginPath();
+        const shadowWidth = Math.min(cellSize * 0.34, drawW * 0.34);
+        const shadowHeight = Math.max(10, drawH * 0.06);
+        ctx.ellipse(width / 2, cellY + cellSize * 0.94, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          state.image,
+          rect.sx, rect.sy, rect.frameW, rect.frameH,
+          dx, dy, drawW, drawH
+        );
+
+        if (frameAnalysis?.stats && !frameAnalysis.stats.empty) {
+          const bboxX = dx + drawW * (frameAnalysis.stats.leftGap / rect.frameW);
+          const bboxY = dy + drawH * (frameAnalysis.stats.topGap / rect.frameH);
+          const bboxW = drawW * (frameAnalysis.stats.bboxWidth / rect.frameW);
+          const bboxH = drawH * (frameAnalysis.stats.bboxHeight / rect.frameH);
+
+          ctx.save();
+          ctx.setLineDash([7, 5]);
+          ctx.strokeStyle = 'rgba(54, 138, 183, 0.6)';
+          ctx.lineWidth = Math.max(1.5, width * 0.002);
+          ctx.strokeRect(bboxX, bboxY, bboxW, bboxH);
+          ctx.restore();
+
+          const anchorY = dy + drawH * ((frameAnalysis.stats.topGap + frameAnalysis.stats.bboxHeight) / rect.frameH);
+          ctx.strokeStyle = 'rgba(216, 114, 54, 0.48)';
+          ctx.lineWidth = Math.max(1, width * 0.002);
+          ctx.beginPath();
+          ctx.moveTo(cellX, anchorY);
+          ctx.lineTo(cellX + cellSize, anchorY);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(46, 36, 25, 0.65)';
+        ctx.font = `${Math.max(11, Math.round(width * 0.012))}px "Trebuchet MS", "Segoe UI", sans-serif`;
+        ctx.fillText('zona consigliata', recommendedZone.x + 8, recommendedZone.y - 8);
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.74)';
+        ctx.fillText('pavimento cella', floorBand.x + 8, floorBand.y - 8);
+      }
+
+      function drawGamePreview() {
+        resizeCanvasToBox(els.gamePreviewCanvas);
+        const canvas = els.gamePreviewCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        drawBackground(ctx, width, height);
+
+        const cols = 3;
+        const rows = 3;
+        const boardSize = Math.min(width * 0.84, height * 0.7);
+        const cell = boardSize / cols;
+        const boardX = (width - boardSize) / 2;
+        const boardY = height - boardSize - Math.max(28, height * 0.12);
+        const activeCol = 1;
+        const activeRow = 1;
+
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const x = boardX + col * cell;
+            const y = boardY + row * cell;
+            const odd = (row + col) % 2 === 0;
+            ctx.fillStyle = odd ? 'rgba(244, 237, 225, 0.96)' : 'rgba(229, 217, 198, 0.96)';
+            ctx.fillRect(x, y, cell, cell);
+            ctx.strokeStyle = 'rgba(120, 96, 66, 0.18)';
+            ctx.lineWidth = Math.max(1, width * 0.0018);
+            ctx.strokeRect(x, y, cell, cell);
+          }
+        }
+
+        const activeX = boardX + activeCol * cell;
+        const activeY = boardY + activeRow * cell;
+        ctx.fillStyle = 'rgba(58, 143, 82, 0.10)';
+        ctx.fillRect(activeX, activeY, cell, cell);
+        ctx.strokeStyle = 'rgba(58, 143, 82, 0.35)';
+        ctx.lineWidth = Math.max(2, width * 0.0024);
+        ctx.strokeRect(activeX, activeY, cell, cell);
+
+        if (!state.image) {
+          els.gamePreviewBadge.textContent = 'Cella centrale';
+          return;
+        }
+
+        const rect = currentFrameRect();
+        if (!rect) {
+          els.gamePreviewBadge.textContent = 'Cella centrale';
+          return;
+        }
+        const frameAnalysis = getFrameAnalysis(rect.frameIndex);
+
+        const spriteScale = clampFloat(els.scaleInput.value, 0.4, 4, 1.7);
+        const gameScale = clampFloat(els.gameScaleInput.value, 0.3, 2, 1);
+        const gameOffsetY = clampFloat(els.gameOffsetYInput.value, -400, 400, 0);
+        const spriteBox = cell * 1.42;
+        const fit = Math.min(spriteBox / rect.frameW, spriteBox / rect.frameH);
+        const drawW = rect.frameW * fit * spriteScale * 0.78 * gameScale;
+        const drawH = rect.frameH * fit * spriteScale * 0.78 * gameScale;
+        const drawX = activeX + (cell - drawW) / 2;
+        const drawY = activeY + gameOffsetY + cell - drawH;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.16)';
+        ctx.beginPath();
+        ctx.ellipse(activeX + cell / 2, activeY + cell * 0.92, Math.min(cell * 0.28, drawW * 0.26), Math.max(8, drawH * 0.05), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          state.image,
+          rect.sx, rect.sy, rect.frameW, rect.frameH,
+          drawX, drawY, drawW, drawH
+        );
+
+        if (frameAnalysis?.stats && !frameAnalysis.stats.empty) {
+          const bboxX = drawX + drawW * (frameAnalysis.stats.leftGap / rect.frameW);
+          const bboxY = drawY + drawH * (frameAnalysis.stats.topGap / rect.frameH);
+          const bboxW = drawW * (frameAnalysis.stats.bboxWidth / rect.frameW);
+          const bboxH = drawH * (frameAnalysis.stats.bboxHeight / rect.frameH);
+          ctx.save();
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = 'rgba(54, 138, 183, 0.58)';
+          ctx.lineWidth = Math.max(1.2, width * 0.002);
+          ctx.strokeRect(bboxX, bboxY, bboxW, bboxH);
+          ctx.restore();
+        }
+
+        els.gamePreviewBadge.textContent = `${Math.round(drawW)}x${Math.round(drawH)} in cella | scala ${gameScale.toFixed(2)} | y ${gameOffsetY > 0 ? '+' : ''}${Math.round(gameOffsetY)}`;
+        const suggestion = computeGameFitSuggestion(cell, rect, frameAnalysis);
+        els.gameFitHint.textContent = suggestion
+          ? `Suggerito per questa cella: scala gioco ${suggestion.scale}, offset Y ${suggestion.offsetY > 0 ? '+' : ''}${suggestion.offsetY}px.`
+          : 'Usa questa sezione per vedere se uno sprite quasi buono puo essere riposizionato meglio nella cella del gioco.';
+      }
+
+      function drawSheetOverview() {
+        resizeCanvasToBox(els.sheetCanvas);
+        const canvas = els.sheetCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        state.sheetViewport = null;
+
+        ctx.clearRect(0, 0, width, height);
+        const tile = Math.max(16, Math.round(width / 26));
+        for (let y = 0; y < height; y += tile) {
+          for (let x = 0; x < width; x += tile) {
+            const odd = ((x / tile) + (y / tile)) % 2 === 0;
+            ctx.fillStyle = odd ? '#f4efe6' : '#e7ddd1';
+            ctx.fillRect(x, y, tile, tile);
+          }
+        }
+
+        if (!state.image) return;
+
+        const pad = 12;
+        const fit = Math.min((width - pad * 2) / state.image.width, (height - pad * 2) / state.image.height);
+        const drawW = state.image.width * fit;
+        const drawH = state.image.height * fit;
+        const dx = (width - drawW) / 2;
+        const dy = (height - drawH) / 2;
+        state.sheetViewport = { dx, dy, fit, drawW, drawH };
+        ctx.drawImage(state.image, dx, dy, drawW, drawH);
+
+        const rect = currentFrameRect();
+        if (!rect) return;
+        const total = frameCount();
+        for (let i = 0; i < total; i++) {
+          const cellRect = frameRectForIndex(i);
+          if (!cellRect) continue;
+          const cellDx = dx + cellRect.sx * fit;
+          const cellDy = dy + cellRect.sy * fit;
+          const cellW = cellRect.frameW * fit;
+          const cellH = cellRect.frameH * fit;
+          ctx.lineWidth = i === rect.frameIndex ? Math.max(2, width * 0.006) : Math.max(1, width * 0.0024);
+          ctx.strokeStyle = i === rect.frameIndex ? '#ffcf54' : 'rgba(95, 78, 52, 0.28)';
+          ctx.strokeRect(cellDx, cellDy, cellW, cellH);
+          if (i === rect.frameIndex) {
+            ctx.fillStyle = 'rgba(255, 207, 84, 0.18)';
+            ctx.fillRect(cellDx, cellDy, cellW, cellH);
+          }
+        }
+
+        const handleSize = Math.max(8, width * 0.012);
+        const activeDx = dx + rect.sx * fit;
+        const activeDy = dy + rect.sy * fit;
+        const activeW = rect.frameW * fit;
+        const activeH = rect.frameH * fit;
+        ctx.fillStyle = '#ffcf54';
+        ctx.fillRect(
+          activeDx + activeW - handleSize * 0.5,
+          activeDy + activeH - handleSize * 0.5,
+          handleSize,
+          handleSize
+        );
+      }
+
+      function updateUiText() {
+        const rect = currentFrameRect();
+        const total = frameCount();
+        const start = els.startFrameInput.value;
+        const end = els.endFrameInput.value;
+
+        els.frameBadge.textContent = rect ? `Frame ${rect.frameIndex} (${rect.col}, ${rect.row})` : 'Frame -';
+        els.sourceBadge.textContent = state.sourceLabel || 'Nessuna immagine';
+        els.infoSource.textContent = state.sourceLabel || '-';
+        els.infoSheet.textContent = state.image ? `${state.image.width} x ${state.image.height}px` : '-';
+        els.infoFrame.textContent = rect ? `${Math.round(rect.frameW)} x ${Math.round(rect.frameH)}px` : '-';
+        els.infoActive.textContent = rect ? `${rect.frameIndex} di ${Math.max(0, total - 1)}` : '-';
+        els.infoRange.textContent = `${start} -> ${end}${isManualGridEnabled() ? ' | manuale' : ' | automatico'}`;
+        els.playPauseBtn.textContent = state.playing ? 'Pausa' : 'Play';
+      }
+
+      function renderAll() {
+        drawPreview();
+        drawGamePreview();
+        drawSheetOverview();
+        updateUiText();
+        updateSheetCanvasCursor();
+      }
+
+      function stepFrame(direction) {
+        const start = clampInt(els.startFrameInput.value, 0, frameCount() - 1, 0);
+        const end = clampInt(els.endFrameInput.value, start, frameCount() - 1, start);
+        let next = clampInt(els.frameInput.value, start, end, start) + direction;
+        if (next < start) next = end;
+        if (next > end) next = start;
+        state.currentFrame = next;
+        els.frameInput.value = next;
+        els.frameSlider.value = next;
+        renderAll();
+      }
+
+      function advanceAnimation() {
+        const start = clampInt(els.startFrameInput.value, 0, frameCount() - 1, 0);
+        const end = clampInt(els.endFrameInput.value, start, frameCount() - 1, start);
+        let frame = clampInt(els.frameInput.value, start, end, start);
+        const mode = els.loopModeInput.value;
+
+        if (mode === 'pingpong') {
+          if (frame <= start) state.direction = 1;
+          if (frame >= end) state.direction = -1;
+          frame += state.direction;
+          if (start === end) frame = start;
+        } else if (mode === 'once') {
+          if (frame < end) {
+            frame += 1;
+          } else {
+            state.playing = false;
+            els.autoplayInput.checked = false;
+          }
+        } else {
+          frame = frame >= end ? start : frame + 1;
+        }
+
+        frame = Math.max(start, Math.min(end, frame));
+        state.currentFrame = frame;
+        els.frameInput.value = frame;
+        els.frameSlider.value = frame;
+      }
+
+      function tick(now) {
+        if (state.playing && state.image) {
+          const fps = clampInt(els.fpsInput.value, 1, 60, 8);
+          const frameDuration = 1000 / fps;
+          if (!state.lastAdvanceAt) state.lastAdvanceAt = now;
+          if (now - state.lastAdvanceAt >= frameDuration) {
+            advanceAnimation();
+            state.lastAdvanceAt = now;
+          }
+        } else {
+          state.lastAdvanceAt = 0;
+        }
+
+        renderAll();
+        window.requestAnimationFrame(tick);
+      }
+
+      function onSettingsChange() {
+        if (state.image && isManualGridEnabled() && (Number(els.cellWidthInput.value) <= 0 || Number(els.cellHeightInput.value) <= 0)) {
+          copyUniformGridToManual();
+        }
+        syncFrameBounds();
+        writeStoredSettings();
+        updateAnalysis();
+        renderAll();
+        updateSheetCanvasCursor();
+      }
+
+      function resetControls() {
+        els.colsInput.value = 3;
+        els.rowsInput.value = 3;
+        els.startFrameInput.value = 0;
+        els.endFrameInput.value = 8;
+        els.frameInput.value = 0;
+        els.frameSlider.value = 0;
+        els.manualGridInput.checked = false;
+        els.offsetXInput.value = 0;
+        els.offsetYInput.value = 0;
+        els.cellWidthInput.value = 0;
+        els.cellHeightInput.value = 0;
+        els.gapXInput.value = 0;
+        els.gapYInput.value = 0;
+        els.fpsInput.value = 8;
+        els.scaleInput.value = 1.7;
+        els.gameScaleInput.value = 1;
+        els.gameOffsetYInput.value = 0;
+        els.loopModeInput.value = 'forward';
+        els.autoplayInput.checked = true;
+        els.backgroundInput.value = 'checker';
+        state.playing = true;
+        state.direction = 1;
+        if (state.image) copyUniformGridToManual();
+        syncFrameBounds();
+        writeStoredSettings();
+        updateAnalysis();
+        renderAll();
+      }
+
+      els.loadPathBtn.addEventListener('click', loadFromProjectPath);
+      els.reloadBtn.addEventListener('click', () => {
+        if (state.objectUrl) {
+          loadImage(state.objectUrl, state.sourceLabel)
+            .then(() => setStatus('Anteprima aggiornata.'))
+            .catch((error) => setStatus(error.message, true));
+        } else {
+          loadFromProjectPath();
+        }
+      });
+      els.fileInput.addEventListener('change', (event) => {
+        loadFromFile(event.target.files && event.target.files[0]);
+      });
+      els.copyAutoGridBtn.addEventListener('click', () => {
+        if (!state.image) return;
+        copyUniformGridToManual();
+        els.manualGridInput.checked = true;
+        syncFrameBounds();
+        writeStoredSettings();
+        updateAnalysis();
+        renderAll();
+      });
+      els.autoFitGameBtn.addEventListener('click', () => {
+        if (!state.image) return;
+        const rect = currentFrameRect();
+        const suggestion = computeGameFitSuggestion(100, rect, getFrameAnalysis(rect?.frameIndex));
+        if (!suggestion) return;
+        els.gameScaleInput.value = suggestion.scale;
+        els.gameOffsetYInput.value = suggestion.offsetY;
+        writeStoredSettings();
+        renderAll();
+      });
+      els.prevFrameBtn.addEventListener('click', () => {
+        state.playing = false;
+        els.autoplayInput.checked = false;
+        stepFrame(-1);
+      });
+      els.nextFrameBtn.addEventListener('click', () => {
+        state.playing = false;
+        els.autoplayInput.checked = false;
+        stepFrame(1);
+      });
+      els.playPauseBtn.addEventListener('click', () => {
+        const end = clampInt(els.endFrameInput.value, 0, frameCount() - 1, 0);
+        if (!state.playing && els.loopModeInput.value === 'once' && clampInt(els.frameInput.value, 0, end, 0) >= end) {
+          els.frameInput.value = clampInt(els.startFrameInput.value, 0, end, 0);
+          els.frameSlider.value = els.frameInput.value;
+        }
+        state.playing = !state.playing;
+        els.autoplayInput.checked = state.playing;
+        writeStoredSettings();
+        updateUiText();
+      });
+      els.resetBtn.addEventListener('click', resetControls);
+
+      [
+        els.colsInput,
+        els.rowsInput,
+        els.startFrameInput,
+        els.endFrameInput,
+        els.frameInput,
+        els.frameSlider,
+        els.manualGridInput,
+        els.offsetXInput,
+        els.offsetYInput,
+        els.cellWidthInput,
+        els.cellHeightInput,
+        els.gapXInput,
+        els.gapYInput,
+        els.fpsInput,
+        els.scaleInput,
+        els.gameScaleInput,
+        els.gameOffsetYInput,
+        els.loopModeInput,
+        els.backgroundInput
+      ].forEach((el) => {
+        el.addEventListener('input', onSettingsChange);
+        el.addEventListener('change', onSettingsChange);
+      });
+
+      els.frameSlider.addEventListener('input', () => {
+        els.frameInput.value = els.frameSlider.value;
+        state.playing = false;
+        els.autoplayInput.checked = false;
+        onSettingsChange();
+      });
+
+      els.autoplayInput.addEventListener('change', () => {
+        state.playing = !!els.autoplayInput.checked;
+        writeStoredSettings();
+        updateUiText();
+      });
+
+      els.sheetCanvas.addEventListener('pointerdown', beginSheetDrag);
+      els.sheetCanvas.addEventListener('pointermove', moveSheetDrag);
+      els.sheetCanvas.addEventListener('pointerup', endSheetDrag);
+      els.sheetCanvas.addEventListener('pointercancel', endSheetDrag);
+      els.sheetCanvas.addEventListener('pointerleave', (event) => {
+        if (!state.dragState) updateSheetCanvasCursor(event);
+      });
+
+      window.addEventListener('resize', renderAll);
+
+      applyStoredSettings();
+      updateAnalysis();
+      renderAll();
+
+      const initialSrc = els.srcPath.value.trim();
+      if (initialSrc) {
+        loadFromProjectPath();
+      }
+
+      window.requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+</html>

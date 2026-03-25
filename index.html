@@ -11,22 +11,22 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/boks-apple-touch-icon.png">
-  <link rel="stylesheet" href="styles/app.css">
-  <link rel="stylesheet" href="styles/character.css">
+  <link rel="stylesheet" href="styles/app.css?v=20260324-211400">
+  <link rel="stylesheet" href="styles/character.css?v=20260324-211400">
 </head>
 <body
   class="prestart"
-  data-build="20260323-164812"
-  data-release-channel="live"
-  data-editor-enabled="false"
-  data-debug-tools-enabled="false"
-  data-build-badge-enabled="false"
+  data-build="20260324-211400"
+  data-release-channel="main"
+  data-editor-enabled="true"
+  data-debug-tools-enabled="true"
+  data-build-badge-enabled="true"
 >
 
 <!-- Splash screen -->
 <div id="splash">
   <div id="splash-logo">
-    <span style="color:#3F9A62;text-shadow:0 5px 0 #2b6f46;">B</span><span style="color:#FF3B3B;text-shadow:0 5px 0 #a81f1f;">Ö</span><span style="color:#FFD31A;text-shadow:0 5px 0 #b18400;">K</span><span style="color:#2B8FD4;text-shadow:0 5px 0 #1a5a8a;">S</span>
+    <span style="color:#3F9A62;">B</span><span style="color:#FF3B3B;">Ö</span><span style="color:#FFD31A;">K</span><span style="color:#2B8FD4;">S</span>
   </div>
   <div class="splash-stage">
     <div class="splash-track" aria-hidden="true">
@@ -47,7 +47,7 @@
 </div>
 <div id="startGate" aria-label="Menu iniziale">
   <div class="start-title">
-    <span style="color:#3F9A62;text-shadow:0 5px 0 #2b6f46;">B</span><span style="color:#FF3B3B;text-shadow:0 5px 0 #a81f1f;">Ö</span><span style="color:#FFD31A;text-shadow:0 5px 0 #b18400;">K</span><span style="color:#2B8FD4;text-shadow:0 5px 0 #1a5a8a;">S</span>
+    <span style="color:#3F9A62;">B</span><span style="color:#FF3B3B;">Ö</span><span style="color:#FFD31A;">K</span><span style="color:#2B8FD4;">S</span>
   </div>
   <div class="start-actions">
     <button id="startGameBtn" type="button" aria-label="Play">
@@ -58,6 +58,8 @@
         <path d="M12 12 L7.5 12 A4.5 4.5 0 0 1 12 7.5 Z" fill="#3F9A62"/>
       </svg>
     </button>
+    <button id="startEditorBtn" type="button">Level Editor</button>
+    <button id="openSpritePreviewBtn" type="button" aria-label="Apri il tool di anteprima sprite sheet">Sprite Sheet Tool</button>
   </div>
 </div>
 <button id="quickEditorBtn" type="button" aria-label="Apri editor con il livello corrente">Editor</button>
@@ -66,6 +68,7 @@
       <div id="editorSide">
         <div id="editorToolbar" aria-label="Level editor controls">
           <button id="saveLevelBtn" type="button">Salva</button>
+          <button id="openStyleEditorBtn" type="button" aria-label="Apri sezione stile livello">Stile</button>
           <button id="exitEditorBtn" type="button" aria-label="Torna al gioco">Torna al gioco</button>
         </div>
         <div id="customLevelsPanel" aria-label="I miei livelli">
@@ -73,6 +76,25 @@
             <h3>Livelli</h3>
           </div>
           <div id="customLevelsList"></div>
+        </div>
+        <div id="levelThemePanel" aria-label="Stile grafico livello">
+          <div class="style-panel-head">
+            <h3>Stile livello</h3>
+            <button id="closeStyleEditorBtn" type="button" aria-label="Torna all'editor">Torna all'editor</button>
+          </div>
+          <div id="themeTargetInfo"></div>
+          <div class="custom-levels-head">
+            <h3>Tema grafico</h3>
+          </div>
+          <div id="themePicker"></div>
+          <div class="custom-levels-head">
+            <h3>Colori</h3>
+          </div>
+          <div id="themeColorControls"></div>
+          <div id="themeColorActions">
+            <button id="applyThemeStyleBtn" type="button" aria-label="Applica stile al livello selezionato">Applica stile</button>
+            <button id="resetThemeColorsBtn" type="button" aria-label="Ripristina colori tema">Ripristina colori tema</button>
+          </div>
         </div>
         <div id="elementPalettePanel" aria-label="Elementi del livello">
           <div class="custom-levels-head">
