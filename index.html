@@ -26,7 +26,7 @@
 <!-- Splash screen -->
 <div id="splash">
   <div id="splash-logo">
-    <span style="color:#3F9A62;text-shadow:0 5px 0 #2b6f46;">B</span><span style="color:#FF3B3B;text-shadow:0 5px 0 #a81f1f;">Ö</span><span style="color:#FFD31A;text-shadow:0 5px 0 #b18400;">K</span><span style="color:#2B8FD4;text-shadow:0 5px 0 #1a5a8a;">S</span>
+    <span style="color:#3F9A62;">B</span><span style="color:#FF3B3B;">Ö</span><span style="color:#FFD31A;">K</span><span style="color:#2B8FD4;">S</span>
   </div>
   <div class="splash-stage">
     <div class="splash-track" aria-hidden="true">
@@ -47,7 +47,7 @@
 </div>
 <div id="startGate" aria-label="Menu iniziale">
   <div class="start-title">
-    <span style="color:#3F9A62;text-shadow:0 5px 0 #2b6f46;">B</span><span style="color:#FF3B3B;text-shadow:0 5px 0 #a81f1f;">Ö</span><span style="color:#FFD31A;text-shadow:0 5px 0 #b18400;">K</span><span style="color:#2B8FD4;text-shadow:0 5px 0 #1a5a8a;">S</span>
+    <span style="color:#3F9A62;">B</span><span style="color:#FF3B3B;">Ö</span><span style="color:#FFD31A;">K</span><span style="color:#2B8FD4;">S</span>
   </div>
   <div class="start-actions">
     <button id="startGameBtn" type="button" aria-label="Play">
@@ -68,6 +68,7 @@
       <div id="editorSide">
         <div id="editorToolbar" aria-label="Level editor controls">
           <button id="saveLevelBtn" type="button">Salva</button>
+          <button id="openStyleEditorBtn" type="button" aria-label="Apri sezione stile livello">Stile</button>
           <button id="exitEditorBtn" type="button" aria-label="Torna al gioco">Torna al gioco</button>
         </div>
         <div id="customLevelsPanel" aria-label="I miei livelli">
@@ -75,6 +76,25 @@
             <h3>Livelli</h3>
           </div>
           <div id="customLevelsList"></div>
+        </div>
+        <div id="levelThemePanel" aria-label="Stile grafico livello">
+          <div class="style-panel-head">
+            <h3>Stile livello</h3>
+            <button id="closeStyleEditorBtn" type="button" aria-label="Torna all'editor">Torna all'editor</button>
+          </div>
+          <div id="themeTargetInfo"></div>
+          <div class="custom-levels-head">
+            <h3>Tema grafico</h3>
+          </div>
+          <div id="themePicker"></div>
+          <div class="custom-levels-head">
+            <h3>Colori</h3>
+          </div>
+          <div id="themeColorControls"></div>
+          <div id="themeColorActions">
+            <button id="applyThemeStyleBtn" type="button" aria-label="Applica stile al livello selezionato">Applica stile</button>
+            <button id="resetThemeColorsBtn" type="button" aria-label="Ripristina colori tema">Ripristina colori tema</button>
+          </div>
         </div>
         <div id="elementPalettePanel" aria-label="Elementi del livello">
           <div class="custom-levels-head">

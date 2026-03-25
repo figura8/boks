@@ -43,6 +43,20 @@ const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
+const LOCKED_THEME_SCENE_VAR_KEYS = ['--scene-body-bg', '--bg-base'];
+const EDITOR_THEME_COLOR_CONTROLS = [
+  { key: '--panel-bg', label: 'Pannelli' },
+  { key: '--panel-edge', label: 'Bordo pannelli' },
+  { key: '--scene-grid-wrap-bg', label: 'Cornice griglia' },
+  { key: '--grid-bg', label: 'Sfondo griglia' },
+  { key: '--cell-bg', label: 'Celle' },
+  { key: '--cell-hi-bg', label: 'Highlight celle' },
+  { key: '--cell-hi-edge', label: 'Bordo highlight' },
+  { key: '--obstacle-bg-top', label: 'Mattoni top' },
+  { key: '--obstacle-bg-bottom', label: 'Mattoni bottom' },
+  { key: '--obstacle-edge', label: 'Bordo mattoni' }
+];
+const EDITOR_THEME_COLOR_KEYS = new Set(EDITOR_THEME_COLOR_CONTROLS.map(control => control.key));
 const RUNTIME_CONFIG = window.BOKS_RUNTIME_CONFIG || {};
 const LEVEL_EDITOR_ENABLED = RUNTIME_CONFIG.editorEnabled !== false;
 const DEBUG_TOOLS_ENABLED = RUNTIME_CONFIG.debugToolsEnabled !== false;
@@ -53,7 +67,15 @@ let running = false, animating = false, idN = 0;
 const avail = [];
 const prog  = Array(SLOTS).fill(null);
 const fnProg = Array(FSLOTS).fill(null);
-const DECOR_CLASSES = ['decor-grass', 'decor-flower', 'decor-stone', 'decor-space-dust', 'decor-space-crater'];
+const DECOR_CLASSES = [
+  'decor-grass',
+  'decor-flower',
+  'decor-stone',
+  'decor-city-road',
+  'decor-city-light',
+  'decor-space-dust',
+  'decor-space-crater'
+];
 let tutorialStepIndex = 0;
 let blockedCells = new Set();
 let activeMainSlots = SLOTS;
@@ -73,6 +95,7 @@ let gameStarted = false;
 let debugVisible = DEBUG_TOOLS_ENABLED;
 let editorMode = false;
 let currentCustomLevel = null;
+let tutorialSceneLevelId = CUSTOM_LEVEL_THEME;
 let selectedSaveIcon = CUSTOM_ICONS[0];
 let lastEditorSolutionCount = 0;
 let selectedEditorLevelId = null;
@@ -81,6 +104,8 @@ const NEW_EDITOR_LEVEL_ID = '__new_editor_level__';
 let playerPlaced = true;
 let goalPlaced = true;
 let selectedElementTool = null;
+let editorStylePanelOpen = false;
+let pendingNewLevelThemeOverrides = {};
 document.body?.classList.add('prestart');
 if (DEBUG_TOOLS_ENABLED) document.body?.classList.add('debug-visible');
 
@@ -393,7 +418,10 @@ function mkB(block, w, h, cls='') {
   svg.setAttribute('viewBox','0 0 40 32');
   svg.setAttribute('width', w); svg.setAttribute('height', h);
 
-  const blockShape = `M4,8 Q4,4 8,4 L32,4 Q36,4 36,8 L36,24 Q36,28 32,28 L8,28 Q4,28 4,24 Z`;
+  const isThomasTheme = document.body?.classList.contains('theme-thomas');
+  const blockShape = isThomasTheme
+    ? `M4,4 L36,4 L36,28 L4,28 Z`
+    : `M4,8 Q4,4 8,4 L32,4 Q36,4 36,8 L36,24 Q36,28 32,28 L8,28 Q4,28 4,24 Z`;
 
   // ombra
   const shadow = document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -661,9 +689,298 @@ function elementPaletteIcon(type) {
   return '<svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true"><rect x="10" y="12" width="28" height="22" rx="5" fill="#c8a271" stroke="#8c6744" stroke-width="2.2"/><path d="M13 20h22M13 26h22" stroke="#8c6744" stroke-width="2" stroke-linecap="round" opacity="0.65"/></svg>';
 }
 
+function normalizeThemeClassName(themeId) {
+  return `theme-${String(themeId || CUSTOM_LEVEL_THEME).toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`;
+}
+
+function clampColorChannel(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function parseColorToHex(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  const shortHex = normalized.match(/^#([0-9a-f]{3})$/i);
+  if (shortHex) {
+    const [r, g, b] = shortHex[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  const fullHex = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (fullHex) return `#${fullHex[1]}`;
+  const rgb = normalized.match(/^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*[0-9.]+\s*)?\)$/i);
+  if (!rgb) return null;
+  const r = clampColorChannel(Number(rgb[1]));
+  const g = clampColorChannel(Number(rgb[2]));
+  const b = clampColorChannel(Number(rgb[3]));
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+  return `#${[r, g, b].map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function getCampaignLockedSceneVars() {
+  const campaignVars = LEVELS.level1?.sceneVars || {};
+  return LOCKED_THEME_SCENE_VAR_KEYS.reduce((acc, key) => {
+    const value = campaignVars[key];
+    if (typeof value === 'string' && value.trim()) acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function sanitizeThemeOverrides(source = {}) {
+  const normalized = normalizeThemeOverrides(source);
+  const sanitized = {};
+  EDITOR_THEME_COLOR_CONTROLS.forEach(control => {
+    const hex = parseColorToHex(normalized[control.key] || '');
+    if (hex) sanitized[control.key] = hex;
+  });
+  return sanitized;
+}
+
+function getCurrentEditorThemeOverrides() {
+  if (currentCustomLevel) {
+    return sanitizeThemeOverrides(currentCustomLevel.themeOverrides || {});
+  }
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    return sanitizeThemeOverrides(pendingNewLevelThemeOverrides || {});
+  }
+  const fallbackLevel = findCustomLevel(selectedEditorLevelId || '');
+  if (fallbackLevel) {
+    return sanitizeThemeOverrides(fallbackLevel.themeOverrides || {});
+  }
+  return {};
+}
+
+function setCurrentEditorThemeOverrides(overrides) {
+  const normalized = sanitizeThemeOverrides(overrides);
+  if (currentCustomLevel) {
+    currentCustomLevel.themeOverrides = normalized;
+    return true;
+  }
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    pendingNewLevelThemeOverrides = normalized;
+    return true;
+  }
+  const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+  if (!selectedLevel) return false;
+  const draft = collectCurrentEditorLevel();
+  currentCustomLevel = normalizeCustomLevel({
+    ...selectedLevel,
+    ...draft,
+    id: selectedLevel.id,
+    number: selectedLevel.number,
+    baseStepIndex: selectedLevel.baseStepIndex,
+    name: selectedLevel.name,
+    themeOverrides: normalized
+  });
+  return true;
+}
+
+function resetCurrentEditorThemeOverrides() {
+  if (!setCurrentEditorThemeOverrides({})) return;
+  applyLevelSceneVars();
+  renderThemeEditorPanel();
+}
+
+async function applyCurrentStyleToSelectedLevel() {
+  if (!LEVEL_EDITOR_ENABLED || !editorMode) return;
+  const levelId = selectedEditorLevelId || currentCustomLevel?.id || null;
+  if (!levelId || levelId === NEW_EDITOR_LEVEL_ID) {
+    toast('Seleziona prima un livello salvato');
+    return;
+  }
+  const levels = readCustomLevels();
+  const idx = levels.findIndex(level => level.id === levelId);
+  if (idx === -1) {
+    toast('Livello non trovato');
+    return;
+  }
+  const current = normalizeCustomLevel(levels[idx]);
+  const updated = normalizeCustomLevel({
+    ...current,
+    baseLevel: getCurrentEditorThemeId(),
+    themeOverrides: getCurrentEditorThemeOverrides()
+  });
+  levels[idx] = updated;
+  const persistResult = await persistEditorLevels(levels, { promptIfMissing: true });
+
+  if (currentCustomLevel && currentCustomLevel.id === updated.id) {
+    currentCustomLevel = cloneCustomLevel({
+      ...currentCustomLevel,
+      baseLevel: updated.baseLevel,
+      themeOverrides: updated.themeOverrides
+    });
+    applyLevelSceneVars();
+    applyEditorBoardChanges();
+  } else {
+    applyLevelSceneVars();
+  }
+  renderCustomLevels();
+  renderThemeEditorPanel();
+  toast(persistResult.projectFileSaved
+    ? 'Stile applicato e salvato nel progetto'
+    : 'Stile applicato in questa sessione');
+}
+
+function resolveThemeLevelId(themeId) {
+  const raw = (typeof themeId === 'string' ? themeId : '').trim();
+  if (raw && LEVELS[raw]) return raw;
+  if (LEVELS[CUSTOM_LEVEL_THEME]) return CUSTOM_LEVEL_THEME;
+  return LEVELS.level1 ? 'level1' : Object.keys(LEVELS)[0];
+}
+
+function getThemeLabel(themeId) {
+  const level = LEVELS[resolveThemeLevelId(themeId)];
+  return level?.themeLabel || level?.name || 'Tema';
+}
+
+function getEditorThemeOptions() {
+  const options = Object.values(LEVELS || {})
+    .filter(level => level && level.themeSelectable)
+    .map(level => ({
+      id: level.id,
+      label: level.themeLabel || level.name || level.id,
+      hint: level.themeHint || ''
+    }));
+  if (options.length) return options;
+  const fallbackId = resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+  return [{
+    id: fallbackId,
+    label: getThemeLabel(fallbackId),
+    hint: ''
+  }];
+}
+
+function getCurrentEditorThemeId() {
+  if (currentCustomLevel?.baseLevel) return resolveThemeLevelId(currentCustomLevel.baseLevel);
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return resolveThemeLevelId(tutorialSceneLevelId);
+  if (editorMode && currentLevel === 'level1') return resolveThemeLevelId(tutorialSceneLevelId);
+  return resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+}
+
+function buildThemePreviewSVG(themeId) {
+  const resolvedId = resolveThemeLevelId(themeId);
+  if (resolvedId === 'level-city') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <defs>
+        <linearGradient id="themeCityBg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#d9e8f6"/>
+          <stop offset="100%" stop-color="#bdd2e5"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="48" height="48" fill="url(#themeCityBg)"/>
+      <rect x="0" y="20" width="48" height="10" fill="#5f748d" opacity="0.52"/>
+      <rect x="20" y="0" width="8" height="48" fill="#526882" opacity="0.46"/>
+      <rect x="4" y="7" width="7" height="13" rx="1.8" fill="#7f99b2"/>
+      <rect x="13" y="4" width="8" height="16" rx="1.8" fill="#90a9c1"/>
+      <rect x="28" y="6" width="8" height="14" rx="1.8" fill="#7f99b2"/>
+      <rect x="38" y="3" width="7" height="17" rx="1.8" fill="#90a9c1"/>
+      <circle cx="37" cy="13" r="2.2" fill="#fff2b8" opacity="0.82"/>
+      <circle cx="11" cy="35" r="2" fill="#d8f2ff" opacity="0.72"/>
+    </svg>`;
+  }
+  if (resolvedId === 'level-universe') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <defs>
+        <radialGradient id="themeSpaceBg" cx="50%" cy="38%" r="70%">
+          <stop offset="0%" stop-color="#3d3378"/>
+          <stop offset="100%" stop-color="#1a1636"/>
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="48" height="48" fill="url(#themeSpaceBg)"/>
+      <circle cx="35" cy="11" r="6" fill="#89cfff"/>
+      <circle cx="35" cy="11" r="3.6" fill="#dff3ff" opacity="0.7"/>
+      <circle cx="10" cy="8" r="1.2" fill="#f9f4ff"/>
+      <circle cx="14" cy="18" r="1.1" fill="#bbf0ff"/>
+      <circle cx="27" cy="22" r="1" fill="#fff1ff"/>
+      <circle cx="41" cy="31" r="1" fill="#c8b5ff"/>
+      <circle cx="8" cy="34" r="1.1" fill="#c4f7ff"/>
+      <ellipse cx="18" cy="33" rx="9" ry="3.4" fill="none" stroke="#a794ff" stroke-width="1.4" opacity="0.52"/>
+    </svg>`;
+  }
+  if (resolvedId === 'level-thomas') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <rect x="0" y="0" width="48" height="48" fill="#f5f2e7"/>
+      <rect x="6" y="6" width="36" height="36" fill="#ecf0e3" stroke="#e2dbc8" stroke-width="1"/>
+      <rect x="10" y="10" width="10" height="10" fill="#a9c8b9" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="21" y="10" width="10" height="10" fill="#a2c2b4" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="32" y="10" width="10" height="10" fill="#a9c8b9" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="10" y="21" width="10" height="10" fill="#a2c2b4" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="21" y="21" width="10" height="10" fill="#a9c8b9" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="32" y="21" width="10" height="10" fill="#a2c2b4" stroke="#f1f4ec" stroke-width="1"/>
+      <rect x="21" y="33" width="10" height="6" fill="#62c66f"/>
+    </svg>`;
+  }
+  return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+    <defs>
+      <linearGradient id="themeGrassBg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#d7efb7"/>
+        <stop offset="100%" stop-color="#b4d983"/>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="48" height="48" fill="url(#themeGrassBg)"/>
+    <rect x="6" y="6" width="36" height="36" rx="5" fill="#cce7a1" stroke="#95bc63" stroke-width="1.2"/>
+    <circle cx="14" cy="32" r="3.1" fill="#74c560" opacity="0.65"/>
+    <circle cx="24" cy="17" r="2.1" fill="#fff0a5" opacity="0.82"/>
+    <circle cx="33" cy="26" r="2.6" fill="#a0dc80" opacity="0.72"/>
+  </svg>`;
+}
+
+function applyEditorTheme(themeId) {
+  if (!editorMode) return;
+  const resolved = resolveThemeLevelId(themeId);
+  let changed = false;
+  if (currentCustomLevel) {
+    if (currentCustomLevel.baseLevel !== resolved) {
+      currentCustomLevel.baseLevel = resolved;
+      changed = true;
+    }
+  } else if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    if (tutorialSceneLevelId !== resolved) {
+      tutorialSceneLevelId = resolved;
+      changed = true;
+    }
+  } else {
+    const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+    if (selectedLevel) {
+      const draft = collectCurrentEditorLevel();
+      currentCustomLevel = normalizeCustomLevel({
+        ...selectedLevel,
+        ...draft,
+        id: selectedLevel.id,
+        number: selectedLevel.number,
+        baseStepIndex: selectedLevel.baseStepIndex,
+        name: selectedLevel.name,
+        baseLevel: resolved
+      });
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  applyLevelSceneVars();
+  applyEditorBoardChanges();
+  renderThemeEditorPanel();
+  renderCustomLevels();
+}
+
+function getThemeThumbnailPalette(themeId) {
+  const resolved = resolveThemeLevelId(themeId);
+  return LEVELS[resolved]?.thumbnailPalette || {};
+}
+
 function buildCustomLevelThumbnail(level) {
   const size = 96;
   const cell = size / COLS;
+  const palette = getThemeThumbnailPalette(level.baseLevel);
+  const overrides = sanitizeThemeOverrides(level.themeOverrides || {});
+  const sceneFill = parseColorToHex(overrides['--scene-grid-wrap-bg']) || palette.scene || '#edf7d9';
+  const cellA = parseColorToHex(overrides['--cell-bg']) || palette.cellA || '#d8efb6';
+  const cellB = parseColorToHex(overrides['--cell-bg']) || palette.cellB || '#cae69f';
+  const cellStroke = parseColorToHex(overrides['--cell-edge']) || palette.cellStroke || '#9dc56b';
+  const obstacleFill = parseColorToHex(overrides['--obstacle-bg-top']) || palette.obstacleFill || '#cdb38c';
+  const obstacleStroke = parseColorToHex(overrides['--obstacle-edge']) || palette.obstacleStroke || '#9d7b51';
+  const goalFill = palette.goalFill || '#7fd765';
+  const goalStroke = palette.goalStroke || '#3f8c33';
+  const startFill = palette.startFill || '#fff7ef';
+  const startStroke = palette.startStroke || '#5aa24e';
   const blocked = new Set((level.obstacles || []).map(o => `${o.x},${o.y}`));
   const cells = [];
 
@@ -671,9 +988,9 @@ function buildCustomLevelThumbnail(level) {
     for (let x = 0; x < COLS; x++) {
       const key = `${x},${y}`;
       const fill = blocked.has(key)
-        ? '#cdb38c'
-        : ((x + y) % 2 === 0 ? '#d8efb6' : '#cae69f');
-      const stroke = blocked.has(key) ? '#9d7b51' : '#9dc56b';
+        ? obstacleFill
+        : ((x + y) % 2 === 0 ? cellA : cellB);
+      const stroke = blocked.has(key) ? obstacleStroke : cellStroke;
       cells.push(`<rect x="${x * cell}" y="${y * cell}" width="${cell - 1}" height="${cell - 1}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="0.8"/>`);
     }
   }
@@ -683,11 +1000,11 @@ function buildCustomLevelThumbnail(level) {
   const startX = level.start?.x * cell + cell / 2;
   const startY = level.start?.y * cell + cell / 2;
   const goalMarkup = level.goal
-    ? `<circle cx="${goalX}" cy="${goalY}" r="${cell * 0.24}" fill="#7fd765" stroke="#3f8c33" stroke-width="2"/>`
+    ? `<circle cx="${goalX}" cy="${goalY}" r="${cell * 0.24}" fill="${goalFill}" stroke="${goalStroke}" stroke-width="2"/>`
     : '';
   const startMarkup = level.start
     ? `
-      <circle cx="${startX}" cy="${startY}" r="${cell * 0.22}" fill="#fff7ef" stroke="#5aa24e" stroke-width="2.2"/>
+      <circle cx="${startX}" cy="${startY}" r="${cell * 0.22}" fill="${startFill}" stroke="${startStroke}" stroke-width="2.2"/>
       <circle cx="${startX - cell * 0.06}" cy="${startY - cell * 0.03}" r="${cell * 0.04}" fill="#2f2d2b"/>
       <circle cx="${startX + cell * 0.06}" cy="${startY - cell * 0.03}" r="${cell * 0.04}" fill="#2f2d2b"/>
       <path d="M ${startX - cell * 0.07} ${startY + cell * 0.07} Q ${startX} ${startY + cell * 0.13} ${startX + cell * 0.07} ${startY + cell * 0.07}" fill="none" stroke="#2f2d2b" stroke-width="1.4" stroke-linecap="round"/>
@@ -696,7 +1013,7 @@ function buildCustomLevelThumbnail(level) {
 
   return `
     <svg viewBox="0 0 ${size} ${size}" width="100%" height="100%" aria-hidden="true">
-      <rect x="0" y="0" width="${size}" height="${size}" rx="12" fill="#edf7d9"/>
+      <rect x="0" y="0" width="${size}" height="${size}" rx="12" fill="${sceneFill}"/>
       ${cells.join('')}
       ${goalMarkup}
       ${startMarkup}
@@ -738,6 +1055,10 @@ function normalizeSlotArray(source = [], length) {
 
 function normalizeEnabledBlocks(source = {}) {
   return levelStorage.normalizeEnabledBlocks(source);
+}
+
+function normalizeThemeOverrides(source = {}) {
+  return levelStorage.normalizeThemeOverrides(source);
 }
 
 function normalizeCustomLevel(level) {
@@ -894,11 +1215,14 @@ const LEVEL_STORAGE_KEY = 'boks-current-level';
 const LEVELS = window.BOKS_LEVELS || {};
 let currentLevel = localStorage.getItem(LEVEL_STORAGE_KEY) || 'level1';
 if (!LEVELS[currentLevel]) currentLevel = LEVELS.level1 ? 'level1' : Object.keys(LEVELS)[0];
+tutorialSceneLevelId = resolveThemeLevelId(currentLevel === 'level1' ? CUSTOM_LEVEL_THEME : currentLevel);
 
 function getLevel() {
   if (currentCustomLevel) {
-    const baseId = currentCustomLevel.baseLevel || CUSTOM_LEVEL_THEME;
-    return LEVELS[baseId] || LEVELS.level1 || null;
+    return LEVELS[resolveThemeLevelId(currentCustomLevel.baseLevel)] || LEVELS.level1 || null;
+  }
+  if (currentLevel === 'level1' && LEVELS[tutorialSceneLevelId]) {
+    return LEVELS[tutorialSceneLevelId];
   }
   return LEVELS[currentLevel] || LEVELS.level1 || null;
 }
@@ -908,8 +1232,27 @@ function getOfficialTutorialSteps() {
 function applyLevelSceneVars() {
   const lv = getLevel();
   if (!lv) return;
-  const vars = lv.sceneVars || {};
-  Object.entries(vars).forEach(([k, v]) => {
+  const isThomas = lv.id === 'level-thomas';
+  document.body?.classList.toggle('theme-thomas', isThomas);
+  document.body?.setAttribute('data-active-theme', lv.id || '');
+  const baseVars = { ...(lv.sceneVars || {}) };
+  let activeOverrides = {};
+  if (editorMode && selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    activeOverrides = sanitizeThemeOverrides(pendingNewLevelThemeOverrides || {});
+  } else if (currentCustomLevel) {
+    activeOverrides = sanitizeThemeOverrides(currentCustomLevel.themeOverrides || {});
+  } else if (currentLevel === 'level1') {
+    const stepLevel = findCustomLevel(getEditorLevelIdForTutorialStep(tutorialStepIndex));
+    activeOverrides = sanitizeThemeOverrides(stepLevel?.themeOverrides || {});
+  }
+  Object.entries(activeOverrides).forEach(([key, value]) => {
+    if (EDITOR_THEME_COLOR_KEYS.has(key)) baseVars[key] = value;
+  });
+  const lockedVars = getCampaignLockedSceneVars();
+  Object.entries(lockedVars).forEach(([key, value]) => {
+    baseVars[key] = value;
+  });
+  Object.entries(baseVars).forEach(([k, v]) => {
     document.documentElement.style.setProperty(k, v);
   });
 }
@@ -917,6 +1260,7 @@ function setLevel(levelId, { persist = true } = {}) {
   if (!LEVELS[levelId]) return false;
   currentCustomLevel = null;
   currentLevel = levelId;
+  tutorialSceneLevelId = resolveThemeLevelId(levelId === 'level1' ? CUSTOM_LEVEL_THEME : levelId);
   applyLevelSceneVars();
   if (persist) localStorage.setItem(LEVEL_STORAGE_KEY, levelId);
   updateDebugBadge();
@@ -1085,8 +1429,10 @@ function setEditorMode(enabled) {
   if (!LEVEL_EDITOR_ENABLED && enabled) return;
   levelEditor.setEditorMode(enabled);
   if (enabled) {
+    setEditorStylePanelOpen(editorStylePanelOpen);
     refreshEditorDebug();
   } else {
+    setEditorStylePanelOpen(false);
     selectedElementTool = null;
     lastEditorSolutionCount = 0;
     updateRunAvailability();
@@ -1130,6 +1476,8 @@ function applyTutorialStep(idx = 0) {
   tutorialStepIndex = ((idx % steps.length) + steps.length) % steps.length;
   selectedEditorLevelId = getEditorLevelIdForTutorialStep(tutorialStepIndex);
   const step = steps[tutorialStepIndex];
+  tutorialSceneLevelId = resolveThemeLevelId(step.baseLevel);
+  applyLevelSceneVars();
   activeMainSlots = Math.max(0, Math.min(SLOTS, step.mainSlots ?? SLOTS));
   activeFnSlots = Math.max(0, Math.min(FSLOTS, step.fnSlots ?? 0));
   setSlotMasks(activeMainSlots, activeFnSlots);
@@ -1196,7 +1544,10 @@ function applyCustomLevel(level, { openEditor = false } = {}) {
   resetPrograms();
   setAvailableBlocks(Object.keys(editorBlockEnabled).filter(dir => editorBlockEnabled[dir]));
   editorMode = !!openEditor;
+  if (!editorMode) editorStylePanelOpen = false;
   document.body.classList.toggle('editor-mode', editorMode);
+  document.body.classList.toggle('editor-style-open', !!(editorMode && editorStylePanelOpen));
+  updateStyleEditorButtons();
   initGrid();
   renderAvail();
   renderBoard();
@@ -1220,24 +1571,53 @@ function collectCurrentEditorLevel() {
     baseStepIndex: currentCustomLevel?.baseStepIndex ?? null,
     name: currentCustomLevel?.name || 'Livello custom',
     icon: currentCustomLevel?.icon || selectedSaveIcon,
-    baseLevel: currentCustomLevel?.baseLevel || CUSTOM_LEVEL_THEME,
+    baseLevel: getCurrentEditorThemeId(),
     start: playerPlaced ? { ...pos } : null,
     goal: goalPlaced ? { ...GOAL } : null,
     startOri: ori,
     obstacles: parseBlockedCellsToArray(),
     mainSlotEnabled: [...mainSlotEnabled],
     fnSlotEnabled: [...fnSlotEnabled],
-    enabledBlocks: { ...editorBlockEnabled }
+    enabledBlocks: { ...editorBlockEnabled },
+    themeOverrides: getCurrentEditorThemeOverrides()
   });
+}
+
+function updateStyleEditorButtons() {
+  const openBtn = document.getElementById('openStyleEditorBtn');
+  if (openBtn) {
+    openBtn.textContent = editorStylePanelOpen ? 'Editor' : 'Stile';
+    openBtn.setAttribute('aria-pressed', editorStylePanelOpen ? 'true' : 'false');
+  }
+}
+
+function setEditorStylePanelOpen(open) {
+  const next = !!(editorMode && open);
+  editorStylePanelOpen = next;
+  document.body.classList.toggle('editor-style-open', next);
+  updateStyleEditorButtons();
+  renderElementPalette();
+  renderThemeEditorPanel();
+}
+
+function resolveStyleTargetLabel() {
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return 'Nuovo livello';
+  if (currentCustomLevel?.name) return currentCustomLevel.name;
+  const level = findCustomLevel(selectedEditorLevelId || '');
+  return level?.name || 'Livello selezionato';
 }
 
 function renderElementPalette() {
   const panel = document.getElementById('elementPalettePanel');
   const palette = document.getElementById('elementPalette');
-  if (!panel || !palette) return;
-  panel.style.display = editorMode ? 'block' : 'none';
+  if (!panel || !palette) {
+    renderThemeEditorPanel();
+    return;
+  }
+  panel.style.display = (editorMode && !editorStylePanelOpen) ? 'block' : 'none';
   if (!editorMode) {
     palette.innerHTML = '';
+    renderThemeEditorPanel();
     return;
   }
 
@@ -1280,6 +1660,114 @@ function renderElementPalette() {
     });
     palette.appendChild(btn);
   });
+  renderThemeEditorPanel();
+}
+
+function renderThemePicker() {
+  const picker = document.getElementById('themePicker');
+  if (!picker) return;
+  if (!editorMode || !editorStylePanelOpen) {
+    picker.innerHTML = '';
+    return;
+  }
+
+  const selectedThemeId = getCurrentEditorThemeId();
+  const options = getEditorThemeOptions();
+  picker.innerHTML = '';
+  options.forEach(theme => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'theme-choice' + (selectedThemeId === theme.id ? ' active' : '');
+    btn.dataset.theme = theme.id;
+    btn.innerHTML = `
+      <span class="theme-choice-art">${buildThemePreviewSVG(theme.id)}</span>
+      <span class="theme-choice-copy">
+        <span class="theme-choice-title">${theme.label}</span>
+        <span class="theme-choice-hint">${theme.hint}</span>
+      </span>
+    `;
+    btn.addEventListener('click', () => applyEditorTheme(theme.id));
+    picker.appendChild(btn);
+  });
+}
+
+function renderThemeColorControls() {
+  const controls = document.getElementById('themeColorControls');
+  if (!controls) return;
+  if (!editorMode || !editorStylePanelOpen) {
+    controls.innerHTML = '';
+    return;
+  }
+  const themeId = getCurrentEditorThemeId();
+  const themeVars = LEVELS[resolveThemeLevelId(themeId)]?.sceneVars || {};
+  const overrides = getCurrentEditorThemeOverrides();
+  controls.innerHTML = '';
+
+  EDITOR_THEME_COLOR_CONTROLS.forEach(control => {
+    const baseColor = parseColorToHex(themeVars[control.key]) || '#cccccc';
+    const currentColor = parseColorToHex(overrides[control.key]) || baseColor;
+    const item = document.createElement('div');
+    item.className = 'theme-color-item';
+    item.innerHTML = `
+      <div class="theme-color-copy">
+        <span class="theme-color-label">${control.label}</span>
+        <span class="theme-color-key">${control.key}</span>
+      </div>
+    `;
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.className = 'theme-color-input';
+    picker.value = currentColor;
+    picker.setAttribute('aria-label', `Colore ${control.label}`);
+    picker.addEventListener('input', () => {
+      const nextOverrides = getCurrentEditorThemeOverrides();
+      nextOverrides[control.key] = picker.value;
+      if (!setCurrentEditorThemeOverrides(nextOverrides)) return;
+      clearBtn.disabled = false;
+      applyLevelSceneVars();
+      renderCustomLevels();
+    });
+    item.appendChild(picker);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'theme-color-reset';
+    clearBtn.textContent = 'Reset';
+    clearBtn.disabled = !overrides[control.key];
+    clearBtn.addEventListener('click', () => {
+      const nextOverrides = getCurrentEditorThemeOverrides();
+      delete nextOverrides[control.key];
+      if (!setCurrentEditorThemeOverrides(nextOverrides)) return;
+      applyLevelSceneVars();
+      renderThemeColorControls();
+      renderCustomLevels();
+    });
+    item.appendChild(clearBtn);
+    controls.appendChild(item);
+  });
+}
+
+function renderThemeEditorPanel() {
+  const panel = document.getElementById('levelThemePanel');
+  const target = document.getElementById('themeTargetInfo');
+  const actions = document.getElementById('themeColorActions');
+  const applyBtn = document.getElementById('applyThemeStyleBtn');
+  if (!panel) return;
+  const visible = !!(editorMode && editorStylePanelOpen);
+  panel.style.display = visible ? 'block' : 'none';
+  if (target) {
+    target.textContent = visible ? `Stai modificando: ${resolveStyleTargetLabel()}` : '';
+  }
+  if (actions) actions.style.display = visible ? 'flex' : 'none';
+  if (applyBtn) {
+    const selected = selectedEditorLevelId || currentCustomLevel?.id || '';
+    const canApply = visible && selected && selected !== NEW_EDITOR_LEVEL_ID && !!findCustomLevel(selected);
+    applyBtn.disabled = !canApply;
+    applyBtn.setAttribute('aria-disabled', canApply ? 'false' : 'true');
+    applyBtn.title = canApply ? `Applica stile a ${resolveStyleTargetLabel()}` : 'Seleziona un livello salvato';
+  }
+  renderThemePicker();
+  renderThemeColorControls();
 }
 
 function applyEditorBoardChanges() {
@@ -1292,7 +1780,9 @@ function applyEditorBoardChanges() {
 function startBlankEditorLevel() {
   selectedEditorLevelId = NEW_EDITOR_LEVEL_ID;
   currentCustomLevel = null;
-  currentLevel = CUSTOM_LEVEL_THEME;
+  pendingNewLevelThemeOverrides = {};
+  currentLevel = resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+  tutorialSceneLevelId = currentLevel;
   applyLevelSceneVars();
   playerPlaced = false;
   goalPlaced = false;
@@ -1314,6 +1804,7 @@ function startBlankEditorLevel() {
   renderBoard();
   renderFn();
   renderCustomLevels();
+  renderThemeEditorPanel();
 }
 
 function setupEditorElementPlacement() {
@@ -1596,13 +2087,14 @@ function renderCustomLevels() {
 
   levels.forEach((level, index) => {
     const normalized = normalizeCustomLevel(level);
+    const themeId = resolveThemeLevelId(normalized.baseLevel);
     const tile = document.createElement('button');
     tile.type = 'button';
-    tile.className = 'editor-level-tile' + (selectedEditorLevelId === normalized.id ? ' active' : '');
+    tile.className = 'editor-level-tile ' + normalizeThemeClassName(themeId) + (selectedEditorLevelId === normalized.id ? ' active' : '');
     tile.draggable = true;
     tile.dataset.levelId = normalized.id;
     tile.textContent = String(index + 1);
-    tile.title = `Livello ${index + 1}`;
+    tile.title = `Livello ${index + 1} - ${getThemeLabel(themeId)}`;
     tile.addEventListener('click', () => {
       selectedEditorLevelId = normalized.id;
       if (editorMode) {
@@ -2327,6 +2819,10 @@ function openSpritePreviewTool() {
   const opened = window.open(targetUrl, '_blank', 'noopener');
   if (!opened) window.location.href = targetUrl;
 }
+function toggleStyleEditorPanel() {
+  if (!editorMode) return;
+  setEditorStylePanelOpen(!editorStylePanelOpen);
+}
 function updateQuickEditorButton() {
   const btn = document.getElementById('quickEditorBtn');
   if (!btn) return;
@@ -2402,6 +2898,10 @@ document.getElementById('startEditorBtn')?.addEventListener('click', startEditor
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
+document.getElementById('openStyleEditorBtn')?.addEventListener('click', toggleStyleEditorPanel);
+document.getElementById('closeStyleEditorBtn')?.addEventListener('click', () => setEditorStylePanelOpen(false));
+document.getElementById('applyThemeStyleBtn')?.addEventListener('click', () => { void applyCurrentStyleToSelectedLevel(); });
+document.getElementById('resetThemeColorsBtn')?.addEventListener('click', resetCurrentEditorThemeOverrides);
 document.getElementById('exportLevelsBtn')?.addEventListener('click', exportEditorLevels);
 document.getElementById('importLevelsBtn')?.addEventListener('click', openImportLevelsPicker);
 document.getElementById('resetLevelsBtn')?.addEventListener('click', resetEditorLevels);
@@ -2429,6 +2929,10 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
   const key = (e.key || '').toLowerCase();
   if (key === 'escape') {
+    if (editorStylePanelOpen) {
+      setEditorStylePanelOpen(false);
+      return;
+    }
     closeSaveLevelModal();
     return;
   }
@@ -2466,6 +2970,7 @@ window.visualViewport?.addEventListener('resize', syncViewportHeight);
 window.visualViewport?.addEventListener('scroll', syncViewportHeight);
 window.addEventListener('orientationchange', syncViewportHeight);
 updateQuickEditorButton();
+updateStyleEditorButtons();
 
 // ri-entra in fullscreen se l'utente torna sull'app (es. dopo notifica)
 document.addEventListener('visibilitychange', () => {

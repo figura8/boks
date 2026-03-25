@@ -26,21 +26,37 @@
       };
     }
 
+    function normalizeThemeOverrides(source = {}) {
+      if (!source || typeof source !== 'object') return {};
+      return Object.entries(source).reduce((acc, [key, value]) => {
+        if (typeof key !== 'string' || !key.startsWith('--')) return acc;
+        if (typeof value !== 'string') return acc;
+        const normalizedValue = value.trim();
+        if (!normalizedValue) return acc;
+        acc[key] = normalizedValue.slice(0, 64);
+        return acc;
+      }, {});
+    }
+
     function normalizeCustomLevel(level) {
+      const normalizedBaseLevel = typeof level.baseLevel === 'string' && level.baseLevel.trim()
+        ? level.baseLevel.trim()
+        : api.customLevelTheme;
       return {
         id: level.id || `custom-${Date.now()}`,
         number: level.number ?? null,
         baseStepIndex: level.baseStepIndex ?? null,
         name: normalizeLevelName(level.name || 'Livello custom') || 'Livello custom',
         icon: api.customIcons.includes(level.icon) ? level.icon : api.customIcons[0],
-        baseLevel: level.baseLevel || api.customLevelTheme,
+        baseLevel: normalizedBaseLevel,
         start: normalizePoint(level.start),
         goal: normalizePoint(level.goal),
         startOri: level.startOri || 'right',
         obstacles: Array.isArray(level.obstacles) ? level.obstacles : [],
         mainSlotEnabled: normalizeSlotArray(level.mainSlotEnabled, api.slots),
         fnSlotEnabled: normalizeSlotArray(level.fnSlotEnabled, api.fnSlots),
-        enabledBlocks: normalizeEnabledBlocks(level.enabledBlocks || {})
+        enabledBlocks: normalizeEnabledBlocks(level.enabledBlocks || {}),
+        themeOverrides: normalizeThemeOverrides(level.themeOverrides || {})
       };
     }
 
@@ -53,11 +69,12 @@
         baseStepIndex: idx,
         name: `Livello ${idx + 1}`,
         icon: api.customIcons[idx % api.customIcons.length],
-        baseLevel: api.customLevelTheme,
+        baseLevel: step.baseLevel || api.customLevelTheme,
         start: { ...(step.start || { x: 2, y: 2 }) },
         goal: { ...(step.goal || { x: 5, y: 5 }) },
         startOri: step.startOri || 'right',
         obstacles: step.obstacles || [],
+        themeOverrides: normalizeThemeOverrides(step.themeOverrides || {}),
         mainSlotEnabled: Array.from({ length: api.slots }, (_, i) => i < mainCount),
         fnSlotEnabled: Array.from({ length: api.fnSlots }, (_, i) => i < fnCount),
         enabledBlocks: normalizeEnabledBlocks(
@@ -69,13 +86,15 @@
     function editorLevelToTutorialStep(level) {
       const normalized = normalizeCustomLevel(level);
       return {
+        baseLevel: normalized.baseLevel || api.customLevelTheme,
         start: normalized.start ? { ...normalized.start } : null,
         goal: normalized.goal ? { ...normalized.goal } : null,
         startOri: normalized.startOri || 'right',
         mainSlots: normalized.mainSlotEnabled.filter(Boolean).length,
         fnSlots: normalized.fnSlotEnabled.filter(Boolean).length,
         availableBlocks: Object.keys(normalized.enabledBlocks).filter(dir => normalized.enabledBlocks[dir]),
-        obstacles: normalized.obstacles || []
+        obstacles: normalized.obstacles || [],
+        themeOverrides: normalizeThemeOverrides(normalized.themeOverrides || {})
       };
     }
 
@@ -250,6 +269,7 @@
       loadEditorLevelsSource,
       normalizeCustomLevel,
       normalizeEnabledBlocks,
+      normalizeThemeOverrides,
       normalizeSlotArray,
       persistEditorLevels,
       readCustomLevels,

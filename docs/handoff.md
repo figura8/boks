@@ -77,7 +77,7 @@ Obiettivo della sessione:
 8. Sostituzione della tartaruga con il personaggio dell'icona
 - La tartaruga placeholder e stata sostituita con il personaggio identico dell'icona.
 - E stato creato l'asset:
-  - `icons/boks-character.png`
+  - `icons/boks-character.png` (rimosso il 2026-03-25 durante il riordino icone)
 - Il renderer del personaggio e stato aggiornato in:
   - `js/levels/level1.js`
 - L'animazione base del personaggio e stata aggiunta in:
