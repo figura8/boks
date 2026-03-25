@@ -476,3 +476,70 @@ Se vuoi ripartire da qui, puoi dire:
 - `leggi docs/handoff.md e riprendiamo dal rilascio live`
 - `leggi docs/handoff.md e verifichiamo il flusso main -> live`
 - `leggi docs/handoff.md e continuiamo da GitHub Pages`
+
+---
+
+Data: 2026-03-25
+
+## Handoff sessione grafica + personaggi
+
+Obiettivo della sessione:
+- iterare su stile grafico senza toccare la logica gameplay
+- introdurre gestione stili per livello dentro editor
+- introdurre pipeline personaggi scalabile (anche Lottie)
+
+### Risultati principali
+
+1. Tema `thomas` e resa "squadrata"
+- Applicato stile senza arrotondamenti solo al tema `thomas`.
+- Uniformato look squadrato agli elementi del tema per avvicinare il riferimento visuale.
+- Confermato che il colore di sfondo globale resta quello richiesto (coerente con campagna).
+
+2. Editor stili per livello
+- Aggiunta sezione dedicata allo stile nel flusso editor, separata dall'editing classico.
+- Possibilita di selezionare stile/tema e personalizzare colori.
+- Aggiunta azione esplicita per applicare lo stile al livello selezionato.
+
+3. UI/UX gioco
+- Logo `BOKS` nel gioco reso cliccabile per tornare al menu principale.
+- Stato hover/active del logo reso piu chiaro, con area click limitata alla sola scritta.
+- Pulsante Play reso quadrato (senza angoli arrotondati) in gioco/menu/editor.
+- Allineato anche feedback hover/active del Play.
+
+4. Feedback quando premi Play senza blocchi
+- Rimossa notifica testuale non necessaria.
+- Aggiunta animazione sui blocchi disponibili per comunicare "servono blocchi prima di avviare".
+
+5. Brand e icone
+- Riordino cartella `icons` e pulizia asset non piu usati.
+- Icone aggiornate con sola scritta `BOKS` (stesso font/look del riferimento, spaziatura piu stretta).
+- Scritta titolo in gioco resa "asciutta" senza ombreggiature.
+
+6. Architettura personaggi scalabile (1, 4, 10+ personaggi)
+- Introdotto supporto `characterId` nei livelli custom/editor con fallback sicuro.
+- Aggiunto picker personaggio nell'editor stile.
+- Runtime ora risolve personaggio per livello/step in modo backward-compatible.
+
+7. Supporto Lottie
+- Integrato renderer con supporto immagine + Lottie.
+- Loader aggiornato con registry personaggi (`assets/animations/characters/registry.json`).
+- Supporto a libreria locale `js/vendor/lottie.min.js` con fallback CDN.
+- Aggiunta documentazione base in `assets/animations/README.md`.
+
+8. Asset personaggi
+- Rinominata cartella personaggio da `boks` a `boks_black`.
+- Aggiunto placeholder orientamento `bock_base` per test direzioni.
+- Supportati stati direzionali `idle`/`move`/`turn` con fallback dove mancano asset.
+
+9. Fix fluidita transizioni direzionali
+- Migliorata transizione di turn (`up -> right`) renderizzando lo stato target durante rotazione.
+- Ridotti flash Lottie:
+  - avvio controllato senza autoplay immediato
+  - seek prima del play
+  - preview visibile durante il load
+- Ultima regolazione: rotazione resa piu lenta e meccanica (`TURN_MS` da `320` a `520`).
+
+### Note operative
+
+- Branch operativo confermato: `main`.
+- Modifiche fatte per mantenere separazione tra stile/visual e logica core di gioco.

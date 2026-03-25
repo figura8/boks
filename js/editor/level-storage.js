@@ -38,6 +38,14 @@
       }, {});
     }
 
+    function normalizeCharacterId(characterId) {
+      if (typeof api.resolveCharacterId === 'function') {
+        return api.resolveCharacterId(characterId);
+      }
+      const normalized = typeof characterId === 'string' ? characterId.trim() : '';
+      return normalized || 'boks';
+    }
+
     function normalizeCustomLevel(level) {
       const normalizedBaseLevel = typeof level.baseLevel === 'string' && level.baseLevel.trim()
         ? level.baseLevel.trim()
@@ -49,6 +57,7 @@
         name: normalizeLevelName(level.name || 'Livello custom') || 'Livello custom',
         icon: api.customIcons.includes(level.icon) ? level.icon : api.customIcons[0],
         baseLevel: normalizedBaseLevel,
+        characterId: normalizeCharacterId(level.characterId),
         start: normalizePoint(level.start),
         goal: normalizePoint(level.goal),
         startOri: level.startOri || 'right',
@@ -70,6 +79,7 @@
         name: `Livello ${idx + 1}`,
         icon: api.customIcons[idx % api.customIcons.length],
         baseLevel: step.baseLevel || api.customLevelTheme,
+        characterId: normalizeCharacterId(step.characterId),
         start: { ...(step.start || { x: 2, y: 2 }) },
         goal: { ...(step.goal || { x: 5, y: 5 }) },
         startOri: step.startOri || 'right',
@@ -87,6 +97,7 @@
       const normalized = normalizeCustomLevel(level);
       return {
         baseLevel: normalized.baseLevel || api.customLevelTheme,
+        characterId: normalizeCharacterId(normalized.characterId),
         start: normalized.start ? { ...normalized.start } : null,
         goal: normalized.goal ? { ...normalized.goal } : null,
         startOri: normalized.startOri || 'right',

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-03-25T10:06:26.246Z",
+  "exportedAt": "2026-03-25T16:17:10.158Z",
   "levels": [
     {
       "id": "level1-step-1",
@@ -8,7 +8,8 @@
       "baseStepIndex": 0,
       "name": "Livello 1",
       "icon": "leaf",
-      "baseLevel": "level1",
+      "baseLevel": "level-thomas",
+      "characterId": "bock_base",
       "start": {
         "x": 2,
         "y": 3
@@ -50,6 +51,7 @@
       "name": "Livello 2",
       "icon": "star",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 3
@@ -90,7 +92,8 @@
       "baseStepIndex": 2,
       "name": "Livello 3",
       "icon": "turtle",
-      "baseLevel": "level1",
+      "baseLevel": "level-thomas",
+      "characterId": "ae-idle",
       "start": {
         "x": 1,
         "y": 3
@@ -137,6 +140,7 @@
       "name": "Livello 4",
       "icon": "sun",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 4,
         "y": 3
@@ -183,6 +187,7 @@
       "name": "Livello 5",
       "icon": "moon",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 4
@@ -229,6 +234,7 @@
       "name": "Livello 6",
       "icon": "leaf",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 3
@@ -270,6 +276,7 @@
       "name": "Livello 7",
       "icon": "leaf",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 4
@@ -316,6 +323,7 @@
       "name": "Livello 8",
       "icon": "star",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 4,
         "y": 4
@@ -362,6 +370,7 @@
       "name": "Livello 9",
       "icon": "turtle",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 4
@@ -412,6 +421,7 @@
       "name": "Livello 10",
       "icon": "sun",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 4
@@ -462,6 +472,7 @@
       "name": "Livello 11",
       "icon": "moon",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 4,
         "y": 4
@@ -512,6 +523,7 @@
       "name": "Livello 12",
       "icon": "flower",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 4,
         "y": 4
@@ -535,7 +547,7 @@
         true,
         true,
         true,
-        true,
+        false,
         false,
         false,
         false,
@@ -562,6 +574,7 @@
       "name": "Livello 13",
       "icon": "leaf",
       "baseLevel": "level1",
+      "characterId": "bock_base",
       "start": {
         "x": 1,
         "y": 4

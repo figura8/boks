@@ -7,6 +7,32 @@
   height: 100%;
 }
 
+#sprite .boks-hero {
+  position: absolute;
+  inset: 0;
+}
+
+#sprite .boks-hero.hero-transition-in,
+#sprite .boks-hero.hero-transition-out {
+  transition: opacity 0.17s ease;
+}
+
+#sprite .boks-hero.hero-transition-in {
+  opacity: 0;
+}
+
+#sprite .boks-hero.hero-transition-in.hero-transition-ready {
+  opacity: 1;
+}
+
+#sprite .boks-hero.hero-transition-out {
+  opacity: 1;
+}
+
+#sprite .boks-hero.hero-transition-out.hero-transition-ready {
+  opacity: 0;
+}
+
 .boks-hero__art {
   width: 100%;
   height: 100%;
@@ -33,6 +59,52 @@
   object-position: center center;
   pointer-events: none;
   user-select: none;
+}
+
+.boks-hero__lottie-wrap {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boks-hero__lottie {
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.boks-hero__img--fallback {
+  position: absolute;
+  inset: 0;
+}
+
+#sprite .boks-hero__img--fallback {
+  display: block;
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+
+#sprite .boks-hero__lottie-wrap.is-failed .boks-hero__img--fallback,
+#sprite .boks-hero__lottie-wrap.is-unavailable .boks-hero__img--fallback {
+  display: block;
+}
+
+#sprite .boks-hero__lottie-wrap.is-ready .boks-hero__lottie {
+  opacity: 1;
+}
+
+#sprite .boks-hero__lottie-wrap.is-ready .boks-hero__img--fallback {
+  opacity: 0;
+}
+
+#ghost .boks-hero__img--fallback {
+  display: block;
+  opacity: 0.92;
 }
 
 /* Temporary fallback until dedicated directional artwork exists. */
