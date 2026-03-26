@@ -1502,6 +1502,78 @@
       font-size: 0.72rem;
       line-height: 1.25;
     }
+    .editor-setup-card {
+      border: 2px solid rgba(210, 201, 180, 0.95);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fffdf6 0%, #f1e6d1 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 2px 0 #cdc2ab, 0 6px 10px rgba(95, 78, 52, 0.1);
+      padding: 10px 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .editor-setup-title {
+      color: #6b5a43;
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .editor-orientation-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .editor-orientation-btn {
+      min-height: 44px;
+      border: 2px solid rgba(210, 201, 180, 0.95);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fffdf6 0%, #efe3cc 100%);
+      color: #5f4e34;
+      font-family: 'Fredoka', system-ui, sans-serif;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .editor-orientation-btn.active {
+      border-color: #76ad4d;
+      background: linear-gradient(180deg, #f5ffe9 0%, #e0efc4 100%);
+      color: #3d6e2c;
+      box-shadow: 0 0 0 2px rgba(118, 173, 77, 0.16);
+    }
+    .editor-orientation-glyph {
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .editor-orientation-label {
+      font-size: 0.76rem;
+      line-height: 1;
+    }
+    .editor-character-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .editor-character-btn {
+      min-height: 34px;
+      padding: 0 10px;
+      border: 2px solid rgba(210, 201, 180, 0.95);
+      border-radius: 999px;
+      background: linear-gradient(180deg, #fffdf6 0%, #efe3cc 100%);
+      color: #5f4e34;
+      font-family: 'Fredoka', system-ui, sans-serif;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .editor-character-btn.active {
+      border-color: #76ad4d;
+      background: linear-gradient(180deg, #f5ffe9 0%, #e0efc4 100%);
+      color: #3d6e2c;
+      box-shadow: 0 0 0 2px rgba(118, 173, 77, 0.16);
+    }
     .custom-level-card,
     .custom-level-empty {
       border-radius: 14px;

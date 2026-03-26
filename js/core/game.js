@@ -1997,6 +1997,73 @@ function resolveStyleTargetLabel() {
   return level?.name || 'Livello selezionato';
 }
 
+function renderEditorSetupControls(palette) {
+  if (!palette || !editorMode) return;
+
+  const card = document.createElement('div');
+  card.className = 'editor-setup-card';
+
+  const orientationTitle = document.createElement('div');
+  orientationTitle.className = 'editor-setup-title';
+  orientationTitle.textContent = 'Orientamento iniziale';
+  card.appendChild(orientationTitle);
+
+  const orientationGrid = document.createElement('div');
+  orientationGrid.className = 'editor-orientation-grid';
+  const orientationOptions = [
+    { id: 'up', label: 'Su', glyph: '^' },
+    { id: 'right', label: 'Destra', glyph: '>' },
+    { id: 'down', label: 'Giu', glyph: 'v' },
+    { id: 'left', label: 'Sinistra', glyph: '<' }
+  ];
+
+  orientationOptions.forEach(option => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'editor-orientation-btn' + (ori === option.id ? ' active' : '');
+    btn.dataset.orientation = option.id;
+    btn.innerHTML = `
+      <span class="editor-orientation-glyph">${option.glyph}</span>
+      <span class="editor-orientation-label">${option.label}</span>
+    `;
+    btn.addEventListener('click', () => {
+      if (ori === option.id) return;
+      ori = option.id;
+      setCharacterAction('idle');
+      syncSprite();
+      refreshEditorDebug();
+    });
+    orientationGrid.appendChild(btn);
+  });
+  card.appendChild(orientationGrid);
+
+  const characterTitle = document.createElement('div');
+  characterTitle.className = 'editor-setup-title';
+  characterTitle.textContent = 'Personaggio test';
+  card.appendChild(characterTitle);
+
+  const characterRow = document.createElement('div');
+  characterRow.className = 'editor-character-row';
+  const selectedCharacterId = getCurrentEditorCharacterId();
+  getCharacterOptions().forEach(option => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'editor-character-btn' + (selectedCharacterId === option.id ? ' active' : '');
+    btn.dataset.characterId = option.id;
+    btn.textContent = option.label;
+    btn.title = option.hint || option.id;
+    btn.addEventListener('click', () => {
+      if (!setCurrentEditorCharacterId(option.id)) return;
+      applyEditorBoardChanges();
+      renderCustomLevels();
+    });
+    characterRow.appendChild(btn);
+  });
+  card.appendChild(characterRow);
+
+  palette.appendChild(card);
+}
+
 function renderElementPalette() {
   const panel = document.getElementById('elementPalettePanel');
   const palette = document.getElementById('elementPalette');
@@ -2050,6 +2117,7 @@ function renderElementPalette() {
     });
     palette.appendChild(btn);
   });
+  renderEditorSetupControls(palette);
   renderThemeEditorPanel();
 }
 
