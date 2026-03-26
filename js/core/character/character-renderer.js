@@ -1,6 +1,6 @@
 (() => {
   const build = document.body?.dataset.build || 'dev';
-  const DEFAULT_CHARACTER_ID = 'boks';
+  const DEFAULT_CHARACTER_ID = 'boks_base';
   const DEFAULT_ACTION = 'idle';
   const DEFAULT_DIRECTION = 'right';
   const lottieInstances = new WeakMap();

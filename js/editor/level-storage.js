@@ -43,7 +43,7 @@
         return api.resolveCharacterId(characterId);
       }
       const normalized = typeof characterId === 'string' ? characterId.trim() : '';
-      return normalized || 'boks';
+      return normalized || 'boks_base';
     }
 
     function normalizeCustomLevel(level) {
