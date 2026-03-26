@@ -385,7 +385,7 @@
 
   window.BOKS_LEVELS.level1 = {
     id: 'level1',
-    characterId: 'boks_base',
+    characterId: 'boks_black',
     name: 'Prato Base',
     themeSelectable: true,
     themeLabel: 'Prato',
@@ -542,7 +542,7 @@
 
   window.BOKS_LEVELS['level-city'] = {
     id: 'level-city',
-    characterId: 'boks_base',
+    characterId: 'boks_black',
     name: 'Citta',
     themeSelectable: true,
     themeLabel: 'Citta',
@@ -588,7 +588,7 @@
 
   window.BOKS_LEVELS['level-universe'] = {
     id: 'level-universe',
-    characterId: 'boks_base',
+    characterId: 'boks_black',
     name: 'Universo',
     themeSelectable: true,
     themeLabel: 'Universo',
@@ -634,7 +634,7 @@
 
   window.BOKS_LEVELS['level-thomas'] = {
     id: 'level-thomas',
-    characterId: 'boks_base',
+    characterId: 'boks_black',
     name: 'Thomas',
     themeSelectable: true,
     themeLabel: 'Thomas',
