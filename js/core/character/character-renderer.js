@@ -6,6 +6,8 @@
   const lottieInstances = new WeakMap();
   const prefetchedLottieSrc = new Set();
   const preloadedCharacterIds = new Set();
+  const inlineSvgSourceCache = new Map();
+  const inlineSvgSourceInflight = new Map();
 
   function normalizeDirection(direction) {
     return ['right', 'left', 'up', 'down'].includes(direction) ? direction : DEFAULT_DIRECTION;
@@ -107,6 +109,10 @@
     return typeof state?.lottieSrc === 'string' && state.lottieSrc.trim().length > 0;
   }
 
+  function hasExternalInlineSvg(state = {}) {
+    return typeof state?.svgSrc === 'string' && state.svgSrc.trim().length > 0;
+  }
+
   function prefetchLottieSource(src = '') {
     const url = withBuildQuery(src);
     if (!url || prefetchedLottieSrc.has(url)) return;
@@ -116,13 +122,51 @@
     });
   }
 
+  function loadInlineSvgSource(src = '') {
+    const url = withBuildQuery(src);
+    if (!url) return Promise.resolve('');
+    if (inlineSvgSourceCache.has(url)) {
+      return Promise.resolve(inlineSvgSourceCache.get(url));
+    }
+    if (inlineSvgSourceInflight.has(url)) {
+      return inlineSvgSourceInflight.get(url);
+    }
+    const pending = fetch(url, { cache: 'force-cache' })
+      .then(async response => {
+        if (!response.ok) {
+          throw new Error(`Failed to load inline SVG: ${url}`);
+        }
+        const markup = await response.text();
+        inlineSvgSourceCache.set(url, markup);
+        return markup;
+      })
+      .finally(() => {
+        inlineSvgSourceInflight.delete(url);
+      });
+    inlineSvgSourceInflight.set(url, pending);
+    return pending;
+  }
+
+  function prefetchInlineSvgSource(src = '') {
+    const url = withBuildQuery(src);
+    if (!url || inlineSvgSourceCache.has(url) || inlineSvgSourceInflight.has(url)) return;
+    loadInlineSvgSource(src).catch(() => {
+      // Anche qui il preload e best-effort.
+    });
+  }
+
   function preloadCharacterAssets(characterId) {
     const manifest = getCharacterManifest(characterId);
     if (!manifest?.states) return;
     if (preloadedCharacterIds.has(characterId)) return;
     Object.values(manifest.states).forEach(state => {
-      if (!isLottieState(state)) return;
-      prefetchLottieSource(state.lottieSrc);
+      if (isLottieState(state)) {
+        prefetchLottieSource(state.lottieSrc);
+        return;
+      }
+      if (hasExternalInlineSvg(state)) {
+        prefetchInlineSvgSource(state.svgSrc);
+      }
     });
     preloadedCharacterIds.add(characterId);
   }
@@ -148,6 +192,9 @@
   function buildImageMarkup(state) {
     if (typeof state?.svgMarkup === 'string' && state.svgMarkup.trim()) {
       return `<span class="boks-hero__inline-svg">${state.svgMarkup}</span>`;
+    }
+    if (hasExternalInlineSvg(state)) {
+      return `<span class="boks-hero__inline-svg boks-hero__inline-svg--deferred" data-inline-svg-src="${escapeAttr(state.svgSrc)}"></span>`;
     }
     if (!state?.src) return '';
     const src = withBuildQuery(state.src);
@@ -258,6 +305,13 @@
 
   function destroyIn(root) {
     if (!root) return;
+    const inlineSvgWraps = root.querySelectorAll?.('.boks-hero__inline-svg[data-inline-svg-src]') || [];
+    inlineSvgWraps.forEach(wrap => {
+      wrap.classList.remove('is-ready', 'is-failed');
+      wrap.dataset.inlineSvgMounted = 'false';
+      wrap.innerHTML = '';
+    });
+
     const wraps = root.querySelectorAll?.('.boks-hero__lottie-wrap') || [];
     wraps.forEach(wrap => {
       const instance = lottieInstances.get(wrap);
@@ -290,6 +344,29 @@
 
   function mountIn(root) {
     if (!root) return;
+    const inlineSvgWraps = root.querySelectorAll?.('.boks-hero__inline-svg[data-inline-svg-src]') || [];
+    inlineSvgWraps.forEach(wrap => {
+      if (wrap.dataset.inlineSvgMounted === 'true') return;
+      const src = wrap.dataset.inlineSvgSrc || '';
+      if (!src) {
+        wrap.classList.add('is-failed');
+        return;
+      }
+      wrap.dataset.inlineSvgMounted = 'loading';
+      loadInlineSvgSource(src)
+        .then(markup => {
+          if (!markup || wrap.dataset.inlineSvgMounted !== 'loading') return;
+          wrap.innerHTML = markup;
+          wrap.dataset.inlineSvgMounted = 'true';
+          wrap.classList.add('is-ready');
+          wrap.classList.remove('is-failed');
+        })
+        .catch(() => {
+          wrap.dataset.inlineSvgMounted = 'false';
+          wrap.classList.add('is-failed');
+        });
+    });
+
     const wraps = root.querySelectorAll?.('.boks-hero__lottie-wrap') || [];
     if (!wraps.length) return;
 
@@ -508,8 +585,12 @@
     const state = info.resolved.state || {};
     const assetRef = isLottieState(state)
       ? withBuildQuery(state.lottieSrc)
-      : withBuildQuery(state.src);
-    const mode = isLottieState(state) ? 'lottie' : 'image';
+      : withBuildQuery(state.svgSrc || state.src);
+    const mode = isLottieState(state)
+      ? 'lottie'
+      : hasExternalInlineSvg(state)
+        ? 'inline-svg'
+        : 'image';
     const renderer = state.lottieRenderer === 'canvas' ? 'canvas' : 'svg';
     const loop = state.lottieLoop !== false ? '1' : '0';
     const autoplay = state.lottieAutoplay !== false ? '1' : '0';
