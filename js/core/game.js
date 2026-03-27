@@ -111,6 +111,10 @@ let pendingNewLevelThemeOverrides = {};
 let pendingNewLevelCharacterId = DEFAULT_CHARACTER_ID;
 let emptyRunHintTimers = [];
 let lastEmptyRunHintAt = 0;
+const WIN_BURST_ANGLES = [-108, -78, -52, -24, 8, 34, 62, 92, 122, 154, 186, 218, 250];
+let winBurstHideTimer = null;
+let activeWinBurstPromise = null;
+let activeWinFeedbackAt = 0;
 document.body?.classList.add('prestart');
 if (DEBUG_TOOLS_ENABLED) document.body?.classList.add('debug-visible');
 if (DEBUG_TOOLS_ENABLED && animationDebugVisible) {
@@ -354,12 +358,181 @@ function playTurnSfx(dir = 'right') {
     o.stop(t + 0.1);
   } catch (_) {}
 }
-async function fadeTransition(ms = 560) {
-  const fade = document.getElementById('levelFade');
-  if (!fade) { await sleep(ms); return; }
-  fade.classList.add('show');
-  await sleep(ms);
+const LEVEL_CLOUD_BASE_W = 440;
+const LEVEL_CLOUD_BASE_H = 440;
+function ensureLevelTransitionMask(fade) {
+    return {
+      svg: fade.querySelector('.level-transition-mask'),
+      mask: fade.querySelector('#levelCloudMask'),
+      maskBase: fade.querySelector('.level-transition-mask-base'),
+      fill: fade.querySelector('.level-transition-fill'),
+      hole: fade.querySelector('.level-transition-hole')
+    };
+  }
+function setTransitionHole(hole, target, scale, rotate = 0) {
+    hole.setAttribute(
+      'transform',
+      `translate(${target.x.toFixed(2)} ${target.y.toFixed(2)}) rotate(${rotate.toFixed(3)}) scale(${scale.toFixed(4)})`
+    );
+  }
+function makeCubicBezier(x1, y1, x2, y2) {
+    const cx = 3 * x1;
+    const bx = 3 * (x2 - x1) - cx;
+    const ax = 1 - cx - bx;
+    const cy = 3 * y1;
+    const by = 3 * (y2 - y1) - cy;
+    const ay = 1 - cy - by;
+    const sampleX = t => ((ax * t + bx) * t + cx) * t;
+    const sampleY = t => ((ay * t + by) * t + cy) * t;
+    const sampleDX = t => (3 * ax * t + 2 * bx) * t + cx;
+    return function cubicBezier(progress) {
+      if (progress <= 0) return 0;
+      if (progress >= 1) return 1;
+      let t = progress;
+      for (let i = 0; i < 6; i++) {
+        const currentX = sampleX(t) - progress;
+        const currentD = sampleDX(t);
+        if (Math.abs(currentX) < 1e-5 || Math.abs(currentD) < 1e-5) break;
+        t -= currentX / currentD;
+      }
+      if (t < 0 || t > 1 || Number.isNaN(t)) {
+        let low = 0;
+        let high = 1;
+        t = progress;
+        for (let i = 0; i < 12; i++) {
+          const currentX = sampleX(t);
+          if (Math.abs(currentX - progress) < 1e-5) break;
+          if (currentX < progress) low = t;
+          else high = t;
+          t = (low + high) / 2;
+        }
+      }
+      return sampleY(t);
+    };
+  }
+const levelTransitionEase = makeCubicBezier(0.4, 0, 0.2, 1);
+function animateTransitionHole(hole, target, frames, duration, easing = levelTransitionEase) {
+    return new Promise(resolve => {
+      const start = performance.now();
+      const ordered = Array.isArray(frames) && frames.length ? frames : [{ offset: 0, scale: 1, rotate: 0 }, { offset: 1, scale: 1, rotate: 0 }];
+      function sampleFrame(progress) {
+        const t = easing(Math.min(Math.max(progress, 0), 1));
+        let nextIndex = ordered.findIndex(frame => t <= frame.offset);
+        if (nextIndex <= 0) return ordered[0];
+        if (nextIndex === -1) return ordered[ordered.length - 1];
+        const prev = ordered[nextIndex - 1];
+        const next = ordered[nextIndex];
+        const range = Math.max(0.0001, next.offset - prev.offset);
+        const local = (t - prev.offset) / range;
+        return {
+          scale: prev.scale + (next.scale - prev.scale) * local,
+          rotate: prev.rotate + (next.rotate - prev.rotate) * local
+        };
+      }
+      function step(now) {
+        const progress = duration <= 0 ? 1 : Math.min(1, (now - start) / duration);
+        const frame = sampleFrame(progress);
+        setTransitionHole(hole, target, frame.scale, frame.rotate);
+        if (progress >= 1) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+async function triggerLevelExit(ms = 760, onClosed = null, anchor = null) {
+  const fade = document.getElementById('levelTransition');
+  if (!fade) {
+    if (typeof onClosed === 'function') await onClosed();
+    await sleep(ms);
+    return;
+  }
+  const { svg, mask, maskBase, fill, hole } = ensureLevelTransitionMask(fade);
+  const gridWrap = document.getElementById('gridWrap');
+  const bottom = document.getElementById('bottom');
+  const gridRect = gridWrap?.getBoundingClientRect();
+  const bottomRect = bottom?.getBoundingClientRect();
+  const gameplayLeft = Math.min(gridRect?.left ?? 0, bottomRect?.left ?? 0);
+  const gameplayRight = Math.max(gridRect?.right ?? window.innerWidth, bottomRect?.right ?? 0);
+  const gameplayTop = Math.min(gridRect?.top ?? 0, bottomRect?.top ?? 0);
+  const gameplayBottom = Math.max(gridRect?.bottom ?? 0, bottomRect?.bottom ?? 0);
+  const gameplayWidth = Math.max(280, gameplayRight - gameplayLeft);
+  const gameplayHeight = Math.max(360, gameplayBottom - gameplayTop);
+  const target = anchor || {
+    x: gameplayLeft + gameplayWidth / 2,
+    y: gameplayTop + gameplayHeight / 2
+  };
+
+  const rootComputed = getComputedStyle(document.documentElement);
+  const overlayColor =
+    (rootComputed.getPropertyValue('--level-transition-fill') || '').trim() ||
+    (rootComputed.getPropertyValue('--bg-base') || '').trim() ||
+    getComputedStyle(document.body).backgroundColor ||
+    '#e8dfcc';
+  fill.setAttribute('fill', overlayColor);
+
+  const overlayWidth = Math.max(window.innerWidth, 1);
+  const overlayHeight = Math.max(window.innerHeight, 1);
+  svg?.setAttribute('viewBox', `0 0 ${overlayWidth} ${overlayHeight}`);
+  mask?.setAttribute('x', '0');
+  mask?.setAttribute('y', '0');
+  mask?.setAttribute('width', `${overlayWidth}`);
+  mask?.setAttribute('height', `${overlayHeight}`);
+  maskBase?.setAttribute('x', '0');
+  maskBase?.setAttribute('y', '0');
+  maskBase?.setAttribute('width', `${overlayWidth}`);
+  maskBase?.setAttribute('height', `${overlayHeight}`);
+  fill?.setAttribute('x', '0');
+  fill?.setAttribute('y', '0');
+  fill?.setAttribute('width', `${overlayWidth}`);
+  fill?.setAttribute('height', `${overlayHeight}`);
+
+  const total = Math.max(1850, ms);
+  const closeMs = Math.round(total * 0.56);
+  const holdMs = Math.round(total * 0.18);
+  const openMs = total - closeMs - holdMs;
+  const fullScale = Math.max(
+    (gameplayWidth + 220) / LEVEL_CLOUD_BASE_W,
+    (gameplayHeight + 260) / LEVEL_CLOUD_BASE_H,
+    1.05
+  );
+  const minScale = 0.0001;
+  const holeTarget = {
+    x: target.x,
+    y: target.y
+  };
+
   fade.classList.remove('show');
+  void fade.offsetWidth;
+  setTransitionHole(hole, holeTarget, fullScale, 0);
+  fade.classList.add('show');
+
+  await animateTransitionHole(hole, holeTarget, [
+    { offset: 0, scale: fullScale, rotate: 0 },
+    { offset: 0.16, scale: fullScale * 1.05, rotate: -3 },
+    { offset: 0.82, scale: fullScale * 0.18, rotate: 2 },
+    { offset: 1, scale: minScale, rotate: 0 }
+  ], closeMs);
+  hole.style.visibility = 'hidden';
+
+  if (typeof onClosed === 'function') await onClosed();
+
+  await sleep(holdMs);
+  hole.style.visibility = 'visible';
+  setTransitionHole(hole, holeTarget, minScale, 0);
+
+  await animateTransitionHole(hole, holeTarget, [
+    { offset: 0, scale: minScale, rotate: 0 },
+    { offset: 0.72, scale: fullScale * 1.04, rotate: 2 },
+    { offset: 1, scale: fullScale, rotate: 0 }
+  ], openMs);
+
+  fade.classList.remove('show');
+}
+async function fadeTransition(ms = 760, onClosed = null, anchor = null) {
+  return triggerLevelExit(ms, onClosed, anchor);
 }
 function syncViewportHeight() {
   const vv = window.visualViewport;
@@ -404,6 +577,89 @@ function toast(msg, cls='', aboveEl=null) {
     el.style.left = '50%';
   }
   clearTimeout(el._t); if(msg) el._t = setTimeout(() => el.className='', 3000);
+}
+function ensureWinBurst() {
+  let root = document.getElementById('winBurst');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'winBurst';
+  root.setAttribute('aria-hidden', 'true');
+
+  const core = document.createElement('span');
+  core.className = 'win-core';
+  root.appendChild(core);
+
+  WIN_BURST_ANGLES.forEach((angle, idx) => {
+    const spark = document.createElement('span');
+    spark.className = 'win-spark';
+    spark.style.setProperty('--a', `${angle}deg`);
+    spark.style.setProperty('--r', `${idx % 2 === 0 ? 96 : 124}px`);
+    spark.style.setProperty('--d', `${idx * 14}ms`);
+    root.appendChild(spark);
+  });
+
+  const ringA = document.createElement('span');
+  ringA.className = 'win-ring';
+  ringA.style.setProperty('--d', '0ms');
+  root.appendChild(ringA);
+
+  const ringB = document.createElement('span');
+  ringB.className = 'win-ring';
+  ringB.style.setProperty('--d', '110ms');
+  root.appendChild(ringB);
+
+  const flash = document.createElement('span');
+  flash.className = 'win-flash';
+  root.appendChild(flash);
+  document.body.appendChild(root);
+  return root;
+}
+function getWinBurstAnchor() {
+  const fallback = {
+    x: Math.round(window.innerWidth * 0.5),
+    y: Math.round(window.innerHeight * 0.36)
+  };
+  if (!goalPlaced) return fallback;
+  const goalCell = document.querySelector(`.cell[data-cx="${GOAL.x}"][data-cy="${GOAL.y}"]`);
+  if (!goalCell) return fallback;
+  const rect = goalCell.getBoundingClientRect();
+  const x = rect.left + rect.width * 0.5;
+  const y = rect.top + rect.height * 0.34;
+  const safeX = Math.max(80, Math.min(window.innerWidth - 80, x));
+  const safeY = Math.max(84, Math.min(window.innerHeight - 94, y));
+  return { x: Math.round(safeX), y: Math.round(safeY) };
+}
+async function playWinBurst() {
+  const root = ensureWinBurst();
+  const anchor = getWinBurstAnchor();
+  root.style.setProperty('--wb-x', `${anchor.x}px`);
+  root.style.setProperty('--wb-y', `${anchor.y}px`);
+  if (winBurstHideTimer) {
+    clearTimeout(winBurstHideTimer);
+    winBurstHideTimer = null;
+  }
+  root.classList.remove('show', 'bursting');
+  void root.offsetWidth;
+  root.classList.add('show', 'bursting');
+  await sleep(980);
+  root.classList.remove('bursting');
+  winBurstHideTimer = setTimeout(() => {
+    root.classList.remove('show');
+    winBurstHideTimer = null;
+  }, 140);
+  await sleep(220);
+}
+function triggerWinFeedbackNow() {
+  const now = window.performance?.now ? window.performance.now() : Date.now();
+  if (activeWinBurstPromise && (now - activeWinFeedbackAt) < 1400) {
+    return activeWinBurstPromise;
+  }
+  activeWinFeedbackAt = now;
+  playWinSfx();
+  activeWinBurstPromise = playWinBurst().finally(() => {
+    activeWinBurstPromise = null;
+  });
+  return activeWinBurstPromise;
 }
 
 // ═══ CLIP PATHS ═══
@@ -3167,7 +3423,12 @@ async function moveChar(dir) {
       setCharacterAction('move');
       syncSprite();
     }
-    await animTo(p.x,p.y); await sleep(80);
+    await animTo(p.x,p.y);
+    if (goalPlaced && p.x === GOAL.x && p.y === GOAL.y) {
+      triggerWinFeedbackNow();
+      return;
+    }
+    await sleep(80);
   } else {
     playTurnSfx(dir);
     const previousOri = ori;
@@ -3236,16 +3497,24 @@ async function run() {
             if (f > fnLast) break;
             hlSlot(f, 'fn'); await sleep(STEP_MS);
             if(fnProg[f]) {
-              await moveChar(fnProg[f].dir||fnProg[f].direction); await sleep(STEP_MS);
-              if(goalPlaced && pos.x===GOAL.x&&pos.y===GOAL.y) { won=true; break; }
+              await moveChar(fnProg[f].dir||fnProg[f].direction);
+              if(goalPlaced && pos.x===GOAL.x&&pos.y===GOAL.y) {
+                won=true;
+                break;
+              }
+              await sleep(STEP_MS);
             }
           }
           document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
           if(won) break;
         }
       } else {
-        await moveChar(prog[i].dir||prog[i].direction); await sleep(STEP_MS);
-        if(goalPlaced && pos.x===GOAL.x&&pos.y===GOAL.y) { won=true; break; }
+        await moveChar(prog[i].dir||prog[i].direction);
+        if(goalPlaced && pos.x===GOAL.x&&pos.y===GOAL.y) {
+          won=true;
+          break;
+        }
+        await sleep(STEP_MS);
       }
     } else { await sleep(STEP_MS); }
   }
@@ -3256,9 +3525,28 @@ async function run() {
   if (!editorMode) resetPrograms();
 
   if(won) {
-    playWinSfx();
+    if (!currentCustomLevel && currentLevel === 'level1') {
+      playLevelTransitionSfx();
+      const transitionAnchor = getWinBurstAnchor();
+        await sleep(260);
+        await fadeTransition(1850, async () => {
+        const steps = getTutorialSteps();
+        if (steps.length) {
+          applyTutorialStep((tutorialStepIndex + 1) % steps.length);
+        } else {
+          resetPrograms();
+          initGrid();
+          renderAvail();
+          renderBoard(); renderFn();
+          drawBackground();
+          syncSprite();
+          moveGoal();
+        }
+      }, transitionAnchor);
+      return;
+    }
+    await (activeWinBurstPromise || triggerWinFeedbackNow());
     if (editorMode) {
-      await sleep(900);
       if (runStartPrograms) {
         prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
         fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
@@ -3271,24 +3559,6 @@ async function run() {
       renderBoard(); renderFn();
       return;
     }
-    if (!currentCustomLevel && currentLevel === 'level1') {
-      playLevelTransitionSfx();
-      await fadeTransition(620);
-      const steps = getTutorialSteps();
-      if (steps.length) {
-        applyTutorialStep((tutorialStepIndex + 1) % steps.length);
-      } else {
-        resetPrograms();
-        initGrid();
-        renderAvail();
-        renderBoard(); renderFn();
-        drawBackground();
-        syncSprite();
-        moveGoal();
-      }
-      return;
-    }
-    await sleep(1200);
     resetPrograms();
     resetPlayerToStepStart();
     renderBoard(); renderFn();

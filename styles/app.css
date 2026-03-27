@@ -32,6 +32,7 @@
       --toy-yellow: #fdb515;
       --toy-purple: #9e44ad;
       --toy-orange: #e57e22;
+      --level-transition-fill: #ddd1bb;
     }
     html {
       background-color: var(--bg-base);
@@ -194,17 +195,35 @@
 
     /* Header BÖKS */
     #header {
-      width: fit-content;
-      max-width: 100%;
+        width: fit-content;
+        max-width: 100%;
       flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; gap: 1px;
       letter-spacing: 0.5px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+      position: relative;
+      overflow: hidden;
+      background: rgba(255, 249, 234, 0.58);
+      box-shadow: 0 2px 0 rgba(205, 194, 171, 0.82), 0 6px 10px rgba(95, 78, 52, 0.14);
+      filter: saturate(1.04);
+      transform: translateY(-1px);
       transition: transform 0.12s ease, filter 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
       border-radius: 10px;
       padding: 4px 10px;
+        z-index: 9800;
+      }
+    #header::after {
+        content: "";
+      position: absolute;
+      inset: -35% -28%;
+      pointer-events: none;
+      border-radius: inherit;
+      background: radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 58%);
+      opacity: 0;
+      transform: translateY(2px) scale(0.96);
+      transition: opacity 0.18s ease, transform 0.18s ease;
     }
     body.editor-mode #header {
       width: fit-content;
@@ -212,20 +231,28 @@
     }
     @media (hover: hover) and (pointer: fine) {
       #header:hover {
-        transform: translateY(-1px);
-        background: rgba(255, 249, 234, 0.55);
-        box-shadow: 0 2px 0 rgba(205, 194, 171, 0.8), 0 6px 10px rgba(95, 78, 52, 0.14);
-        filter: saturate(1.05);
+        transform: translateY(-2px) scale(1.01);
+        background: rgba(255, 249, 234, 0.72);
+        box-shadow: 0 3px 0 rgba(205, 194, 171, 0.84), 0 9px 16px rgba(95, 78, 52, 0.16), 0 0 18px rgba(255, 238, 172, 0.42);
+        filter: saturate(1.1) brightness(1.03);
+      }
+      #header:hover::after {
+        opacity: 0.9;
+        transform: translateY(0) scale(1);
       }
       #header:hover .logo-letter {
         transform: scale(1.03);
       }
     }
     #header:active {
-      transform: translateY(1px) scale(0.99);
-      background: rgba(255, 249, 234, 0.72);
-      box-shadow: 0 1px 0 rgba(205, 194, 171, 0.85), 0 3px 6px rgba(95, 78, 52, 0.13);
-      filter: saturate(1.08);
+      transform: translateY(1px) scale(0.985);
+      background: rgba(255, 245, 225, 0.88);
+      box-shadow: 0 1px 0 rgba(205, 194, 171, 0.88), 0 3px 7px rgba(95, 78, 52, 0.16);
+      filter: saturate(1.06) brightness(0.98);
+    }
+    #header:active::after {
+      opacity: 0.2;
+      transform: translateY(3px) scale(0.95);
     }
     #header:focus-visible {
       outline: 2px solid rgba(95, 78, 52, 0.55);
@@ -796,16 +823,158 @@
       background: #fffbe6;
       box-shadow: 0 6px 24px rgba(255,200,0,0.3);
     }
-    #levelFade {
+    #winBurst {
       position: fixed;
       inset: 0;
-      background: #000;
-      opacity: 0;
+      z-index: 9400;
       pointer-events: none;
-      z-index: 9500;
-      transition: opacity .55s ease;
+      opacity: 0;
+      transition: opacity 0.12s linear;
+      --wb-x: 50vw;
+      --wb-y: 36vh;
     }
-    #levelFade.show { opacity: 0.58; }
+    #winBurst.show {
+      opacity: 1;
+    }
+    #winBurst .win-core {
+      position: fixed;
+      left: var(--wb-x);
+      top: var(--wb-y);
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.3);
+      background: radial-gradient(circle, rgba(255, 252, 232, 0.98) 0%, rgba(255, 224, 126, 0.78) 58%, rgba(255, 214, 82, 0) 100%);
+      box-shadow: 0 0 20px rgba(255, 213, 94, 0.4);
+      filter: blur(0.15px);
+    }
+    #winBurst.bursting .win-core {
+      animation: winCorePulse 280ms ease-out forwards;
+    }
+    @keyframes winCorePulse {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+      }
+      20% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(2.1);
+      }
+    }
+    #winBurst .win-spark {
+      position: fixed;
+      left: var(--wb-x);
+      top: var(--wb-y);
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      border: 1px solid rgba(103, 73, 8, 0.45);
+      background: linear-gradient(180deg, #fff6b5 0%, #ffd147 100%);
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(var(--a, 0deg)) translateX(0) scale(0.3);
+      box-shadow: 0 2px 5px rgba(98, 72, 12, 0.3);
+    }
+    #winBurst.bursting .win-spark {
+      animation: winSparkBurst 740ms ease-out forwards;
+      animation-delay: var(--d, 0ms);
+    }
+    @keyframes winSparkBurst {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) rotate(var(--a, 0deg)) translateX(0) scale(0.2);
+      }
+      18% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+      transform: translate(-50%, -50%) rotate(var(--a, 0deg)) translateX(var(--r, 100px)) scale(1);
+      }
+    }
+    #winBurst .win-ring {
+      position: fixed;
+      left: var(--wb-x);
+      top: var(--wb-y);
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 230, 147, 0.85);
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.2);
+      box-shadow: 0 0 0 2px rgba(255, 241, 193, 0.28);
+    }
+    #winBurst .win-flash {
+      position: fixed;
+      left: var(--wb-x);
+      top: var(--wb-y);
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.25);
+      background: radial-gradient(circle, rgba(255,255,236,0.98) 0%, rgba(255,224,126,0.74) 56%, rgba(255,214,82,0) 100%);
+      filter: blur(0.2px);
+    }
+    #winBurst.bursting .win-ring {
+      animation: winRingPulse 700ms ease-out forwards;
+      animation-delay: var(--d, 0ms);
+    }
+    #winBurst.bursting .win-flash {
+      animation: winFlashBurst 260ms ease-out forwards;
+    }
+    @keyframes winRingPulse {
+      0% {
+        opacity: 0.96;
+        transform: translate(-50%, -50%) scale(0.25);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(9.2);
+      }
+    }
+    @keyframes winFlashBurst {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.25);
+      }
+      16% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(2.2);
+      }
+    }
+    #levelTransition {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: 0;
+        opacity: 0;
+        pointer-events: none;
+        z-index: 9900;
+        overflow: hidden;
+        transition: opacity 0.12s linear;
+      }
+    #levelTransition.show { opacity: 1; }
+    #levelTransition .level-transition-mask {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+    #levelTransition .level-transition-fill {
+      fill: var(--level-transition-fill);
+      }
+    #levelTransition .level-transition-hole {
+      will-change: transform;
+    }
 
     #debugBadge {
       position: fixed;
