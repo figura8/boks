@@ -261,6 +261,9 @@
     async function loadEditorLevelsSource() {
       if (api.preferProjectLevelsFile) {
         try {
+          localStorage.removeItem(api.editorLevelsStorageKey);
+        } catch (_) {}
+        try {
           const response = await fetch(api.editorLevelsFilePath, { cache: 'no-store' });
           if (response.ok) {
             const payload = await response.json();
