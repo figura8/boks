@@ -1,13 +1,26 @@
 (function () {
-  const GOAL_CHARACTER_SRC = `assets/animations/characters/boks_black/boks_black_trapped.png?v=${encodeURIComponent(document.body?.dataset.build || 'dev')}`;
-
   function renderGoalCharacterBadge({
-    shadow = 'rgba(83, 28, 39, 0.22)'
+    shadow = 'rgba(255, 219, 111, 0.32)'
   } = {}) {
     return `
-      <span aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-        <span style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000;box-shadow:0 4px 8px ${shadow};overflow:hidden;">
-          <img src="${GOAL_CHARACTER_SRC}" alt="" style="width:92%;height:92%;display:block;object-fit:contain;transform:none;"/>
+      <span class="goal-bubble" aria-hidden="true" style="--goal-bubble-shadow:${shadow};">
+        <span class="goal-light">
+          <span class="goal-light__bloom"></span>
+          <span class="goal-light__rays"></span>
+          <span class="goal-light__core"></span>
+          <span class="goal-light__speck goal-light__speck--a"></span>
+          <span class="goal-light__speck goal-light__speck--b"></span>
+          <span class="goal-light__speck goal-light__speck--c"></span>
+          <span class="goal-light__speck goal-light__speck--d"></span>
+        </span>
+        <span class="goal-bubble__glow"></span>
+        <span class="goal-bubble__burst goal-bubble__burst--ring"></span>
+        <span class="goal-bubble__burst goal-bubble__burst--a"></span>
+        <span class="goal-bubble__burst goal-bubble__burst--b"></span>
+        <span class="goal-bubble__burst goal-bubble__burst--c"></span>
+        <span class="goal-bubble__burst goal-bubble__burst--d"></span>
+        <span class="goal-bubble__shell">
+          <span class="goal-bubble__flower"></span>
         </span>
       </span>
     `;
@@ -15,13 +28,14 @@
 
   function renderGoalCharacterIcon({
     size = 38,
-    shadow = 'rgba(83, 28, 39, 0.18)'
+    shadow = 'rgba(255, 219, 111, 0.26)'
   } = {}) {
-    const shiftY = 0;
     return `
       <span aria-hidden="true" style="width:${size}px;height:${size}px;display:inline-flex;align-items:center;justify-content:center;overflow:visible;">
-        <span style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;background:#000;box-shadow:0 3px 6px ${shadow};overflow:hidden;">
-          <img src="${GOAL_CHARACTER_SRC}" alt="" style="width:${Math.round(size * 0.9)}px;height:${Math.round(size * 0.9)}px;display:block;object-fit:contain;transform:translateY(${shiftY}px);"/>
+        <span style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;overflow:visible;">
+          <span style="position:absolute;width:${Math.round(size * 0.9)}px;height:${Math.round(size * 0.9)}px;border-radius:999px;background:radial-gradient(circle, rgba(255,248,193,0.98) 0%, rgba(255,232,128,0.46) 40%, rgba(255,208,92,0) 72%);box-shadow:0 0 12px 2px ${shadow};"></span>
+          <span style="position:absolute;width:${Math.round(size * 0.68)}px;height:${Math.round(size * 0.68)}px;border-radius:999px;background:radial-gradient(circle at 33% 28%, rgba(255,255,255,0.96) 0 8%, rgba(255,255,255,0) 10%), radial-gradient(circle at 68% 70%, rgba(110,220,255,0.22) 0 13%, rgba(110,220,255,0) 15%), radial-gradient(circle at 50% 50%, rgba(255,255,255,0.22) 0 58%, rgba(255,255,255,0.08) 69%, rgba(255,255,255,0) 76%);border:1px solid rgba(255,255,255,0.72);box-shadow:inset 0 1px 3px rgba(255,255,255,0.48), 0 0 10px rgba(189,245,255,0.34);"></span>
+          <span style="position:absolute;width:${Math.round(size * 0.28)}px;height:${Math.round(size * 0.28)}px;border-radius:999px;background:radial-gradient(circle at 50% 50%, #f3c341 0 18%, transparent 20%), radial-gradient(circle at 50% 10%, rgba(255,120,120,0.96) 0 13%, transparent 15%), radial-gradient(circle at 84% 38%, rgba(255,92,92,0.96) 0 13%, transparent 15%), radial-gradient(circle at 72% 82%, rgba(255,74,74,0.96) 0 13%, transparent 15%), radial-gradient(circle at 28% 82%, rgba(255,110,110,0.96) 0 13%, transparent 15%), radial-gradient(circle at 16% 38%, rgba(255,58,58,0.96) 0 13%, transparent 15%);"></span>
         </span>
       </span>
     `;
@@ -33,39 +47,42 @@
     size = 20,
     clipId = 'goal-preview'
   } = {}) {
-    const bgSize = size;
-    const bgX = x - bgSize / 2;
-    const bgY = y - bgSize / 2;
-    const imageSize = size * 0.9;
-    const imageX = x - imageSize / 2;
-    const imageY = y - imageSize / 2;
-    const safeClipId = String(clipId).replace(/[^a-z0-9_-]+/gi, '-');
+    const glowSize = size * 0.96;
+    const bubbleSize = size * 0.76;
+    const flowerSize = size * 0.3;
+    const safeGlowId = `${String(clipId).replace(/[^a-z0-9_-]+/gi, '-')}-glow`;
     return `
       <defs>
-        <clipPath id="${safeClipId}">
-          <rect x="${bgX.toFixed(2)}" y="${bgY.toFixed(2)}" width="${bgSize.toFixed(2)}" height="${bgSize.toFixed(2)}"/>
-        </clipPath>
+        <radialGradient id="${safeGlowId}" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="rgba(255,248,193,0.98)"/>
+          <stop offset="38%" stop-color="rgba(255,232,128,0.84)"/>
+          <stop offset="70%" stop-color="rgba(255,208,92,0.26)"/>
+          <stop offset="100%" stop-color="rgba(255,208,92,0)"/>
+        </radialGradient>
       </defs>
-      <rect x="${bgX.toFixed(2)}" y="${bgY.toFixed(2)}" width="${bgSize.toFixed(2)}" height="${bgSize.toFixed(2)}" fill="#000"/>
-      <image href="${GOAL_CHARACTER_SRC}" x="${imageX.toFixed(2)}" y="${imageY.toFixed(2)}" width="${imageSize.toFixed(2)}" height="${imageSize.toFixed(2)}" preserveAspectRatio="xMidYMid meet" clip-path="url(#${safeClipId})"/>
+      <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(glowSize / 2).toFixed(2)}" fill="url(#${safeGlowId})"/>
+      <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(bubbleSize / 2).toFixed(2)}" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.72)" stroke-width="1.2"/>
+      <circle cx="${(x - bubbleSize * 0.15).toFixed(2)}" cy="${(y - bubbleSize * 0.18).toFixed(2)}" r="${(bubbleSize * 0.08).toFixed(2)}" fill="rgba(255,255,255,0.92)"/>
+      <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(flowerSize / 2).toFixed(2)}" fill="url(#${safeGlowId})" opacity="0.4"/>
+      <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(flowerSize * 0.18).toFixed(2)}" fill="#f3c341"/>
     `;
   }
 
   function goalSVGLevel1() {
     return renderGoalCharacterBadge({
-      shadow: 'rgba(52, 84, 31, 0.2)'
+      shadow: 'rgba(255, 222, 115, 0.34)'
     });
   }
 
   function goalSVGCity() {
     return renderGoalCharacterBadge({
-      shadow: 'rgba(35, 70, 110, 0.2)'
+      shadow: 'rgba(146, 217, 255, 0.3)'
     });
   }
 
   function goalSVGUniverse() {
     return renderGoalCharacterBadge({
-      shadow: 'rgba(43, 32, 84, 0.26)'
+      shadow: 'rgba(169, 146, 255, 0.38)'
     });
   }
 
@@ -75,7 +92,7 @@
       : { action: 'idle', ...(state || {}) };
     const characterId = typeof resolvedState.characterId === 'string' && resolvedState.characterId.trim()
       ? resolvedState.characterId.trim()
-      : 'boks_black';
+      : 'boks_green';
     return window.BOKS_CHARACTER_RENDERER?.render({
       characterId,
       action: resolvedState.action,
@@ -396,7 +413,9 @@
 
   function decorateLevel1(cell, x, y) {
     if ((x + y) % 2 === 0) cell.classList.add('decor-grass');
-    if ((x * 3 + y * 2) % 7 === 0) cell.classList.add('decor-flower');
+    if ((x * 3 + y * 2) % 7 === 0) {
+      cell.classList.add('decor-flower');
+    }
     if ((x * 5 + y) % 9 === 0) cell.classList.add('decor-stone');
   }
 
@@ -414,7 +433,7 @@
 
   window.goalSVGLevel1 = goalSVGLevel1;
   window.BOKS_GOAL_CHARACTER = {
-    src: GOAL_CHARACTER_SRC,
+    src: '',
     badgeMarkup: renderGoalCharacterBadge,
     iconMarkup: renderGoalCharacterIcon,
     previewSvgMarkup: renderGoalCharacterPreviewSvg
@@ -426,7 +445,7 @@
 
   window.BOKS_LEVELS.level1 = {
     id: 'level1',
-    characterId: 'boks_black',
+    characterId: 'boks_green',
     name: 'Prato Base',
     themeSelectable: true,
     themeLabel: 'Prato',
@@ -472,7 +491,7 @@
 
   window.BOKS_LEVELS['level-city'] = {
     id: 'level-city',
-    characterId: 'boks_black',
+    characterId: 'boks_green',
     name: 'Citta',
     themeSelectable: true,
     themeLabel: 'Citta',
@@ -518,7 +537,7 @@
 
   window.BOKS_LEVELS['level-universe'] = {
     id: 'level-universe',
-    characterId: 'boks_black',
+    characterId: 'boks_green',
     name: 'Universo',
     themeSelectable: true,
     themeLabel: 'Universo',
@@ -564,7 +583,7 @@
 
   window.BOKS_LEVELS['level-thomas'] = {
     id: 'level-thomas',
-    characterId: 'boks_black',
+    characterId: 'boks_green',
     name: 'Thomas',
     themeSelectable: true,
     themeLabel: 'Thomas',

@@ -712,6 +712,6 @@
     input.addEventListener('change', onRuntimeInputsChanged);
   });
 
-  els.srcPathInput.value = 'assets/animations/characters/boks_black/boks_black_turn_right_to_up.json';
+  els.srcPathInput.value = '';
   setStatus('Pronto. Carica un file Lottie per iniziare.');
 })();

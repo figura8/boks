@@ -1,6 +1,6 @@
 (() => {
   const build = document.body?.dataset.build || 'dev';
-  const DEFAULT_CHARACTER_ID = 'boks_base';
+  const DEFAULT_CHARACTER_ID = 'boks_green';
   const DEFAULT_ACTION = 'idle';
   const DEFAULT_DIRECTION = 'right';
   const lottieInstances = new WeakMap();
@@ -190,6 +190,9 @@
   }
 
   function buildImageMarkup(state) {
+    if (typeof state?.htmlMarkup === 'string' && state.htmlMarkup.trim()) {
+      return `<span class="boks-hero__html">${state.htmlMarkup}</span>`;
+    }
     if (typeof state?.svgMarkup === 'string' && state.svgMarkup.trim()) {
       return `<span class="boks-hero__inline-svg">${state.svgMarkup}</span>`;
     }
@@ -585,9 +588,13 @@
     const state = info.resolved.state || {};
     const assetRef = isLottieState(state)
       ? withBuildQuery(state.lottieSrc)
-      : withBuildQuery(state.svgSrc || state.src);
+      : (typeof state?.htmlMarkup === 'string' && state.htmlMarkup.trim())
+        ? `html:${state.htmlMarkup.length}`
+        : withBuildQuery(state.svgSrc || state.src);
     const mode = isLottieState(state)
       ? 'lottie'
+      : (typeof state?.htmlMarkup === 'string' && state.htmlMarkup.trim())
+        ? 'html'
       : hasExternalInlineSvg(state)
         ? 'inline-svg'
         : 'image';

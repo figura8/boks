@@ -72,6 +72,14 @@
   display: block;
 }
 
+.boks-hero__html {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .boks-hero__inline-svg svg {
   width: 100%;
   height: 100%;
@@ -136,4 +144,106 @@
 #ghost .boks-hero__img {
   animation: none;
   opacity: 0.92;
+}
+
+.boks-cube3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.boks-cube3d__shadow {
+  position: absolute;
+  left: 50%;
+  top: 72%;
+  width: 46%;
+  height: 14%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle at center, rgba(82, 62, 33, 0.34) 0%, rgba(82, 62, 33, 0.18) 58%, rgba(82, 62, 33, 0) 100%);
+  filter: blur(4px);
+}
+
+.boks-cube3d__scene {
+  position: relative;
+  width: 52%;
+  height: 52%;
+  perspective: 220px;
+  perspective-origin: 50% 44%;
+  transform-style: preserve-3d;
+  transition: transform 140ms ease;
+}
+
+.boks-cube3d__cube {
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  width: 52px;
+  height: 52px;
+  transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
+}
+
+.boks-cube3d__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  border: 3px solid rgba(43, 114, 53, 0.82);
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.boks-cube3d__face--front {
+  background: linear-gradient(180deg, #63d86d 0%, #39af4a 100%);
+  transform: translateZ(18px);
+}
+
+.boks-cube3d__face--right {
+  background: linear-gradient(180deg, #38a74a 0%, #27773a 100%);
+  transform: rotateY(90deg) translateZ(18px);
+  transform-origin: center;
+}
+
+.boks-cube3d__face--top {
+  background: linear-gradient(180deg, #9bf194 0%, #73d771 100%);
+  transform: rotateX(90deg) translateZ(18px);
+  transform-origin: center;
+}
+
+.boks-cube3d__eye {
+  position: absolute;
+  right: 8px;
+  top: 16px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.boks-cube3d__pupil {
+  position: absolute;
+  right: 2px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #121614;
+}
+
+.boks-hero[data-direction="right"] .boks-cube3d__scene,
+.boks-hero[data-direction="down"] .boks-cube3d__scene {
+  transform: rotateX(-28deg) rotateY(-38deg);
+}
+
+.boks-hero[data-direction="left"] .boks-cube3d__scene {
+  transform: rotateX(-28deg) rotateY(38deg);
+}
+
+.boks-hero[data-direction="up"] .boks-cube3d__scene {
+  transform: rotateX(-34deg) rotateY(0deg);
 }

@@ -38,8 +38,7 @@
   }
 
   const DEFAULT_CHARACTER_MANIFESTS = [
-    'assets/animations/characters/boks_base/manifest.js',
-    'assets/animations/characters/boks_black/manifest.js'
+    'assets/animations/characters/boks_green/manifest.js'
   ];
   const CHARACTER_MANIFEST_REGISTRY = 'assets/animations/characters/registry.json';
   const OPTIONAL_LOTTIE_SCRIPT = 'js/vendor/lottie.min.js';

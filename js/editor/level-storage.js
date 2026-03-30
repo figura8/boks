@@ -44,7 +44,7 @@
         return api.resolveCharacterId(characterId);
       }
       const normalized = typeof characterId === 'string' ? characterId.trim() : '';
-      return normalized || 'boks_black';
+      return normalized || 'boks_green';
     }
 
     function extractLevels(payload) {

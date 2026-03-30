@@ -32,10 +32,312 @@ function moveGoal() {
   if(cell) {
     cell.classList.remove(...DECOR_CLASSES);
     cell.classList.add('goal-cell');
-    cell.innerHTML = goalSVG();
     cell.style.position = 'relative';
-    cell.style.overflow = 'hidden';
+    cell.style.overflow = 'visible';
   }
+  sizeGoalCanvasLayers();
+}
+let goalIdleCanvasFrame = null;
+let goalPopCanvasFrame = null;
+let goalPopCanvasDpr = Math.max(1, window.devicePixelRatio || 1);
+let goalIdleCanvasDpr = Math.max(1, window.devicePixelRatio || 1);
+let goalBubblePopUntil = 0;
+let goalCanvasPopStartedAt = 0;
+let goalCanvasParticles = [];
+let goalCanvasPopOrigin = { x: 0, y: 0 };
+let goalCanvasPopProfile = null;
+
+function ensureGoalCanvasLayers() {
+  const wrap = document.getElementById('gridWrap');
+  if (!wrap) return null;
+  let idle = document.getElementById('goalIdleCanvas');
+  let pop = document.getElementById('goalPopCanvas');
+  if (!idle) {
+    idle = document.createElement('canvas');
+    idle.id = 'goalIdleCanvas';
+    idle.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(idle);
+  }
+  if (!pop) {
+    pop = document.createElement('canvas');
+    pop.id = 'goalPopCanvas';
+    pop.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(pop);
+  }
+  return { idle, pop };
+}
+function getGoalCanvasOrigin() {
+  const goalCell = document.querySelector('.goal-cell');
+  const wrap = document.getElementById('gridWrap');
+  if (!goalCell || !wrap) return null;
+  const wrapRect = wrap.getBoundingClientRect();
+  const goalRect = goalCell.getBoundingClientRect();
+  return {
+    x: goalRect.left - wrapRect.left + (goalRect.width * 0.5),
+    y: goalRect.top - wrapRect.top + (goalRect.height * 0.5)
+  };
+}
+function sizeGoalCanvasLayers() {
+  const layers = ensureGoalCanvasLayers();
+  const grid = document.getElementById('gameGrid');
+  const wrap = document.getElementById('gridWrap');
+  if (!layers || !grid || !wrap) return;
+  const rect = grid.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const width = Math.round(rect.width);
+  const height = Math.round(rect.height);
+  const left = rect.left - wrapRect.left;
+  const top = rect.top - wrapRect.top;
+  [layers.idle, layers.pop].forEach((canvas, index) => {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    if (index === 0) goalIdleCanvasDpr = dpr;
+    else goalPopCanvasDpr = dpr;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    canvas.style.left = `${left}px`;
+    canvas.style.top = `${top}px`;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  });
+}
+function clearCanvas(canvas, dpr) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+}
+function drawGoalIdleCanvas(now) {
+  const idleCanvas = document.getElementById('goalIdleCanvas');
+  if (!idleCanvas || !goalPlaced) {
+    goalIdleCanvasFrame = null;
+    return;
+  }
+  const ctx = idleCanvas.getContext('2d');
+  const origin = getGoalCanvasOrigin();
+  if (!ctx || !origin) {
+    goalIdleCanvasFrame = window.requestAnimationFrame(drawGoalIdleCanvas);
+    return;
+  }
+  clearCanvas(idleCanvas, goalIdleCanvasDpr);
+  if ((window.performance?.now?.() || Date.now()) >= goalBubblePopUntil) {
+    const t = now / 1000;
+    const driftY = Math.sin(t * 1.4) * 4.5;
+    const driftX = Math.cos(t * 0.9) * 1.8;
+    const shellRx = 28 + Math.sin(t * 1.2) * 1.8;
+    const shellRy = 31 + Math.cos(t * 1.05) * 2.6;
+    const wobble = Math.sin(t * 2.1) * 0.08;
+    const glossShift = Math.sin(t * 1.7) * 3.2;
+    const bubbleX = origin.x + driftX;
+    const bubbleY = origin.y + driftY;
+
+    const glow = ctx.createRadialGradient(bubbleX, bubbleY, 0, bubbleX, bubbleY, 54);
+    glow.addColorStop(0, 'rgba(255,248,193,0.22)');
+    glow.addColorStop(0.42, 'rgba(216,245,255,0.14)');
+    glow.addColorStop(1, 'rgba(216,245,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(bubbleX, bubbleY, 54, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(bubbleX, bubbleY);
+    ctx.rotate(wobble);
+
+    const shell = ctx.createRadialGradient(-10 + glossShift, -14, 0, 0, 0, 44);
+    shell.addColorStop(0, 'rgba(255,255,255,0.24)');
+    shell.addColorStop(0.56, 'rgba(212,243,255,0.14)');
+    shell.addColorStop(1, 'rgba(212,243,255,0.03)');
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, shellRx, shellRy, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(232,250,255,0.88)';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, shellRx, shellRy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(164,226,248,0.28)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(2, 1, shellRx - 4, shellRy - 5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.82)';
+    ctx.beginPath();
+    ctx.ellipse(-10 + glossShift, -14, 6, 10, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(210,244,255,0.42)';
+    ctx.beginPath();
+    ctx.ellipse(14, 10, 9, 6, 0.38, 0, Math.PI * 2);
+    ctx.fill();
+
+    const petalColors = [
+      'rgba(255,120,120,0.96)',
+      'rgba(255,92,92,0.96)',
+      'rgba(255,74,74,0.96)',
+      'rgba(255,110,110,0.96)',
+      'rgba(255,58,58,0.96)'
+    ];
+    const petalPositions = [
+      { x: 0, y: -10 },
+      { x: 9, y: -2 },
+      { x: 6, y: 9 },
+      { x: -6, y: 9 },
+      { x: -9, y: -2 }
+    ];
+    petalPositions.forEach((petal, index) => {
+      ctx.fillStyle = petalColors[index];
+      ctx.beginPath();
+      ctx.arc(petal.x, petal.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = '#f3c341';
+    ctx.beginPath();
+    ctx.arc(0, 0, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  goalIdleCanvasFrame = window.requestAnimationFrame(drawGoalIdleCanvas);
+}
+function ensureGoalIdleCanvasLoop() {
+  sizeGoalCanvasLayers();
+  if (!goalIdleCanvasFrame) {
+    goalIdleCanvasFrame = window.requestAnimationFrame(drawGoalIdleCanvas);
+  }
+}
+function createGoalPopParticles(origin) {
+  const burstAngle = Math.random() * Math.PI * 2;
+  const burstBias = 0.45 + Math.random() * 0.35;
+  goalCanvasPopProfile = {
+    burstAngle,
+    burstBias,
+    ringOffsetX: (Math.random() - 0.5) * 12,
+    ringOffsetY: (Math.random() - 0.5) * 10,
+    ringStretchX: 0.88 + Math.random() * 0.4,
+    ringStretchY: 0.82 + Math.random() * 0.34,
+    ringRotation: (Math.random() - 0.5) * 0.9
+  };
+  const particles = [];
+  const orbCount = 14 + Math.floor(Math.random() * 7);
+  for (let i = 0; i < orbCount; i += 1) {
+    const spreadMode = Math.random();
+    const baseAngle = spreadMode < 0.55
+      ? burstAngle + (Math.random() - 0.5) * 1.35
+      : (Math.PI * 2 * i) / orbCount + (Math.random() - 0.5) * 0.62;
+    const biasBoost = 1 + Math.max(0, Math.cos(baseAngle - burstAngle)) * burstBias;
+    const speed = (34 + Math.random() * 84) * biasBoost;
+    const spawnRadius = Math.random() * 10;
+    const largeBubbleBias = Math.random();
+    particles.push({
+      kind: 'orb',
+      x: origin.x + Math.cos(baseAngle) * spawnRadius,
+      y: origin.y + Math.sin(baseAngle) * spawnRadius,
+      vx: Math.cos(baseAngle) * speed,
+      vy: Math.sin(baseAngle) * speed,
+      radius: largeBubbleBias > 0.62 ? 14 + Math.random() * 18 : 8 + Math.random() * 14,
+      alpha: 0.78 + Math.random() * 0.24,
+      life: 1500 + Math.random() * 820,
+      wobble: (Math.random() - 0.5) * 18,
+      wobblePhase: Math.random() * Math.PI * 2
+    });
+  }
+  return particles;
+}
+function drawGoalPopCanvas(now) {
+  const popCanvas = document.getElementById('goalPopCanvas');
+  if (!popCanvas) {
+    goalPopCanvasFrame = null;
+    return;
+  }
+  const ctx = popCanvas.getContext('2d');
+  if (!ctx) {
+    goalPopCanvasFrame = null;
+    return;
+  }
+  const elapsed = now - goalCanvasPopStartedAt;
+  clearCanvas(popCanvas, goalPopCanvasDpr);
+  const ringProgress = Math.min(1, elapsed / 760);
+  const ringRadius = 16 + (ringProgress * 84);
+  const ringAlpha = Math.max(0, 1 - ringProgress);
+  if (ringAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = ringAlpha * 0.92;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(234,250,255,0.92)';
+    ctx.shadowColor = 'rgba(158,237,255,0.45)';
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.ellipse(
+      goalCanvasPopOrigin.x + (goalCanvasPopProfile?.ringOffsetX || 0),
+      goalCanvasPopOrigin.y + (goalCanvasPopProfile?.ringOffsetY || 0),
+      ringRadius * (goalCanvasPopProfile?.ringStretchX || 1),
+      ringRadius * (goalCanvasPopProfile?.ringStretchY || 1),
+      goalCanvasPopProfile?.ringRotation || 0,
+      0,
+      Math.PI * 2
+    );
+    ctx.stroke();
+    ctx.restore();
+  }
+  goalCanvasParticles = goalCanvasParticles.filter((particle) => elapsed <= particle.life);
+  goalCanvasParticles.forEach((particle) => {
+    const t = Math.min(1, elapsed / particle.life);
+    const wobble = Math.sin((t * 7) + particle.wobblePhase) * particle.wobble * (1 - t);
+    const x = particle.x + particle.vx * t * 0.82 + wobble;
+    const y = particle.y + particle.vy * t * 0.82 + (Math.cos((t * 6) + particle.wobblePhase) * particle.wobble * 0.45 * (1 - t));
+    const radius = particle.radius * (1 - t * 0.34);
+    const alpha = particle.alpha * Math.max(0, 1 - t * 0.82);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const gradient = ctx.createRadialGradient(x - radius * 0.25, y - radius * 0.3, 0, x, y, Math.max(2, radius));
+    gradient.addColorStop(0, 'rgba(255,255,255,0.98)');
+    gradient.addColorStop(0.18, 'rgba(245,252,255,0.95)');
+    gradient.addColorStop(0.54, 'rgba(198,238,255,0.34)');
+    gradient.addColorStop(0.78, 'rgba(168,226,248,0.08)');
+    gradient.addColorStop(1, 'rgba(168,226,248,0)');
+    ctx.fillStyle = gradient;
+    ctx.strokeStyle = `rgba(232,250,255,${Math.max(0, alpha * 0.82)})`;
+    ctx.lineWidth = Math.max(1.2, radius * 0.08);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(1.5, radius), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255,255,255,${Math.max(0, alpha * 0.92)})`;
+    ctx.arc(x - radius * 0.28, y - radius * 0.3, Math.max(1.2, radius * 0.16), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+  if (elapsed < 2500) {
+    goalPopCanvasFrame = window.requestAnimationFrame(drawGoalPopCanvas);
+  } else {
+    goalPopCanvasFrame = null;
+    goalCanvasPopProfile = null;
+    clearCanvas(popCanvas, goalPopCanvasDpr);
+  }
+}
+function triggerGoalCanvasPop() {
+  const origin = getGoalCanvasOrigin();
+  const popCanvas = ensureGoalCanvasLayers()?.pop;
+  if (!origin || !popCanvas) return;
+  sizeGoalCanvasLayers();
+  goalCanvasPopOrigin = origin;
+  goalCanvasParticles = createGoalPopParticles(origin);
+  goalCanvasPopStartedAt = window.performance?.now?.() || Date.now();
+  goalBubblePopUntil = goalCanvasPopStartedAt + 1200;
+  if (goalPopCanvasFrame) window.cancelAnimationFrame(goalPopCanvasFrame);
+  goalPopCanvasFrame = window.requestAnimationFrame(drawGoalPopCanvas);
+}
+async function popGoalBubble() {
+  const goalCell = document.querySelector('.goal-cell');
+  if (!goalCell || goalCell.classList.contains('is-popping')) return;
+  triggerGoalCanvasPop();
+  await sleep(1200);
 }
 let ori = 'right';
 const MOVE_MS = 650, TURN_MS = 520, STEP_MS = 180;
@@ -55,7 +357,7 @@ const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
-const DEFAULT_CHARACTER_ID = 'boks_black';
+  const DEFAULT_CHARACTER_ID = 'boks_green';
 const LOCKED_THEME_SCENE_VAR_KEYS = ['--scene-body-bg', '--bg-base'];
 const EDITOR_THEME_COLOR_CONTROLS = [
   { key: '--panel-bg', label: 'Pannelli' },
@@ -74,7 +376,7 @@ const RUNTIME_CONFIG = window.BOKS_RUNTIME_CONFIG || {};
 const LEVEL_EDITOR_ENABLED = RUNTIME_CONFIG.editorEnabled !== false;
 const DEBUG_TOOLS_ENABLED = RUNTIME_CONFIG.debugToolsEnabled !== false;
 const FORCE_LIGHTWEIGHT_CHARACTER = RUNTIME_CONFIG.lightweightCharacterMode !== false;
-const LIGHTWEIGHT_CHARACTER_ID = 'boks_black';
+  const LIGHTWEIGHT_CHARACTER_ID = 'boks_green';
 
 // ═══ STATE ═══
 let pos = {...START};
@@ -743,13 +1045,14 @@ function initGrid() {
     if(goalPlaced && x===GOAL.x && y===GOAL.y) {
       c.classList.remove(...DECOR_CLASSES);
       c.classList.add('goal-cell');
-      c.innerHTML = goalSVG();
       c.style.position = 'relative';
-      c.style.overflow = 'hidden';
+      c.style.overflow = 'visible';
     }
     gridCellEls[y][x] = c;
     g.appendChild(c);
   }
+  ensureGoalIdleCanvasLoop();
+  sizeGoalCanvasLayers();
 }
 
 // ═══ SIZE THE GRID AS A SQUARE ═══
@@ -770,6 +1073,7 @@ function sizeGrid() {
   grid.style.width  = sq + 'px';
   grid.style.height = sq + 'px';
   wrap.style.height = sq + 'px'; // shrink wrap to exact grid size, no extra space
+  sizeGoalCanvasLayers();
 }
 
 // ═══ SPRITE ═══
@@ -1041,6 +1345,9 @@ async function animTo(tx, ty) {
   if(animating) return;
   animating = true;
   const s = document.getElementById('sprite');
+  const enteringGoal = goalPlaced && tx === GOAL.x && ty === GOAL.y;
+  let popTimer = null;
+  let popPromise = null;
   let fr = cellPos(pos.x, pos.y), to = cellPos(tx, ty);
   if(!fr || !to) {
     sizeGrid();
@@ -1070,7 +1377,23 @@ async function animTo(tx, ty) {
     ],
     {duration:MOVE_MS, easing:'cubic-bezier(.2,.9,.2,1)', fill:'forwards'}
   );
+  if (enteringGoal) {
+    const popDelay = Math.max(20, Math.round(MOVE_MS * 0.2));
+    popTimer = setTimeout(() => {
+      popPromise = popGoalBubble();
+    }, popDelay);
+  }
   await a.finished.catch(()=>{});
+  if (popTimer) {
+    clearTimeout(popTimer);
+    popTimer = null;
+  }
+  if (enteringGoal && !popPromise) {
+    popPromise = popGoalBubble();
+  }
+  if (popPromise) {
+    await popPromise;
+  }
   a.cancel();
   s.style.transform = '';
   pos={x:tx,y:ty};
@@ -2262,7 +2585,9 @@ function applyCustomLevel(level, { openEditor = false } = {}) {
   resetPrograms();
   setAvailableBlocks(Object.keys(editorBlockEnabled).filter(dir => editorBlockEnabled[dir]));
   editorMode = !!openEditor;
-  if (!editorMode) editorStylePanelOpen = false;
+  if (!editorMode) {
+    editorStylePanelOpen = false;
+  }
   document.body.classList.toggle('editor-mode', editorMode);
   document.body.classList.toggle('editor-style-open', !!(editorMode && editorStylePanelOpen));
   updateStyleEditorButtons();
@@ -3487,7 +3812,6 @@ async function moveChar(dir) {
     }
     await animTo(p.x,p.y);
     if (goalPlaced && p.x === GOAL.x && p.y === GOAL.y) {
-      triggerWinFeedbackNow();
       return;
     }
     await sleep(80);
@@ -3607,7 +3931,6 @@ async function run() {
       }, transitionAnchor);
       return;
     }
-    await (activeWinBurstPromise || triggerWinFeedbackNow());
     if (editorMode) {
       if (runStartPrograms) {
         prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
@@ -3749,6 +4072,11 @@ function openLottieInspectorTool() {
   const opened = window.open(targetUrl, '_blank', 'noopener');
   if (!opened) window.location.href = targetUrl;
 }
+function openVfxTool() {
+  const targetUrl = new URL('tools/vfx-tool.html', window.location.href).toString();
+  const opened = window.open(targetUrl, '_blank', 'noopener');
+  if (!opened) window.location.href = targetUrl;
+}
 function toggleStyleEditorPanel() {
   if (!editorMode) return;
   setEditorStylePanelOpen(!editorStylePanelOpen);
@@ -3826,6 +4154,7 @@ setTimeout(dismissSplash, 0);
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
+document.getElementById('openVfxToolBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('openLottieInspectorBtn')?.addEventListener('click', openLottieInspectorTool);
 document.getElementById('openLottieInspectorBtnEditor')?.addEventListener('click', openLottieInspectorTool);
 document.getElementById('header')?.addEventListener('click', returnToMainMenu);
@@ -3837,6 +4166,7 @@ document.getElementById('header')?.addEventListener('keydown', e => {
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
 document.getElementById('openStyleEditorBtn')?.addEventListener('click', toggleStyleEditorPanel);
+document.getElementById('openVfxEditorBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('closeStyleEditorBtn')?.addEventListener('click', () => setEditorStylePanelOpen(false));
 document.getElementById('applyThemeStyleBtn')?.addEventListener('click', () => { void applyCurrentStyleToSelectedLevel(); });
 document.getElementById('resetThemeColorsBtn')?.addEventListener('click', resetCurrentEditorThemeOverrides);
