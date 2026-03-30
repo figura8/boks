@@ -1674,6 +1674,7 @@ function setCurrentEditorThemeOverrides(overrides) {
   const normalized = sanitizeThemeOverrides(overrides);
   if (currentCustomLevel) {
     currentCustomLevel.themeOverrides = normalized;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1693,6 +1694,7 @@ function setCurrentEditorThemeOverrides(overrides) {
     name: selectedLevel.name,
     themeOverrides: normalized
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1700,6 +1702,7 @@ function setCurrentEditorLevelHints(levelHints) {
   const normalized = sanitizeLevelHints(levelHints);
   if (currentCustomLevel) {
     currentCustomLevel.levelHints = normalized;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1719,6 +1722,7 @@ function setCurrentEditorLevelHints(levelHints) {
     name: selectedLevel.name,
     levelHints: normalized
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1834,6 +1838,7 @@ function setCurrentEditorCharacterId(characterId) {
   const resolved = resolveCharacterId(characterId);
   if (currentCustomLevel) {
     currentCustomLevel.characterId = resolved;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1853,6 +1858,7 @@ function setCurrentEditorCharacterId(characterId) {
     name: selectedLevel.name,
     characterId: resolved
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1956,6 +1962,7 @@ function applyEditorTheme(themeId) {
     }
   }
   if (!changed) return;
+  syncCurrentEditorLevelToSessionCache();
   applyLevelSceneVars();
   applyEditorBoardChanges();
   renderThemeEditorPanel();
@@ -2060,6 +2067,10 @@ function writeCustomLevels(levels) {
   return levelStorage.writeCustomLevels(levels);
 }
 
+function updateCachedLevel(level) {
+  return levelStorage.updateCachedLevel(level);
+}
+
 function exportableLevelsPayload(levels = readCustomLevels()) {
   return levelStorage.exportableLevelsPayload(levels);
 }
@@ -2078,6 +2089,25 @@ function normalizeThemeOverrides(source = {}) {
 
 function normalizeCustomLevel(level) {
   return levelStorage.normalizeCustomLevel(level);
+}
+
+function syncCurrentEditorLevelToSessionCache() {
+  if (!LEVEL_EDITOR_ENABLED || !currentCustomLevel?.id) return null;
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return null;
+  const savedLevel = findCustomLevel(currentCustomLevel.id) || currentCustomLevel;
+  const draft = collectCurrentEditorLevel();
+  const merged = normalizeCustomLevel({
+    ...savedLevel,
+    ...draft,
+    id: savedLevel.id,
+    number: savedLevel.number,
+    campaignIndex: savedLevel.campaignIndex ?? savedLevel.baseStepIndex ?? null,
+    baseStepIndex: savedLevel.baseStepIndex,
+    name: savedLevel.name
+  });
+  updateCachedLevel(merged);
+  currentCustomLevel = cloneCustomLevel(merged);
+  return merged;
 }
 
 function findCustomLevel(levelId) {

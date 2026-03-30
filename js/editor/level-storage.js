@@ -165,6 +165,18 @@
       editorLevelsCache = normalizedLevels;
     }
 
+    function updateCachedLevel(level) {
+      const normalized = normalizeCustomLevel(level);
+      const sourceLevels = editorLevelsCache.length
+        ? editorLevelsCache.map(normalizeCustomLevel)
+        : buildInitialEditorLevels();
+      const idx = sourceLevels.findIndex(entry => entry.id === normalized.id);
+      if (idx >= 0) sourceLevels[idx] = normalized;
+      else sourceLevels.push(normalized);
+      editorLevelsCache = sourceLevels.map(normalizeCustomLevel);
+      return normalized;
+    }
+
     function exportableLevelsPayload(levels = readCustomLevels()) {
       return {
         version: 1,
@@ -342,6 +354,7 @@
       normalizeSlotArray,
       persistEditorLevels,
       readCustomLevels,
+      updateCachedLevel,
       writeCustomLevels
     };
   }
