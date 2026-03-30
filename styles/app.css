@@ -862,13 +862,13 @@
     }
     .ablock .available-block-vfx__glow {
       position: absolute;
-      inset: -40%;
+      inset: -22%;
       border-radius: 50%;
       opacity: 0;
       background:
-        radial-gradient(circle, rgba(255, 251, 214, 0.99) 0%, rgba(255, 231, 104, 0.94) 18%, rgba(255, 205, 46, 0.7) 42%, rgba(255, 184, 46, 0.2) 64%, rgba(255, 184, 46, 0) 82%);
-      filter: blur(12px);
-      transform: scale(0.62);
+        radial-gradient(circle, rgba(255, 251, 214, 0.99) 0%, rgba(255, 231, 104, 0.94) 22%, rgba(255, 205, 46, 0.62) 38%, rgba(255, 184, 46, 0.14) 52%, rgba(255, 184, 46, 0) 68%);
+      filter: blur(8px);
+      transform: scale(0.7);
     }
     .ablock .available-block-vfx__spark,
     .ablock .available-block-vfx__spark::before {
@@ -924,24 +924,30 @@
       z-index: 1;
       filter: drop-shadow(0 4px 0 rgba(58, 138, 57, 0.32)) drop-shadow(0 9px 12px rgba(56, 106, 36, 0.2));
     }
-    .ablock.tutorial-focus .available-block-vfx__glow {
-      animation: availableBlockGlow 1.8s ease-in-out infinite;
-    }
-    #blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx__glow {
-      animation: availableBlockGlow 1.8s ease-in-out infinite;
-    }
-    .ablock.tutorial-focus .available-block-vfx__spark {
-      animation: availableBlockSpark 1.8s ease-in-out infinite;
-    }
-    #blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx__spark {
-      animation: availableBlockSpark 1.8s ease-in-out infinite;
-    }
-    .ablock.tutorial-focus .available-block-vfx::before {
-      animation: availableBlockFlash 1.8s ease-in-out infinite;
-    }
-    #blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx::before {
-      animation: availableBlockFlash 1.8s ease-in-out infinite;
-    }
+.ablock.tutorial-focus .available-block-vfx__glow {
+  animation: availableBlockGlow 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
+#blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx__glow {
+  animation: availableBlockGlow 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
+.ablock.tutorial-focus .available-block-vfx__spark {
+  animation: availableBlockSpark 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
+#blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx__spark {
+  animation: availableBlockSpark 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
+.ablock.tutorial-focus .available-block-vfx::before {
+  animation: availableBlockFlash 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
+#blocksRow.available-block-guided .ablock.tutorial-focus .available-block-vfx::before {
+  animation: availableBlockFlash 1.8s ease-in-out infinite;
+  animation-delay: var(--available-block-glow-delay, 0s);
+}
     .ablock.empty-play-block-hint {
       position: relative;
       z-index: 3;
@@ -985,8 +991,8 @@
       }
     }
     @keyframes availableBlockGlow {
-      0%, 100% { opacity: 0.14; transform: scale(0.82); }
-      50% { opacity: 0.82; transform: scale(1.08); }
+      0%, 100% { opacity: 0.14; transform: scale(0.78); }
+      50% { opacity: 0.78; transform: scale(0.92); }
     }
     @keyframes availableBlockFlash {
       0%, 100% { opacity: 0.1; transform: scale(0.96); }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-03-30T17:11:42.377Z",
+  "exportedAt": "2026-03-30T18:36:18.989Z",
   "levels": [
     {
       "id": "level1-step-1",
@@ -93,7 +93,7 @@
         "--grid-bg": "#acd784"
       },
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -147,7 +147,7 @@
         "--grid-bg": "#b9dd98"
       },
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -200,7 +200,7 @@
         "--scene-grid-wrap-bg": "#c5e1a3"
       },
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -251,7 +251,7 @@
       },
       "themeOverrides": {},
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -297,7 +297,7 @@
       },
       "themeOverrides": {},
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -348,7 +348,7 @@
       },
       "themeOverrides": {},
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -399,7 +399,7 @@
       },
       "themeOverrides": {},
       "levelHints": {
-        "availableBlockGlow": false
+        "availableBlockGlow": true
       }
     },
     {
@@ -453,7 +453,6 @@
         "function": true
       },
       "themeOverrides": {
-        "--panel-bg": "#4767b3",
         "--scene-grid-wrap-bg": "#c0becb",
         "--cell-bg": "#605d83",
         "--cell-hi-bg": "#777e88",

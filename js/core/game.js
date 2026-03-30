@@ -2451,6 +2451,7 @@ function setBlockedCells(obstacles = []) {
 function resetPrograms() {
   for (let j = 0; j < SLOTS; j++) prog[j] = null;
   for (let j = 0; j < FSLOTS; j++) fnProg[j] = null;
+  refreshAvailableBlockGlowState();
 }
 function setAvailableBlocks(blocks = ['forward', 'right', 'left']) {
   avail.length = 0;
@@ -2550,6 +2551,10 @@ function setEditorMode(enabled) {
     setEditorStylePanelOpen(editorStylePanelOpen);
     refreshEditorDebug();
   } else {
+    refreshAvailableBlockGlowState();
+    renderAvail();
+    renderBoard();
+    renderFn();
     setEditorStylePanelOpen(false);
     selectedElementTool = null;
     lastEditorSolutionCount = 0;
@@ -2599,6 +2604,30 @@ function isFunctionTutorialStep() {
 }
 function shouldShowAvailableBlockGlow(level = currentCustomLevel || getCurrentCampaignLevel()) {
   return !!level?.levelHints?.availableBlockGlow;
+}
+function hasAnyPlacedProgramBlock() {
+  return prog.some(Boolean) || fnProg.some(Boolean);
+}
+function syncAvailableBlockGlowUI() {
+  const row = document.getElementById('blocksRow');
+  if (!row || editorMode) return;
+  row.classList.toggle('available-block-guided', !!stepStartHintActive);
+  row.querySelectorAll('.ablock').forEach((blockEl, idx) => {
+    const shouldGlow = !!stepStartHintActive;
+    blockEl.classList.toggle('tutorial-focus', shouldGlow);
+    blockEl.style.setProperty('--available-block-glow-delay', shouldGlow ? `${(idx % 6) * 0.42}s` : '0s');
+  });
+}
+function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
+  if (editorMode) {
+    stepStartHintActive = false;
+    syncAvailableBlockGlowUI();
+    return stepStartHintActive;
+  }
+  const draggingAvailableBlock = suspendForActiveDrag && dg?.active && dg.src === 'avail';
+  stepStartHintActive = shouldShowAvailableBlockGlow() && !hasAnyPlacedProgramBlock() && !draggingAvailableBlock;
+  syncAvailableBlockGlowUI();
+  return stepStartHintActive;
 }
 function resetPlayerToStepStart() {
   const step = getCurrentCampaignLevel();
@@ -3001,7 +3030,7 @@ function renderLevelHintControls(controls) {
     };
     if (!setCurrentEditorLevelHints(nextHints)) return;
     if (currentCustomLevel?.campaignIndex != null || currentCustomLevel?.baseStepIndex != null) {
-      stepStartHintActive = !!nextHints.availableBlockGlow;
+      refreshAvailableBlockGlowState();
     }
     renderElementPalette();
     renderThemeEditorPanel();
@@ -3503,9 +3532,11 @@ function renderAvail() {
 
   avail.forEach((block, i) => {
     const el = mkB(block, sz, sz, 'ablock');
-    if (showAvailableBlockGlow && block.dir === 'forward') {
+    el.dataset.blockDir = block.dir || block.direction || '';
+    if (showAvailableBlockGlow) {
       el.classList.add('tutorial-focus');
     }
+    el.style.setProperty('--available-block-glow-delay', showAvailableBlockGlow ? `${(i % 6) * 0.42}s` : '0s');
     el.dataset.ai = i;
     el.style.position = 'absolute';
     el.style.top = '50%';
@@ -3821,6 +3852,7 @@ function startDg(cx,cy,src,idx,sz) {
   const block = src==='avail' ? avail[idx] : src==='fn' ? fnProg[idx] : prog[idx];
   if(!block) return;
   dg = {active:true, block, src, si:idx, hover:null};
+  if(src==='avail') refreshAvailableBlockGlowState({ suspendForActiveDrag: true });
   const g = document.getElementById('ghost');
   g.innerHTML=''; g.appendChild(mkB(block,sz,sz));
   g.style.cssText=`display:block;width:${sz}px;height:${sz}px;left:${cx}px;top:${cy}px;border-radius:5px;`;
@@ -3893,11 +3925,8 @@ function endDg(cx,cy) {
     const firstFnForwardPlaced = fnProg.some(b => (b?.dir || b?.direction) === 'forward');
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
-  if (stepStartHintActive) {
-    const hasAnyPlacedBlock = prog.some(Boolean) || fnProg.some(Boolean);
-    if (hasAnyPlacedBlock) stepStartHintActive = false;
-  }
   dg.active=false;
+  refreshAvailableBlockGlowState();
   renderAvail(); renderBoard(); renderFn();
   refreshEditorDebug();
 }
