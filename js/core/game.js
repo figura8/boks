@@ -355,7 +355,7 @@ const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
 const FILE_HANDLE_DB_NAME = 'boks-file-handles';
 const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
-const FIRST_LEVEL_ONBOARDING_STORAGE_KEY = 'boks-first-level-onboarding-v5';
+const FIRST_LEVEL_ONBOARDING_STORAGE_KEY = 'boks-first-level-onboarding-completed-v1';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
   const DEFAULT_CHARACTER_ID = 'boks_green';
@@ -2714,32 +2714,16 @@ function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
   queueFirstLevelOnboardingSync();
   return stepStartHintActive;
 }
-function getCurrentRuntimeBuild() {
-  const runtimeBuild = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || '';
-  if (runtimeBuild) return runtimeBuild;
-  try {
-    return new URL(window.location.href).searchParams.get('_build') || '';
-  } catch (_err) {
-    return '';
-  }
-}
-function getFirstLevelOnboardingStorageEntryKey() {
-  const build = getCurrentRuntimeBuild();
-  const releaseChannel = window.BOKS_RUNTIME_CONFIG?.releaseChannel || document.body?.dataset?.releaseChannel || 'live';
-  return `${FIRST_LEVEL_ONBOARDING_STORAGE_KEY}:${releaseChannel}:${build || 'unknown'}`;
-}
 function readFirstLevelOnboardingDone() {
-  if (window.BOKS_RUNTIME_CONFIG?.releaseChannel === 'main') return false;
   try {
-    return localStorage.getItem(getFirstLevelOnboardingStorageEntryKey()) === 'done';
+    return localStorage.getItem(FIRST_LEVEL_ONBOARDING_STORAGE_KEY) === 'done';
   } catch (_err) {
     return false;
   }
 }
 function writeFirstLevelOnboardingDone() {
-  if (window.BOKS_RUNTIME_CONFIG?.releaseChannel === 'main') return;
   try {
-    localStorage.setItem(getFirstLevelOnboardingStorageEntryKey(), 'done');
+    localStorage.setItem(FIRST_LEVEL_ONBOARDING_STORAGE_KEY, 'done');
   } catch (_err) {
     // ignore storage errors
   }
@@ -4769,6 +4753,21 @@ window.addEventListener('orientationchange', syncViewportHeight);
 updateQuickEditorButton();
 updateStyleEditorButtons();
 
+function refreshSceneAfterAppResume() {
+  syncViewportHeight();
+  renderAvail();
+  requestAnimationFrame(() => {
+    sizeGrid();
+    renderBoard();
+    renderFn();
+    drawBackground();
+    syncSprite();
+    refreshEditorDebug();
+    syncFirstLevelOnboardingDelayForCurrentView();
+    queueFirstLevelOnboardingSync();
+  });
+}
+
 // ri-entra in fullscreen se l'utente torna sull'app (es. dopo notifica)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
@@ -4776,7 +4775,11 @@ document.addEventListener('visibilitychange', () => {
       resumePizzicatoBgm();
       requestAppFullscreen();
     }
+    refreshSceneAfterAppResume();
   } else {
     pausePizzicatoBgm();
   }
+});
+window.addEventListener('pageshow', () => {
+  refreshSceneAfterAppResume();
 });
