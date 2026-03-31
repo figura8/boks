@@ -355,7 +355,6 @@ const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
 const FILE_HANDLE_DB_NAME = 'boks-file-handles';
 const FILE_HANDLE_STORE_NAME = 'handles';
 const EDITOR_LEVELS_FILE_HANDLE_KEY = 'editor-levels-project-file';
-const FIRST_LEVEL_ONBOARDING_STORAGE_KEY = 'boks-first-level-onboarding-completed-v1';
 const CUSTOM_LEVEL_THEME = 'level1';
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
   const DEFAULT_CHARACTER_ID = 'boks_green';
@@ -579,7 +578,7 @@ function getLevelOneIntroAudio() {
   const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
   const audio = new Audio(`${LEVEL_ONE_INTRO_AUDIO_PATH}?v=${encodeURIComponent(build)}`);
   audio.preload = 'auto';
-  audio.volume = 0.32;
+  audio.volume = 0.5;
   levelOneIntroAudio = audio;
   return levelOneIntroAudio;
 }
@@ -2714,20 +2713,6 @@ function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
   queueFirstLevelOnboardingSync();
   return stepStartHintActive;
 }
-function readFirstLevelOnboardingDone() {
-  try {
-    return localStorage.getItem(FIRST_LEVEL_ONBOARDING_STORAGE_KEY) === 'done';
-  } catch (_err) {
-    return false;
-  }
-}
-function writeFirstLevelOnboardingDone() {
-  try {
-    localStorage.setItem(FIRST_LEVEL_ONBOARDING_STORAGE_KEY, 'done');
-  } catch (_err) {
-    // ignore storage errors
-  }
-}
 function renderFirstLevelOnboardingHandSvg(idSuffix = 'main') {
   return `
     <svg viewBox="0 0 128 128" aria-hidden="true">
@@ -2806,7 +2791,7 @@ function scheduleFirstLevelOnboardingDelay(delayMs = 0) {
   }, delayMs + 16);
 }
 function syncFirstLevelOnboardingDelayForCurrentView() {
-  if (readFirstLevelOnboardingDone() || editorMode || !isFirstLevelOnboardingContext()) {
+  if (editorMode || !isFirstLevelOnboardingContext()) {
     clearFirstLevelOnboardingDelay();
     return;
   }
@@ -2832,7 +2817,6 @@ function shouldShowFirstLevelOnboarding() {
     && !document.body.classList.contains('prestart')
     && !editorMode
     && isFirstLevelOnboardingContext()
-    && !readFirstLevelOnboardingDone()
     && Date.now() >= appSceneRevealReadyAt
     && (
       firstLevelOnboardingStage === 'play'
@@ -2841,15 +2825,14 @@ function shouldShowFirstLevelOnboarding() {
     );
 }
 function advanceFirstLevelOnboardingToPlay() {
-  if (editorMode || !isFirstLevelOnboardingContext() || readFirstLevelOnboardingDone()) return;
+  if (editorMode || !isFirstLevelOnboardingContext()) return;
   clearFirstLevelOnboardingDelay();
   firstLevelOnboardingStage = 'play';
   queueFirstLevelOnboardingSync();
 }
 function completeFirstLevelOnboarding() {
-  if (editorMode || !isFirstLevelOnboardingContext() || readFirstLevelOnboardingDone()) return;
+  if (editorMode || !isFirstLevelOnboardingContext()) return;
   clearFirstLevelOnboardingDelay();
-  writeFirstLevelOnboardingDone();
   firstLevelOnboardingStage = 'done';
   queueFirstLevelOnboardingSync();
 }
@@ -2933,7 +2916,7 @@ function applyTutorialStep(idx = 0) {
   const steps = getTutorialSteps();
   if (!steps.length) return false;
   tutorialStepIndex = ((idx % steps.length) + steps.length) % steps.length;
-  firstLevelOnboardingStage = tutorialStepIndex === 0 && !readFirstLevelOnboardingDone() ? 'drag' : 'idle';
+  firstLevelOnboardingStage = tutorialStepIndex === 0 ? 'drag' : 'idle';
   clearFirstLevelOnboardingDelay();
   if (tutorialStepIndex !== 0) clearAppSceneRevealWindow();
   selectedEditorLevelId = getCampaignLevelIdForIndex(tutorialStepIndex);
