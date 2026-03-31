@@ -462,6 +462,12 @@ let levelOneIntroAudio = null;
 let levelOneIntroBgmTimer = null;
 const BGM_TARGET_GAIN = 0.02;
 const LEVEL_ONE_INTRO_AUDIO_PATH = 'assets/audio/intro_level_01_V2.ogg';
+const DRAG_START_SFX_PATH = 'assets/audio/sfx/detach_v2.ogg';
+const HOVER_SLOT_SFX_PATH = 'assets/audio/sfx/hover_slot.mp3';
+const DROP_SUCCESS_SFX_PATH = 'assets/audio/sfx/drop.mp3';
+const PLAY_PRESS_SFX_PATH = 'assets/audio/sfx/play_sound_v2.mp3';
+const STEP_MOVE_SFX_PATH = 'assets/audio/sfx/step_mov_01.mp3';
+const uiSfxPlayers = new Map();
 const FX = () => {
   if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
   if (fxAc.state === 'suspended') fxAc.resume();
@@ -582,6 +588,47 @@ function getLevelOneIntroAudio() {
   levelOneIntroAudio = audio;
   return levelOneIntroAudio;
 }
+function getUiAudioSfxPlayer(path) {
+  const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
+  const cacheKey = `${path}?v=${encodeURIComponent(build)}`;
+  if (uiSfxPlayers.has(cacheKey)) return uiSfxPlayers.get(cacheKey);
+  const audio = new Audio(cacheKey);
+  audio.preload = 'auto';
+  uiSfxPlayers.set(cacheKey, audio);
+  return audio;
+}
+function playUiAudioSfx(path, volume = 0.5, { mode = 'oneshot' } = {}) {
+  try {
+    const audio = mode === 'restart'
+      ? getUiAudioSfxPlayer(path)
+      : new Audio(getUiAudioSfxPlayer(path).src);
+    audio.volume = volume;
+    if (mode === 'restart') {
+      audio.pause();
+      try {
+        audio.currentTime = 0;
+      } catch (_err) {
+        // ignore seek issues
+      }
+    }
+    const playAttempt = audio.play();
+    if (playAttempt?.catch) playAttempt.catch(() => {});
+  } catch (_err) {
+    // ignore ui audio failures
+  }
+}
+function playBlockDragStartSfx() {
+  playUiAudioSfx(DRAG_START_SFX_PATH, 0.42);
+}
+function playBlockHoverSlotSfx() {
+  playUiAudioSfx(HOVER_SLOT_SFX_PATH, 0.22);
+}
+function playBlockDropSuccessSfx() {
+  playUiAudioSfx(DROP_SUCCESS_SFX_PATH, 0.48);
+}
+function playStepSfx() {
+  playUiAudioSfx(STEP_MOVE_SFX_PATH, 0.16, { mode: 'restart' });
+}
 function stopLevelOneIntro({ reset = true } = {}) {
   clearLevelOneIntroBgmTimer();
   if (!levelOneIntroAudio) return;
@@ -656,44 +703,7 @@ function playWinSfx() {
   } catch (_) {}
 }
 function playRunPressSfx() {
-  try {
-    const c = FX();
-    const t = c.currentTime;
-    const o = c.createOscillator();
-    const g = c.createGain();
-    o.type = 'square';
-    o.frequency.setValueAtTime(300, t);
-    o.frequency.exponentialRampToValueAtTime(520, t + 0.1);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.045, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-    o.connect(g);
-    g.connect(c.destination);
-    o.start(t);
-    o.stop(t + 0.14);
-  } catch (_) {}
-}
-function playStepSfx() {
-  try {
-    const c = FX();
-    const t = c.currentTime;
-    const o = c.createOscillator();
-    const g = c.createGain();
-    const lp = c.createBiquadFilter();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(185, t);
-    o.frequency.exponentialRampToValueAtTime(132, t + 0.08);
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(1100, t);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.042, t + 0.007);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(lp);
-    lp.connect(g);
-    g.connect(c.destination);
-    o.start(t);
-    o.stop(t + 0.12);
-  } catch (_) {}
+  playUiAudioSfx(PLAY_PRESS_SFX_PATH, 0.34);
 }
 function playTurnSfx(dir = 'right') {
   try {
@@ -4115,7 +4125,7 @@ function drawTrack(svg, slotH, gapH, totalH, W, mainActive, fnActive) {
 }
 
 // ═══ DRAG ═══
-let dg = {active:false, block:null, src:null, si:null, hover:null};
+let dg = {active:false, block:null, src:null, si:null, hover:null, hoverValidKey:null};
 
 function bindDrag(el, src, idx, sz) {
   el.addEventListener('touchstart',e=>{
@@ -4137,7 +4147,8 @@ function bindDrag(el, src, idx, sz) {
 function startDg(cx,cy,src,idx,sz) {
   const block = src==='avail' ? avail[idx] : src==='fn' ? fnProg[idx] : prog[idx];
   if(!block) return;
-  dg = {active:true, block, src, si:idx, hover:null};
+  dg = {active:true, block, src, si:idx, hover:null, hoverValidKey:null};
+  playBlockDragStartSfx();
   if(src==='avail') refreshAvailableBlockGlowState({ suspendForActiveDrag: true });
   const g = document.getElementById('ghost');
   g.innerHTML=''; g.appendChild(mkB(block,sz,sz));
@@ -4156,6 +4167,24 @@ function startDg(cx,cy,src,idx,sz) {
   }
 }
 
+function getDragHoverValidSlotKey(slot) {
+  if (!slot || !dg.active) return '';
+  const ti = +slot.dataset.slot;
+  const zone = slot.dataset.zone;
+  if (zone === 'main') {
+    if (!mainSlotEnabled[ti]) return '';
+    if (dg.src === 'prog' && dg.si === ti) return '';
+    return `main:${ti}`;
+  }
+  if (zone === 'fn') {
+    if (!fnSlotEnabled[ti]) return '';
+    if (dg.block?.dir === 'function') return '';
+    if (dg.src === 'fn' && dg.si === ti) return '';
+    return `fn:${ti}`;
+  }
+  return '';
+}
+
 function moveDg(cx,cy) {
   if(!dg.active) return;
   const g = document.getElementById('ghost');
@@ -4164,13 +4193,17 @@ function moveDg(cx,cy) {
   const u=document.elementFromPoint(cx,cy);
   g.style.display='block';
   const slot=u?.closest('.pslot');
+  const validHoverKey = getDragHoverValidSlotKey(slot);
   if(dg.hover&&dg.hover!==slot) dg.hover.classList.remove('over');
   if(slot){slot.classList.add('over');dg.hover=slot;} else dg.hover=null;
+  if (validHoverKey && validHoverKey !== dg.hoverValidKey) playBlockHoverSlotSfx();
+  dg.hoverValidKey = validHoverKey || null;
 }
 
 function endDg(cx,cy) {
   if(!dg.active) return;
   const hadPlacedProgramBlocks = hasAnyPlacedProgramBlock();
+  let didDropSuccessfully = false;
   document.getElementById('ghost').style.display='none';
   if(dg.hover) dg.hover.classList.remove('over');
   document.querySelectorAll('.ablock,.pblock').forEach(e=>{
@@ -4196,13 +4229,13 @@ function endDg(cx,cy) {
     if(zone === 'fn') {
       // blocchi function non possono stare nella fn zone
       if(dg.block.dir === 'function') { dg.active=false; renderAvail(); renderBoard(); renderFn(); return; }
-      if(dg.src==='avail') fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
-      else if(dg.src==='fn'&&dg.si!==ti){ const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp; }
-      else if(dg.src==='prog'){ fnProg[ti]={...dg.block}; prog[dg.si]=null; }
+      if(dg.src==='avail') { fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]}; didDropSuccessfully = true; }
+      else if(dg.src==='fn'&&dg.si!==ti){ const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp; didDropSuccessfully = true; }
+      else if(dg.src==='prog'){ fnProg[ti]={...dg.block}; prog[dg.si]=null; didDropSuccessfully = true; }
     } else {
-      if(dg.src==='avail') prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
-      else if(dg.src==='prog'&&dg.si!==ti){ const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp; }
-      else if(dg.src==='fn'){ prog[ti]={...dg.block}; fnProg[dg.si]=null; }
+      if(dg.src==='avail') { prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]}; didDropSuccessfully = true; }
+      else if(dg.src==='prog'&&dg.si!==ti){ const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp; didDropSuccessfully = true; }
+      else if(dg.src==='fn'){ prog[ti]={...dg.block}; fnProg[dg.si]=null; didDropSuccessfully = true; }
     }
     if (!hadPlacedProgramBlocks && zone === 'main' && prog[ti] && firstLevelOnboardingStage === 'drag') {
       advanceFirstLevelOnboardingToPlay();
@@ -4215,6 +4248,7 @@ function endDg(cx,cy) {
     const firstFnForwardPlaced = fnProg.some(b => (b?.dir || b?.direction) === 'forward');
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
+  if (didDropSuccessfully) playBlockDropSuccessSfx();
   dg.active=false;
   refreshAvailableBlockGlowState();
   renderAvail(); renderBoard(); renderFn();
