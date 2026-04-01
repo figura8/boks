@@ -351,6 +351,7 @@ const POOL = {
 const CUSTOM_LEVELS_STORAGE_KEY = 'boks-custom-levels';
 const EDITOR_LEVELS_STORAGE_KEY = 'boks-editor-levels-v1';
 const PROJECT_LEVELS_CACHE_KEY = 'boks-project-levels-cache-v1';
+const STYLE_PRESETS_STORAGE_KEY = 'boks-style-presets-v1';
 const EDITOR_LEVELS_FILE_PATH = './data/editor-levels.json';
 const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
 const FILE_HANDLE_DB_NAME = 'boks-file-handles';
@@ -419,6 +420,7 @@ let selectedSaveIcon = CUSTOM_ICONS[0];
 let lastEditorSolutionCount = 0;
 let selectedEditorLevelId = null;
 let draggingEditorLevelId = null;
+let stylePresets = readStylePresets();
 const NEW_EDITOR_LEVEL_ID = '__new_editor_level__';
 let playerPlaced = true;
 let goalPlaced = true;
@@ -440,6 +442,7 @@ let winBurstHideTimer = null;
 let activeWinBurstPromise = null;
 let activeWinFeedbackAt = 0;
 let scheduledWinFeedbackTimer = null;
+let endingCinematicPromise = null;
 let settingsOpen = false;
 document.body?.classList.add('prestart');
 document.body?.classList.toggle('debug-visible', DEBUG_TOOLS_ENABLED && debugVisible);
@@ -1217,6 +1220,115 @@ function scheduleWinFeedback(delayMs = 0) {
     triggerWinFeedbackNow();
   }, delayMs);
 }
+function ensureEndingCinematicRoot() {
+  let root = document.getElementById('endingCinematic');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'endingCinematic';
+  root.setAttribute('aria-hidden', 'true');
+  const petals = Array.from({ length: 12 }, (_, idx) => `
+    <span
+      class="ending-cinematic__petal"
+      style="--petal-angle:${idx * 31}deg;--petal-distance:${84 + ((idx % 4) * 18)}px;--petal-delay:${idx * 120}ms;"
+    ></span>
+  `).join('');
+  const sparks = Array.from({ length: 10 }, (_, idx) => `
+    <span
+      class="ending-cinematic__spark"
+      style="--spark-angle:${idx * 36}deg;--spark-distance:${96 + ((idx % 3) * 22)}px;--spark-delay:${idx * 110}ms;"
+    ></span>
+  `).join('');
+  root.innerHTML = `
+    <div class="ending-cinematic__veil"></div>
+    <span class="ending-cinematic__sun"></span>
+    <span class="ending-cinematic__ring ending-cinematic__ring--a"></span>
+    <span class="ending-cinematic__ring ending-cinematic__ring--b"></span>
+    <div class="ending-cinematic__message" aria-hidden="true">
+      <span class="ending-cinematic__thanks">Thank you for playing</span>
+      <span class="ending-cinematic__brand">
+        <span class="logo-letter logo-b">B</span><span class="logo-letter logo-o">Ö</span><span class="logo-letter logo-k">K</span><span class="logo-letter logo-s">S</span>
+      </span>
+    </div>
+    ${sparks}
+    ${petals}
+  `;
+  document.body.appendChild(root);
+  return root;
+}
+function getEndingCinematicAnchor() {
+  const goalCell = getGridCell(GOAL.x, GOAL.y);
+  if (goalCell) {
+    const rect = goalCell.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * 0.5,
+      y: rect.top + rect.height * 0.5
+    };
+  }
+  const wrap = document.getElementById('gridWrap');
+  const rect = wrap?.getBoundingClientRect();
+  if (rect) {
+    return {
+      x: rect.left + rect.width * 0.5,
+      y: rect.top + rect.height * 0.42
+    };
+  }
+  return {
+    x: window.innerWidth * 0.5,
+    y: window.innerHeight * 0.4
+  };
+}
+function prepareEndingCinematicScene() {
+  const anchorCell = getGridCell(GOAL.x, GOAL.y);
+  const anchorX = Number(anchorCell?.dataset?.cx ?? GOAL.x ?? 0);
+  const anchorY = Number(anchorCell?.dataset?.cy ?? GOAL.y ?? 0);
+  document.querySelectorAll('.cell').forEach(cell => {
+    const cx = Number(cell.dataset.cx || 0);
+    const cy = Number(cell.dataset.cy || 0);
+    const distance = Math.abs(cx - anchorX) + Math.abs(cy - anchorY);
+    cell.style.setProperty('--ending-delay', `${distance * 120}ms`);
+  });
+  document.querySelectorAll('#blocksRow .ablock').forEach((block, idx) => {
+    block.style.setProperty('--ending-delay', `${220 + (idx * 70)}ms`);
+  });
+}
+function clearEndingCinematicScene() {
+  document.body.classList.remove('ending-cinematic-active');
+  document.querySelectorAll('.cell').forEach(cell => cell.style.removeProperty('--ending-delay'));
+  document.querySelectorAll('#blocksRow .ablock').forEach(block => block.style.removeProperty('--ending-delay'));
+}
+async function playEndingCinematic({ preview = false } = {}) {
+  if (endingCinematicPromise) return endingCinematicPromise;
+  const root = ensureEndingCinematicRoot();
+  const anchor = getEndingCinematicAnchor();
+  root.style.setProperty('--ending-x', `${Math.round(anchor.x)}px`);
+  root.style.setProperty('--ending-y', `${Math.round(anchor.y)}px`);
+  prepareEndingCinematicScene();
+  endingCinematicPromise = (async () => {
+    document.body.classList.add('ending-cinematic-active');
+    root.classList.remove('show');
+    void root.offsetWidth;
+    root.classList.add('show');
+    await triggerWinFeedbackNow();
+    await sleep(5200);
+    root.classList.remove('show');
+    await sleep(260);
+    clearEndingCinematicScene();
+    if (preview) toast('Ending preview finished');
+  })().finally(() => {
+    endingCinematicPromise = null;
+  });
+  return endingCinematicPromise;
+}
+async function previewEndingCinematic() {
+  if (document.body.classList.contains('prestart')) return;
+  if (running || animating) {
+    toast('Wait for the move to finish');
+    return;
+  }
+  closeSettingsPanel();
+  requestAppFullscreen();
+  await playEndingCinematic({ preview: true });
+}
 
 // ═══ CLIP PATHS ═══
 const clip = dir =>
@@ -1752,9 +1864,43 @@ function getCharacterIds() {
   return ids;
 }
 
+function canUseCharacterInLightweightMode(characterId) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  if (!manifest?.states || typeof manifest.states !== 'object') return false;
+  return Object.values(manifest.states).every(state => (
+    !!state?.svgSrc
+    || !!state?.svgMarkup
+    || !!state?.htmlMarkup
+    || !!state?.src
+  ));
+}
+
+function hasRenderableCharacterState(characterId, stateKey) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  const state = manifest?.states?.[stateKey];
+  return !!state && (
+    !!state.svgSrc
+    || !!state.svgMarkup
+    || !!state.htmlMarkup
+    || !!state.src
+  );
+}
+
+function isCharacterEditorApproved(characterId) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  if (!manifest?.editorApproved) return false;
+  return ['right', 'left', 'up', 'down'].every(direction => (
+    hasRenderableCharacterState(resolvedId, `idle:${direction}`)
+  ));
+}
+
 function resolveRuntimeCharacterId(characterId) {
   const resolved = resolveCharacterId(characterId);
   if (!FORCE_LIGHTWEIGHT_CHARACTER) return resolved;
+  if (canUseCharacterInLightweightMode(resolved)) return resolved;
   const ids = getCharacterIds();
   return ids.includes(LIGHTWEIGHT_CHARACTER_ID) ? LIGHTWEIGHT_CHARACTER_ID : resolved;
 }
@@ -1797,6 +1943,7 @@ function customIconSVG(icon) {
   const icons = {
     leaf: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="M39 9C26 10 13 18 11 31c-1 7 6 10 12 8 10-2 18-14 16-30Z" fill="#71c85f" stroke="#3f8c33" stroke-width="2"/><path d="M16 32c6-4 12-10 18-18" fill="none" stroke="#3f8c33" stroke-width="2.2" stroke-linecap="round"/></svg>',
     star: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="m24 6 5.2 10.5 11.6 1.7-8.4 8.2 2 11.6L24 32.4 13.6 38l2-11.6-8.4-8.2 11.6-1.7Z" fill="#ffd34d" stroke="#c39217" stroke-width="2"/></svg>',
+    boks: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><defs><linearGradient id="editorBoksFace" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7fda68"/><stop offset="100%" stop-color="#58b44f"/></linearGradient><linearGradient id="editorBoksSide" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2f8f3a"/><stop offset="100%" stop-color="#226c30"/></linearGradient></defs><g transform="translate(4 5)"><path d="M6 7.5C6 4.462 8.462 2 11.5 2h15C29.538 2 32 4.462 32 7.5v19c0 3.038-2.462 5.5-5.5 5.5h-15C8.462 32 6 29.538 6 26.5Z" fill="url(#editorBoksFace)" stroke="#3f8c33" stroke-width="2.2"/><path d="M6 26.5v-19C6 4.462 8.462 2 11.5 2H14v30H11.5C8.462 32 6 29.538 6 26.5Z" fill="url(#editorBoksSide)" opacity="0.98"/><rect x="10.2" y="6.2" width="17.4" height="4.2" rx="2.1" fill="rgba(255,255,255,0.22)"/><ellipse cx="31.2" cy="18.8" rx="5.2" ry="5.8" fill="#fffdf7" stroke="rgba(63,140,51,0.18)" stroke-width="1.2"/><circle cx="32.6" cy="18.8" r="1.55" fill="#2c2a28"/><circle cx="33.1" cy="18.4" r="0.45" fill="#ffffff"/></g></svg>',
     turtle: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><ellipse cx="24" cy="24" rx="12" ry="10" fill="#97dd75" stroke="#58a44a" stroke-width="2"/><circle cx="37" cy="24" r="4" fill="#97dd75" stroke="#58a44a" stroke-width="2"/><circle cx="18" cy="15" r="2.2" fill="#58a44a"/><circle cx="30" cy="15" r="2.2" fill="#58a44a"/><circle cx="17" cy="34" r="2.5" fill="#58a44a"/><circle cx="31" cy="34" r="2.5" fill="#58a44a"/></svg>',
     sun: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><circle cx="24" cy="24" r="9" fill="#ffcf40" stroke="#d79a14" stroke-width="2"/><g stroke="#d79a14" stroke-width="2.5" stroke-linecap="round"><path d="M24 5v7"/><path d="M24 36v7"/><path d="M5 24h7"/><path d="M36 24h7"/><path d="m10 10 5 5"/><path d="m33 33 5 5"/><path d="m38 10-5 5"/><path d="m15 33-5 5"/></g></svg>',
     moon: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="M31 7c-8 2-14 10-14 19 0 6 3 11 8 14-9 1-18-6-18-16C7 14 16 6 27 6c1 0 3 0 4 1Z" fill="#7ea6df" stroke="#4f78b8" stroke-width="2"/></svg>',
@@ -1807,7 +1954,7 @@ function customIconSVG(icon) {
 
 function elementPaletteIcon(type) {
   if (type === 'player') {
-    return customIconSVG('turtle').replace('width="24" height="24"', 'width="38" height="38"');
+    return customIconSVG('boks').replace('width="24" height="24"', 'width="38" height="38"');
   }
   if (type === 'goal') {
     return window.BOKS_GOAL_CHARACTER?.iconMarkup?.({
@@ -1872,6 +2019,47 @@ function sanitizeLevelHints(source = {}) {
   return {
     availableBlockGlow: !!source.availableBlockGlow
   };
+}
+
+function sanitizeStylePresetName(name = '') {
+  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 32);
+}
+
+function sanitizeStylePreset(source = {}) {
+  const id = typeof source?.id === 'string' && source.id.trim()
+    ? source.id.trim()
+    : `style-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const name = sanitizeStylePresetName(source?.name || '');
+  if (!name) return null;
+  return {
+    id,
+    name,
+    baseLevel: resolveThemeLevelId(source?.baseLevel),
+    characterId: resolveCharacterId(source?.characterId),
+    themeOverrides: sanitizeThemeOverrides(source?.themeOverrides || {}),
+    levelHints: sanitizeLevelHints(source?.levelHints || {})
+  };
+}
+
+function readStylePresets() {
+  try {
+    const stored = localStorage.getItem(STYLE_PRESETS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(sanitizeStylePreset).filter(Boolean);
+  } catch (_err) {
+    return [];
+  }
+}
+
+function writeStylePresets(presets) {
+  stylePresets = presets.map(sanitizeStylePreset).filter(Boolean);
+  try {
+    localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(stylePresets));
+  } catch (_err) {
+    // ignore persistence issues
+  }
 }
 
 function getCurrentEditorThemeOverrides() {
@@ -1962,6 +2150,148 @@ function resetCurrentEditorThemeOverrides() {
   if (!setCurrentEditorThemeOverrides({})) return;
   applyLevelSceneVars();
   renderThemeEditorPanel();
+}
+
+function buildCurrentEditorStylePreset(name) {
+  return sanitizeStylePreset({
+    id: `style-${Date.now()}`,
+    name,
+    baseLevel: getCurrentEditorThemeId(),
+    characterId: getCurrentEditorCharacterId(),
+    themeOverrides: getCurrentEditorThemeOverrides(),
+    levelHints: getCurrentEditorLevelHints()
+  });
+}
+
+function applyStylePresetToCurrentEditor(presetId) {
+  const preset = stylePresets.find(entry => entry.id === presetId);
+  if (!preset) {
+    toast('Stile non trovato');
+    return false;
+  }
+
+  if (currentCustomLevel) {
+    currentCustomLevel.baseLevel = preset.baseLevel;
+    currentCustomLevel.characterId = preset.characterId;
+    currentCustomLevel.themeOverrides = sanitizeThemeOverrides(preset.themeOverrides);
+    currentCustomLevel.levelHints = sanitizeLevelHints(preset.levelHints);
+    syncCurrentEditorLevelToSessionCache();
+  } else if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    tutorialSceneLevelId = preset.baseLevel;
+    pendingNewLevelCharacterId = preset.characterId;
+    pendingNewLevelThemeOverrides = sanitizeThemeOverrides(preset.themeOverrides);
+    pendingNewLevelHints = sanitizeLevelHints(preset.levelHints);
+  } else {
+    const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+    if (!selectedLevel) {
+      toast('Seleziona prima un livello');
+      return false;
+    }
+    const draft = collectCurrentEditorLevel();
+    currentCustomLevel = normalizeCustomLevel({
+      ...selectedLevel,
+      ...draft,
+      id: selectedLevel.id,
+      number: selectedLevel.number,
+      campaignIndex: selectedLevel.campaignIndex ?? selectedLevel.baseStepIndex ?? null,
+      baseStepIndex: selectedLevel.baseStepIndex,
+      name: selectedLevel.name,
+      baseLevel: preset.baseLevel,
+      characterId: preset.characterId,
+      themeOverrides: sanitizeThemeOverrides(preset.themeOverrides),
+      levelHints: sanitizeLevelHints(preset.levelHints)
+    });
+    syncCurrentEditorLevelToSessionCache();
+  }
+
+  applyLevelSceneVars();
+  applyEditorBoardChanges();
+  renderThemeEditorPanel();
+  renderCustomLevels();
+  toast(`Stile "${preset.name}" applicato`);
+  return true;
+}
+
+function saveCurrentStylePreset() {
+  if (!LEVEL_EDITOR_ENABLED || !editorMode) return;
+  const input = document.getElementById('stylePresetNameInput');
+  const presetName = sanitizeStylePresetName(input?.value || '');
+  if (!presetName) {
+    toast('Dai un nome allo stile');
+    input?.focus();
+    return;
+  }
+  const nextPreset = buildCurrentEditorStylePreset(presetName);
+  if (!nextPreset) {
+    toast('Impossibile salvare questo stile');
+    return;
+  }
+  const existingIndex = stylePresets.findIndex(entry => entry.name.toLowerCase() === presetName.toLowerCase());
+  const nextList = [...stylePresets];
+  if (existingIndex >= 0) {
+    nextPreset.id = stylePresets[existingIndex].id;
+    nextList[existingIndex] = nextPreset;
+  } else {
+    nextList.unshift(nextPreset);
+  }
+  writeStylePresets(nextList);
+  if (input) input.value = '';
+  renderStylePresetPanel();
+  toast(existingIndex >= 0 ? 'Stile aggiornato' : 'Stile salvato');
+}
+
+function deleteStylePreset(presetId) {
+  const preset = stylePresets.find(entry => entry.id === presetId);
+  if (!preset) return;
+  writeStylePresets(stylePresets.filter(entry => entry.id !== presetId));
+  renderStylePresetPanel();
+  toast(`Stile "${preset.name}" rimosso`);
+}
+
+function renderStylePresetPanel() {
+  const panel = document.getElementById('stylePresetPanel');
+  const list = document.getElementById('stylePresetList');
+  if (!panel || !list) return;
+  if (!editorMode || !editorStylePanelOpen) {
+    list.innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = '';
+  if (!stylePresets.length) {
+    const empty = document.createElement('div');
+    empty.className = 'style-preset-empty';
+    empty.textContent = 'Salva uno stile qui e lo potrai riutilizzare su altri livelli.';
+    list.appendChild(empty);
+    return;
+  }
+
+  stylePresets.forEach(preset => {
+    const item = document.createElement('div');
+    item.className = 'style-preset-item';
+    item.innerHTML = `
+      <div class="style-preset-copy">
+        <span class="style-preset-name">${preset.name}</span>
+        <span class="style-preset-meta">${getThemeLabel(preset.baseLevel)} · ${getCharacterLabel(preset.characterId)}</span>
+      </div>
+    `;
+
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'style-preset-apply';
+    applyBtn.textContent = 'Applica';
+    applyBtn.addEventListener('click', () => applyStylePresetToCurrentEditor(preset.id));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'style-preset-delete';
+    deleteBtn.textContent = 'Elimina';
+    deleteBtn.addEventListener('click', () => deleteStylePreset(preset.id));
+
+    item.appendChild(applyBtn);
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+  });
 }
 
 async function applyCurrentStyleToSelectedLevel() {
@@ -3256,9 +3586,23 @@ function renderEditorSetupControls(palette) {
   const card = document.createElement('div');
   card.className = 'editor-setup-card';
 
+  const orientationLabels = {
+    up: 'Su',
+    right: 'Destra',
+    down: 'Giu',
+    left: 'Sinistra'
+  };
+
+  const setupHint = document.createElement('div');
+  setupHint.className = 'editor-setup-hint';
+  setupHint.innerHTML = playerPlaced
+    ? `BÖKS e pronto. Tocca una cella libera per spostarlo e scegli la direzione iniziale: <strong>${orientationLabels[ori] || 'Destra'}</strong>.`
+    : 'Seleziona <strong>BÖKS</strong> qui sopra e tocca una cella libera della griglia.';
+  card.appendChild(setupHint);
+
   const orientationTitle = document.createElement('div');
   orientationTitle.className = 'editor-setup-title';
-  orientationTitle.textContent = 'Orientamento iniziale';
+  orientationTitle.textContent = 'Direzione iniziale di BÖKS';
   card.appendChild(orientationTitle);
 
   const orientationGrid = document.createElement('div');
@@ -3284,6 +3628,7 @@ function renderEditorSetupControls(palette) {
       ori = option.id;
       setCharacterAction('idle');
       syncSprite();
+      renderElementPalette();
       refreshEditorDebug();
     });
     orientationGrid.appendChild(btn);
@@ -3292,7 +3637,7 @@ function renderEditorSetupControls(palette) {
 
   const characterTitle = document.createElement('div');
   characterTitle.className = 'editor-setup-title';
-  characterTitle.textContent = 'Personaggio test';
+  characterTitle.textContent = 'Personaggio';
   card.appendChild(characterTitle);
 
   const characterRow = document.createElement('div');
@@ -3343,15 +3688,23 @@ function renderElementPalette() {
   const tools = [
     {
       key: 'player',
-      label: 'Giocatore',
+      label: 'BÖKS',
       present: playerPlaced,
-      hint: playerPlaced ? 'Presente: sposta o tocca per rimuovere' : 'Tocca e piazza sulla griglia'
+      hint: playerPlaced
+        ? (selectedElementTool === 'player'
+          ? 'Tocca una cella libera per spostarlo'
+          : 'Seleziona per spostarlo sulla griglia')
+        : 'Seleziona e tocca una cella libera della griglia'
     },
     {
       key: 'goal',
-      label: 'Boks nero',
+      label: 'Goal',
       present: goalPlaced,
-      hint: goalPlaced ? 'Presente: sposta o tocca per rimuovere' : 'Tocca e piazza sulla griglia'
+      hint: goalPlaced
+        ? (selectedElementTool === 'goal'
+          ? 'Tocca una cella libera per spostarlo'
+          : 'Seleziona per spostarlo sulla griglia')
+        : 'Seleziona e tocca una cella libera della griglia'
     },
     {
       key: 'brick',
@@ -3367,10 +3720,13 @@ function renderElementPalette() {
     btn.type = 'button';
     btn.className = 'element-tool' + (selectedElementTool === tool.key ? ' active' : '') + (tool.present ? ' placed' : '');
     btn.dataset.tool = tool.key;
+    const status = tool.key === 'brick'
+      ? 'TOGGLE'
+      : (tool.present ? (selectedElementTool === tool.key ? 'MOVE' : 'SET') : 'PLACE');
     btn.innerHTML = `
       <span class="element-tool-icon">${elementPaletteIcon(tool.key)}</span>
       <span class="element-tool-label">${tool.label}</span>
-      <span class="element-tool-status">${tool.key === 'brick' ? 'TOGGLE' : (tool.present ? 'PRESENTE' : 'AGGIUNGI')}</span>
+      <span class="element-tool-status">${status}</span>
       <span class="element-tool-hint">${tool.hint}</span>
     `;
     btn.addEventListener('click', () => {
@@ -3412,7 +3768,9 @@ function renderThemePicker() {
 }
 
 function getCharacterOptions() {
-  return getCharacterIds().map(id => {
+  return getCharacterIds()
+    .filter(id => isCharacterEditorApproved(id))
+    .map(id => {
     const manifest = getCharacterDefs()[id] || {};
     return {
       id,
@@ -3592,12 +3950,14 @@ function renderThemeEditorPanel() {
   renderThemePicker();
   renderCharacterPicker();
   renderThemeColorControls();
+  renderStylePresetPanel();
 }
 
 function applyEditorBoardChanges() {
   initGrid();
   drawBackground();
   syncSprite();
+  if (editorMode) renderElementPalette();
   refreshEditorDebug();
 }
 
@@ -3704,15 +4064,12 @@ function setupEditorElementPlacement() {
     const isBlocked = isBlockedCell(x, y);
 
     if (selectedElementTool === 'player') {
-      if (playerPlaced) {
-        if (isPlayerCell) {
-          playerPlaced = false;
-          selectedElementTool = null;
-          applyEditorBoardChanges();
-        }
+      if (isBlocked || isGoalCell) return;
+      if (playerPlaced && isPlayerCell) {
+        selectedElementTool = null;
+        renderElementPalette();
         return;
       }
-      if (isBlocked || isGoalCell) return;
       playerPlaced = true;
       START = { x, y };
       pos = { x, y };
@@ -3722,12 +4079,10 @@ function setupEditorElementPlacement() {
     }
 
     if (selectedElementTool === 'goal') {
-      if (goalPlaced) {
-        if (isGoalCell) {
-          goalPlaced = false;
-          selectedElementTool = null;
-          applyEditorBoardChanges();
-        }
+      if (goalPlaced && isGoalCell) {
+        goalPlaced = false;
+        selectedElementTool = null;
+        applyEditorBoardChanges();
         return;
       }
       if (isBlocked || isPlayerCell) return;
@@ -3906,6 +4261,25 @@ async function saveCurrentEditorLevel() {
   return savedLevel;
 }
 
+async function reorderEditorLevels(draggedLevelId, targetLevelId) {
+  if (!draggedLevelId || !targetLevelId || draggedLevelId === targetLevelId) return false;
+  const current = readCustomLevels();
+  const from = current.findIndex(entry => entry.id === draggedLevelId);
+  const to = current.findIndex(entry => entry.id === targetLevelId);
+  if (from === -1 || to === -1) return false;
+
+  const reordered = current.map(normalizeCustomLevel);
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+
+  const persistResult = await persistEditorLevels(reordered, { promptIfMissing: true });
+  syncEditorStateAfterLevelsChange(reordered, { preferredLevelId: moved.id });
+  toast(persistResult.projectFileSaved
+    ? `Livello spostato in posizione ${to + 1}`
+    : `Livello spostato in posizione ${to + 1} solo in questa sessione`);
+  return true;
+}
+
 function renderCustomLevels() {
   const list = document.getElementById('customLevelsList');
   if (!list || !LEVEL_EDITOR_ENABLED) return;
@@ -3954,18 +4328,15 @@ function renderCustomLevels() {
       tile.classList.add('drop-target');
     });
     tile.addEventListener('dragleave', () => tile.classList.remove('drop-target'));
-    tile.addEventListener('drop', e => {
+    tile.addEventListener('drop', async e => {
       e.preventDefault();
       tile.classList.remove('drop-target');
       if (!draggingEditorLevelId || draggingEditorLevelId === normalized.id) return;
-      const current = readCustomLevels();
-      const from = current.findIndex(entry => entry.id === draggingEditorLevelId);
-      const to = current.findIndex(entry => entry.id === normalized.id);
-      if (from === -1 || to === -1) return;
-      const [moved] = current.splice(from, 1);
-      current.splice(to, 0, moved);
-      writeCustomLevels(current);
-      renderCustomLevels();
+      const draggedId = draggingEditorLevelId;
+      draggingEditorLevelId = null;
+      tile.classList.remove('dragging');
+      list.querySelectorAll('.editor-level-tile').forEach(el => el.classList.remove('drop-target', 'dragging'));
+      await reorderEditorLevels(draggedId, normalized.id);
     });
     list.appendChild(tile);
   });
@@ -4602,11 +4973,17 @@ async function run() {
   if(won) {
     if (!currentCustomLevel && currentLevel === 'level1') {
       rememberCompletedCampaignLevel();
-      const transitionAnchor = getWinBurstAnchor();
-        await sleep(260);
-        await fadeTransition(1850, async () => {
       const campaignLevels = getCampaignLevels();
-      if (campaignLevels.length) {
+      const isFinalCampaignLevel = campaignLevels.length > 0 && tutorialStepIndex >= campaignLevels.length - 1;
+      await sleep(260);
+      if (isFinalCampaignLevel) {
+        await playEndingCinematic();
+        returnToMainMenu();
+        return;
+      }
+      const transitionAnchor = getWinBurstAnchor();
+      await fadeTransition(1850, async () => {
+        if (campaignLevels.length) {
           applyCampaignLevel((tutorialStepIndex + 1) % campaignLevels.length);
         } else {
           resetPrograms();
@@ -4892,6 +5269,12 @@ document.getElementById('openVfxEditorBtn')?.addEventListener('click', openVfxTo
 document.getElementById('closeStyleEditorBtn')?.addEventListener('click', () => setEditorStylePanelOpen(false));
 document.getElementById('applyThemeStyleBtn')?.addEventListener('click', () => { void applyCurrentStyleToSelectedLevel(); });
 document.getElementById('resetThemeColorsBtn')?.addEventListener('click', resetCurrentEditorThemeOverrides);
+document.getElementById('saveStylePresetBtn')?.addEventListener('click', saveCurrentStylePreset);
+document.getElementById('stylePresetNameInput')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  saveCurrentStylePreset();
+});
 document.getElementById('exportLevelsBtn')?.addEventListener('click', exportEditorLevels);
 document.getElementById('importLevelsBtn')?.addEventListener('click', openImportLevelsPicker);
 document.getElementById('resetLevelsBtn')?.addEventListener('click', resetEditorLevels);
@@ -4972,6 +5355,7 @@ window.addEventListener('orientationchange', syncViewportHeight);
 updateQuickEditorButton();
 updateStyleEditorButtons();
 syncSettingsPanelUi();
+window.BOKS_PREVIEW_ENDING = () => previewEndingCinematic();
 
 function refreshSceneAfterAppResume() {
   syncViewportHeight();

@@ -1,5 +1,8 @@
 {
   "manifests": [
-    "assets/animations/characters/boks_green/manifest.js"
+    "assets/animations/characters/boks_green/manifest.js",
+    "assets/animations/characters/boks_city/manifest.js",
+    "assets/animations/characters/boks_yellow/manifest.js",
+    "assets/animations/characters/boks_red/manifest.js"
   ]
 }

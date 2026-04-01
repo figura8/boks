@@ -32,6 +32,7 @@
     legacyId: 'boks_black',
     label: 'Boks Green Cube',
     hint: 'Cubo verde con viste direzionali dedicate',
+    editorApproved: true,
     containerDrivenPose: false,
     defaultAction: 'idle',
     defaultDirection: 'right',
