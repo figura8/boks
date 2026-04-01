@@ -337,6 +337,7 @@ async function popGoalBubble() {
   const goalCell = document.querySelector('.goal-cell');
   if (!goalCell || goalCell.classList.contains('is-popping')) return;
   triggerGoalCanvasPop();
+  playBubblePopSfx();
   await sleep(1200);
 }
 let ori = 'right';
@@ -350,6 +351,7 @@ const POOL = {
 const CUSTOM_LEVELS_STORAGE_KEY = 'boks-custom-levels';
 const EDITOR_LEVELS_STORAGE_KEY = 'boks-editor-levels-v1';
 const PROJECT_LEVELS_CACHE_KEY = 'boks-project-levels-cache-v1';
+const STYLE_PRESETS_STORAGE_KEY = 'boks-style-presets-v1';
 const EDITOR_LEVELS_FILE_PATH = './data/editor-levels.json';
 const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
 const FILE_HANDLE_DB_NAME = 'boks-file-handles';
@@ -418,6 +420,7 @@ let selectedSaveIcon = CUSTOM_ICONS[0];
 let lastEditorSolutionCount = 0;
 let selectedEditorLevelId = null;
 let draggingEditorLevelId = null;
+let stylePresets = readStylePresets();
 const NEW_EDITOR_LEVEL_ID = '__new_editor_level__';
 let playerPlaced = true;
 let goalPlaced = true;
@@ -428,10 +431,19 @@ let pendingNewLevelCharacterId = DEFAULT_CHARACTER_ID;
 let pendingNewLevelHints = {};
 let emptyRunHintTimers = [];
 let lastEmptyRunHintAt = 0;
+let firstLevelOnboardingStage = 'idle';
+let firstLevelOnboardingFrame = null;
+let firstLevelOnboardingReadyAt = 0;
+let firstLevelOnboardingDelayTimer = null;
+let appSceneRevealReadyAt = 0;
+let appSceneRevealTimer = null;
 const WIN_BURST_ANGLES = [-108, -78, -52, -24, 8, 34, 62, 92, 122, 154, 186, 218, 250];
 let winBurstHideTimer = null;
 let activeWinBurstPromise = null;
 let activeWinFeedbackAt = 0;
+let scheduledWinFeedbackTimer = null;
+let endingCinematicPromise = null;
+let settingsOpen = false;
 document.body?.classList.add('prestart');
 document.body?.classList.toggle('debug-visible', DEBUG_TOOLS_ENABLED && debugVisible);
 if (DEBUG_TOOLS_ENABLED && animationDebugVisible) {
@@ -445,211 +457,316 @@ if (DEBUG_TOOLS_ENABLED && animationDebugVisible) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 let fxAc;
-let bgmBus;
-let bgmTicker = null;
-let bgmStarted = false;
-let bgmStep = 0;
-let bgmNextNoteTime = 0;
-let bgmSharedLowpass;
-let bgmSharedHighpass;
-const BGM_TARGET_GAIN = 0.02;
+let backgroundMusicAudio = null;
+let backgroundMusicStarted = false;
+let levelOneIntroAudio = null;
+let levelOneIntroBgmTimer = null;
+const BACKGROUND_MUSIC_VOLUME = 0.18;
+const LEVEL_ONE_INTRO_VOLUME = 0.72;
+const BACKGROUND_MUSIC_STORAGE_KEY = 'boks-bgm-enabled';
+const BACKGROUND_MUSIC_VOLUME_STORAGE_KEY = 'boks-bgm-volume';
+const SOUND_EFFECTS_STORAGE_KEY = 'boks-sfx-enabled';
+const PROGRESS_STORAGE_KEY = 'boks-progress-v1';
+const AUDIO_PATHS = Object.freeze({
+  music: {
+    gameLoop: 'assets/audio/music/game_loop_main.mp3',
+    level01Intro: 'assets/audio/music/level_01_intro_main.ogg'
+  },
+  sfx: {
+    ui: {
+      blockDetach: 'assets/audio/sfx/ui/block_detach.ogg',
+      blockDropSuccess: 'assets/audio/sfx/ui/block_drop_success.mp3',
+      slotHover: 'assets/audio/sfx/ui/slot_hover.mp3',
+      playPress: 'assets/audio/sfx/ui/play_press_main.mp3'
+    },
+    gameplay: {
+      stepMove: 'assets/audio/sfx/gameplay/step_move.mp3',
+      errorAction: 'assets/audio/sfx/gameplay/error_action.mp3',
+      bubblePop: 'assets/audio/sfx/gameplay/bubble_pop_main.ogg',
+      levelComplete: 'assets/audio/sfx/gameplay/level_complete_main.mp3'
+    }
+  }
+});
+const audioPlayers = new Map();
 const FX = () => {
   if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
   if (fxAc.state === 'suspended') fxAc.resume();
   return fxAc;
 };
-const BGM_TEMPO = 104;
-const BGM_STEP = (60 / BGM_TEMPO) / 2;
-const BGM_CHORDS = [
-  [57, 64, 69, 72], // A minor
-  [53, 60, 65, 69], // F major
-  [55, 62, 67, 71], // G major
-  [52, 59, 64, 67]  // E minor
-];
-const BGM_ARP = [0, 1, 2, 1, 3, 2, 1, 2];
-const midiFreqCache = new Map();
-const midiToFreq = midi => {
-  if (midiFreqCache.has(midi)) return midiFreqCache.get(midi);
-  const freq = 440 * Math.pow(2, (midi - 69) / 12);
-  midiFreqCache.set(midi, freq);
-  return freq;
-};
-function getBgmBus() {
-  if (bgmBus) return bgmBus;
-  const c = FX();
-  const comp = c.createDynamicsCompressor();
-  comp.threshold.value = -30;
-  comp.knee.value = 8;
-  comp.ratio.value = 3;
-  comp.attack.value = 0.006;
-  comp.release.value = 0.18;
-  bgmSharedLowpass = c.createBiquadFilter();
-  bgmSharedLowpass.type = 'lowpass';
-  bgmSharedLowpass.frequency.value = 2400;
-  bgmSharedLowpass.Q.value = 0.8;
-  bgmSharedHighpass = c.createBiquadFilter();
-  bgmSharedHighpass.type = 'highpass';
-  bgmSharedHighpass.frequency.value = 160;
-  bgmBus = c.createGain();
-  bgmBus.gain.value = 0.0001;
-  bgmBus.connect(bgmSharedLowpass);
-  bgmSharedLowpass.connect(bgmSharedHighpass);
-  bgmSharedHighpass.connect(comp);
-  comp.connect(c.destination);
-  return bgmBus;
+function getVersionedAudioPath(path) {
+  const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
+  return `${path}?v=${encodeURIComponent(build)}`;
 }
-function fadeInPizzicatoBgm(ms = 2200) {
-  const c = FX();
-  const bus = getBgmBus();
-  const t = c.currentTime;
-  const now = Math.max(0.0001, bus.gain.value);
-  bus.gain.cancelScheduledValues(t);
-  bus.gain.setValueAtTime(now, t);
-  bus.gain.exponentialRampToValueAtTime(BGM_TARGET_GAIN, t + (ms / 1000));
-}
-function playPizzicatoNote(time, midi, accent = false) {
-  const c = FX();
-  const f = midiToFreq(midi);
-
-  const osc = c.createOscillator();
-  const amp = c.createGain();
-  const peak = accent ? 0.082 : 0.048;
-  osc.type = accent ? 'triangle' : 'sine';
-  osc.frequency.setValueAtTime(f, time);
-  osc.frequency.exponentialRampToValueAtTime(f * (accent ? 0.997 : 0.992), time + 0.22);
-  amp.gain.setValueAtTime(0.0001, time);
-  amp.gain.exponentialRampToValueAtTime(peak, time + 0.01);
-  amp.gain.exponentialRampToValueAtTime(0.0001, time + (accent ? 0.24 : 0.21));
-
-  osc.connect(amp);
-  amp.connect(getBgmBus());
-
-  osc.start(time);
-  osc.stop(time + (accent ? 0.25 : 0.22));
-}
-function scheduleBgmStep(step, time) {
-  const chord = BGM_CHORDS[Math.floor(step / 8) % BGM_CHORDS.length];
-  const pos = step % 8;
-  const accent = pos === 0 || pos === 4;
-
-  playPizzicatoNote(time + 0.002, chord[BGM_ARP[pos]], accent);
-  if (accent) playPizzicatoNote(time + 0.008, chord[0] - 12, true);
-}
-function scheduleBgmLookahead() {
-  if (!bgmStarted) return;
-  const c = FX();
-  while (bgmNextNoteTime < c.currentTime + 0.36) {
-    scheduleBgmStep(bgmStep, bgmNextNoteTime);
-    bgmNextNoteTime += BGM_STEP;
-    bgmStep = (bgmStep + 1) % (BGM_CHORDS.length * 8);
+function readSoundEffectsEnabledPreference() {
+  try {
+    const stored = localStorage.getItem(SOUND_EFFECTS_STORAGE_KEY);
+    return stored == null ? true : stored !== 'false';
+  } catch (_err) {
+    return true;
   }
 }
-function startPizzicatoBgm() {
-  if (bgmStarted) return;
-  bgmStarted = true;
-  const c = FX();
-  getBgmBus();
-  bgmStep = 0;
-  bgmNextNoteTime = c.currentTime + 0.05;
-  scheduleBgmLookahead();
-  bgmTicker = setInterval(scheduleBgmLookahead, 120);
+function clampUnitVolume(value, fallback = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(1, numeric));
 }
-function pausePizzicatoBgm() {
-  if (!bgmTicker) return;
-  clearInterval(bgmTicker);
-  bgmTicker = null;
-}
-function resumePizzicatoBgm() {
-  if (!bgmStarted || bgmTicker) return;
-  const c = FX();
-  bgmNextNoteTime = c.currentTime + 0.05;
-  bgmTicker = setInterval(scheduleBgmLookahead, 120);
-  fadeInPizzicatoBgm(800);
-}
-function playLevelTransitionSfx() {
+function readBackgroundMusicVolumePreference() {
   try {
-    const c = FX();
-    const notes = [740, 988, 1319];
-    notes.forEach((f, i) => {
-      const o = c.createOscillator();
-      const g = c.createGain();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(f, c.currentTime + i * 0.09);
-      g.gain.setValueAtTime(0.0001, c.currentTime + i * 0.09);
-      g.gain.exponentialRampToValueAtTime(0.08, c.currentTime + i * 0.09 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + i * 0.09 + 0.22);
-      o.connect(g); g.connect(c.destination);
-      o.start(c.currentTime + i * 0.09);
-      o.stop(c.currentTime + i * 0.09 + 0.25);
-    });
-  } catch (_) {}
+    const storedVolume = localStorage.getItem(BACKGROUND_MUSIC_VOLUME_STORAGE_KEY);
+    if (storedVolume != null && storedVolume !== '') return clampUnitVolume(storedVolume, 1);
+    const storedEnabled = localStorage.getItem(BACKGROUND_MUSIC_STORAGE_KEY);
+    if (storedEnabled == null) return 1;
+    return storedEnabled === 'false' ? 0 : 1;
+  } catch (_err) {
+    return 1;
+  }
 }
-function playWinSfx() {
-  try {
-    const c = FX();
-    const t = c.currentTime;
-    const notes = [784, 988, 1175, 1568];
-    notes.forEach((f, i) => {
-      const o = c.createOscillator();
-      const g = c.createGain();
-      const lp = c.createBiquadFilter();
-      o.type = i % 2 === 0 ? 'triangle' : 'square';
-      o.frequency.setValueAtTime(f, t + i * 0.07);
-      o.frequency.exponentialRampToValueAtTime(f * 1.012, t + i * 0.07 + 0.12);
-      lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(2200 + i * 180, t + i * 0.07);
-      g.gain.setValueAtTime(0.0001, t + i * 0.07);
-      g.gain.exponentialRampToValueAtTime(0.06, t + i * 0.07 + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.07 + 0.24);
-      o.connect(lp);
-      lp.connect(g);
-      g.connect(c.destination);
-      o.start(t + i * 0.07);
-      o.stop(t + i * 0.07 + 0.26);
-    });
-  } catch (_) {}
+function sanitizeProgressState(raw) {
+  const currentCampaignStep = Number.isFinite(raw?.currentCampaignStep)
+    ? Math.max(0, Math.floor(raw.currentCampaignStep))
+    : 0;
+  const completedLevelIds = Array.isArray(raw?.completedLevelIds)
+    ? [...new Set(raw.completedLevelIds.filter(id => typeof id === 'string' && id.trim()))]
+    : [];
+  const seenJourneyHints = Array.isArray(raw?.seenJourneyHints)
+    ? [...new Set(raw.seenJourneyHints.filter(id => typeof id === 'string' && id.trim()))]
+    : [];
+  return {
+    currentCampaignStep,
+    completedLevelIds,
+    seenJourneyHints
+  };
 }
-function playRunPressSfx() {
+function readProgressState() {
   try {
-    const c = FX();
-    const t = c.currentTime;
-    const o = c.createOscillator();
-    const g = c.createGain();
-    o.type = 'square';
-    o.frequency.setValueAtTime(300, t);
-    o.frequency.exponentialRampToValueAtTime(520, t + 0.1);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.045, t + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-    o.connect(g);
-    g.connect(c.destination);
-    o.start(t);
-    o.stop(t + 0.14);
-  } catch (_) {}
+    const stored = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (!stored) return sanitizeProgressState({});
+    return sanitizeProgressState(JSON.parse(stored));
+  } catch (_err) {
+    return sanitizeProgressState({});
+  }
+}
+let backgroundMusicVolume = readBackgroundMusicVolumePreference();
+let backgroundMusicEnabled = backgroundMusicVolume > 0.001;
+let soundEffectsEnabled = readSoundEffectsEnabledPreference();
+let progressState = readProgressState();
+function getBackgroundMusicLoopVolume() {
+  return BACKGROUND_MUSIC_VOLUME * backgroundMusicVolume;
+}
+function getLevelOneIntroMixVolume() {
+  return LEVEL_ONE_INTRO_VOLUME * backgroundMusicVolume;
+}
+function setProgressState(nextState, { persist = true } = {}) {
+  progressState = sanitizeProgressState(nextState);
+  if (!persist) return;
+  try {
+    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progressState));
+  } catch (_err) {
+    // ignore persistence issues
+  }
+}
+function rememberCurrentCampaignStep(stepIndex = tutorialStepIndex) {
+  if (currentCustomLevel || currentLevel !== 'level1') return;
+  setProgressState({
+    ...progressState,
+    currentCampaignStep: Math.max(0, Math.floor(stepIndex || 0))
+  });
+}
+function rememberCompletedCampaignLevel(levelId = getCampaignLevelIdForIndex(tutorialStepIndex)) {
+  if (!levelId) return;
+  if (progressState.completedLevelIds.includes(levelId)) return;
+  setProgressState({
+    ...progressState,
+    completedLevelIds: [...progressState.completedLevelIds, levelId]
+  });
+}
+function resetJourneyProgressState() {
+  setProgressState({
+    currentCampaignStep: 0,
+    completedLevelIds: [],
+    seenJourneyHints: []
+  });
+}
+function applyBackgroundMusicVolumeToActiveAudio() {
+  if (backgroundMusicAudio) {
+    backgroundMusicAudio.muted = !backgroundMusicEnabled;
+    backgroundMusicAudio.volume = getBackgroundMusicLoopVolume();
+  }
+  if (levelOneIntroAudio) {
+    levelOneIntroAudio.muted = !backgroundMusicEnabled;
+    levelOneIntroAudio.volume = getLevelOneIntroMixVolume();
+  }
+}
+function setBackgroundMusicVolume(nextVolume, { persist = true } = {}) {
+  backgroundMusicVolume = clampUnitVolume(nextVolume, backgroundMusicVolume);
+  backgroundMusicEnabled = backgroundMusicVolume > 0.001;
+  if (persist) {
+    try {
+      localStorage.setItem(BACKGROUND_MUSIC_VOLUME_STORAGE_KEY, String(backgroundMusicVolume));
+      localStorage.setItem(BACKGROUND_MUSIC_STORAGE_KEY, backgroundMusicEnabled ? 'true' : 'false');
+    } catch (_err) {
+      // ignore persistence issues
+    }
+  }
+  applyBackgroundMusicVolumeToActiveAudio();
+  if (!backgroundMusicEnabled) {
+    stopLevelOneIntro();
+    pauseBackgroundMusicLoop();
+  } else if (gameStarted) {
+    startBackgroundMusicLoop();
+  }
+  syncSettingsPanelUi();
+}
+function setSoundEffectsEnabled(enabled, { persist = true } = {}) {
+  soundEffectsEnabled = !!enabled;
+  if (persist) {
+    try {
+      localStorage.setItem(SOUND_EFFECTS_STORAGE_KEY, soundEffectsEnabled ? 'true' : 'false');
+    } catch (_err) {
+      // ignore persistence issues
+    }
+  }
+  syncSettingsPanelUi();
+}
+function getBackgroundMusicAudio() {
+  if (backgroundMusicAudio) return backgroundMusicAudio;
+  const audio = new Audio(getVersionedAudioPath(AUDIO_PATHS.music.gameLoop));
+  audio.preload = 'auto';
+  audio.loop = true;
+  audio.muted = !backgroundMusicEnabled;
+  audio.volume = getBackgroundMusicLoopVolume();
+  backgroundMusicAudio = audio;
+  return backgroundMusicAudio;
+}
+function startBackgroundMusicLoop() {
+  if (!backgroundMusicEnabled) return;
+  const audio = getBackgroundMusicAudio();
+  audio.volume = getBackgroundMusicLoopVolume();
+  backgroundMusicStarted = true;
+  if (!audio.paused) return;
+  const playAttempt = audio.play();
+  if (playAttempt?.catch) playAttempt.catch(() => {});
+}
+function pauseBackgroundMusicLoop() {
+  if (!backgroundMusicAudio) return;
+  try {
+    backgroundMusicAudio.pause();
+  } catch (_err) {
+    // ignore media pause issues
+  }
+}
+function clearLevelOneIntroBgmTimer() {
+  if (!levelOneIntroBgmTimer) return;
+  clearTimeout(levelOneIntroBgmTimer);
+  levelOneIntroBgmTimer = null;
+}
+function getLevelOneIntroAudio() {
+  if (levelOneIntroAudio) return levelOneIntroAudio;
+  const audio = new Audio(getVersionedAudioPath(AUDIO_PATHS.music.level01Intro));
+  audio.preload = 'auto';
+  audio.muted = !backgroundMusicEnabled;
+  audio.volume = getLevelOneIntroMixVolume();
+  levelOneIntroAudio = audio;
+  return levelOneIntroAudio;
+}
+function getUiAudioSfxPlayer(path) {
+  const cacheKey = getVersionedAudioPath(path);
+  if (audioPlayers.has(cacheKey)) return audioPlayers.get(cacheKey);
+  const audio = new Audio(cacheKey);
+  audio.preload = 'auto';
+  audioPlayers.set(cacheKey, audio);
+  return audio;
+}
+function playUiAudioSfx(path, volume = 0.5, { mode = 'oneshot' } = {}) {
+  if (!soundEffectsEnabled) return;
+  try {
+    const audio = mode === 'restart'
+      ? getUiAudioSfxPlayer(path)
+      : new Audio(getUiAudioSfxPlayer(path).src);
+    audio.volume = volume;
+    if (mode === 'restart') {
+      audio.pause();
+      try {
+        audio.currentTime = 0;
+      } catch (_err) {
+        // ignore seek issues
+      }
+    }
+    const playAttempt = audio.play();
+    if (playAttempt?.catch) playAttempt.catch(() => {});
+  } catch (_err) {
+    // ignore ui audio failures
+  }
+}
+function playBlockDragStartSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDetach, 0.42);
+}
+function playBlockHoverSlotSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.ui.slotHover, 0.22);
+}
+function playBlockDropSuccessSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDropSuccess, 0.48);
 }
 function playStepSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.stepMove, 0.16, { mode: 'restart' });
+}
+function playErrorSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.errorAction, 0.3);
+}
+function playBubblePopSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.bubblePop, 0.26);
+}
+function playLevelCompleteSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.levelComplete, 0.5);
+}
+function stopLevelOneIntro({ reset = true } = {}) {
+  clearLevelOneIntroBgmTimer();
+  if (!levelOneIntroAudio) return;
   try {
-    const c = FX();
-    const t = c.currentTime;
-    const o = c.createOscillator();
-    const g = c.createGain();
-    const lp = c.createBiquadFilter();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(185, t);
-    o.frequency.exponentialRampToValueAtTime(132, t + 0.08);
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(1100, t);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.042, t + 0.007);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    o.connect(lp);
-    lp.connect(g);
-    g.connect(c.destination);
-    o.start(t);
-    o.stop(t + 0.12);
-  } catch (_) {}
+    levelOneIntroAudio.onended = null;
+    levelOneIntroAudio.pause();
+    if (reset) levelOneIntroAudio.currentTime = 0;
+  } catch (_err) {
+    // ignore media stop errors
+  }
+}
+function playLevelOneIntroAndQueueBgm() {
+  if (!backgroundMusicEnabled) {
+    stopLevelOneIntro();
+    clearLevelOneIntroBgmTimer();
+    return;
+  }
+  stopLevelOneIntro();
+  const audio = getLevelOneIntroAudio();
+  clearLevelOneIntroBgmTimer();
+  try {
+    audio.currentTime = 0;
+  } catch (_err) {
+    // ignore seek issues
+  }
+  const playAttempt = audio.play();
+  if (playAttempt?.catch) {
+    playAttempt.catch(() => {});
+  }
+  const startLoop = () => {
+    clearLevelOneIntroBgmTimer();
+    startBackgroundMusicLoop();
+  };
+  audio.onended = startLoop;
+  levelOneIntroBgmTimer = setTimeout(startLoop, 3200);
+}
+function resumeBackgroundMusicLoop() {
+  if (!backgroundMusicEnabled || !backgroundMusicStarted) return;
+  const audio = getBackgroundMusicAudio();
+  audio.volume = getBackgroundMusicLoopVolume();
+  const playAttempt = audio.play();
+  if (playAttempt?.catch) playAttempt.catch(() => {});
+}
+function playRunPressSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.ui.playPress, 0.34);
 }
 function playTurnSfx(dir = 'right') {
+  if (!soundEffectsEnabled) return;
   try {
     const c = FX();
     const t = c.currentTime;
@@ -869,7 +986,6 @@ function updateOrientationGuard() {
   document.body.classList.toggle('landscape-block', !portrait && mobileLike);
 }
 async function requestAppFullscreen() {
-  startPizzicatoBgm();
   // Evita lo snap automatico a schermo intero al primo click.
   // Se in futuro vuoi reintrodurlo, legalo a un'azione esplicita dell'utente.
   // blocca orientamento portrait su Android
@@ -892,13 +1008,118 @@ function toast(msg, cls='', aboveEl=null) {
   }
   clearTimeout(el._t); if(msg) el._t = setTimeout(() => el.className='', 3000);
 }
+function syncSettingsPanelUi() {
+  const header = document.getElementById('header');
+  const settingsModal = document.getElementById('settingsModal');
+  const sfxBtn = document.getElementById('settingsSfxBtn');
+  const sfxSwitch = document.getElementById('settingsSfxSwitch');
+  const musicSlider = document.getElementById('settingsMusicVolume');
+  const musicValue = document.getElementById('settingsMusicVolumeValue');
+  const creditsMeta = document.getElementById('settingsBuildMeta');
+  const creditsBtn = document.getElementById('settingsCreditsBtn');
+  const creditsPanel = document.getElementById('settingsCreditsPanel');
+  const creditsPill = creditsBtn?.querySelector('.settings-pill');
+  const resetBtn = document.getElementById('settingsResetProgressBtn');
+  const resetPanel = document.getElementById('settingsResetProgressPanel');
+  const resetPill = resetBtn?.querySelector('.settings-pill');
+  if (settingsModal) {
+    settingsModal.classList.toggle('show', settingsOpen);
+    settingsModal.setAttribute('aria-hidden', settingsOpen ? 'false' : 'true');
+  }
+  if (header) {
+    const headerLabel = settingsOpen ? 'Close settings' : 'Open settings';
+    header.setAttribute('aria-label', headerLabel);
+    header.setAttribute('title', headerLabel);
+  }
+  if (sfxBtn) sfxBtn.setAttribute('aria-pressed', soundEffectsEnabled ? 'true' : 'false');
+  if (sfxSwitch) sfxSwitch.classList.toggle('is-on', soundEffectsEnabled);
+  if (musicSlider) musicSlider.value = String(Math.round(backgroundMusicVolume * 100));
+  if (musicValue) musicValue.textContent = `${Math.round(backgroundMusicVolume * 100)}%`;
+  if (creditsBtn && creditsPanel) {
+    const expanded = !creditsPanel.hidden;
+    creditsBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (creditsPill) creditsPill.textContent = expanded ? 'Close' : 'Open';
+  }
+  if (resetBtn && resetPanel) {
+    const expanded = !resetPanel.hidden;
+    resetBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    if (resetPill) resetPill.textContent = expanded ? 'Close' : 'Open';
+  }
+  if (creditsMeta) {
+    const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
+    const channel = window.BOKS_RUNTIME_CONFIG?.releaseChannel || document.body?.dataset?.releaseChannel || 'main';
+    creditsMeta.textContent = `Build ${build}\nChannel ${channel}`;
+  }
+}
+function closeSettingsPanel() {
+  if (!settingsOpen) return;
+  document.getElementById('settingsCreditsPanel')?.setAttribute('hidden', '');
+  document.getElementById('settingsResetProgressPanel')?.setAttribute('hidden', '');
+  settingsOpen = false;
+  syncSettingsPanelUi();
+}
+function openSettingsPanel() {
+  if (document.body.classList.contains('prestart')) return;
+  if (running || animating) {
+    toast('Wait for the move to finish');
+    return;
+  }
+  closeSaveLevelModal();
+  settingsOpen = true;
+  syncSettingsPanelUi();
+}
+function toggleSettingsPanel() {
+  if (settingsOpen) {
+    closeSettingsPanel();
+    return;
+  }
+  openSettingsPanel();
+}
+function toggleSettingsCredits() {
+  const panel = document.getElementById('settingsCreditsPanel');
+  const resetPanel = document.getElementById('settingsResetProgressPanel');
+  if (!panel) return;
+  const shouldOpen = panel.hidden;
+  panel.hidden = !shouldOpen;
+  if (resetPanel) resetPanel.hidden = true;
+  syncSettingsPanelUi();
+}
+function toggleResetProgressPanel() {
+  const panel = document.getElementById('settingsResetProgressPanel');
+  const creditsPanel = document.getElementById('settingsCreditsPanel');
+  if (!panel) return;
+  const shouldOpen = panel.hidden;
+  panel.hidden = !shouldOpen;
+  if (creditsPanel) creditsPanel.hidden = true;
+  syncSettingsPanelUi();
+}
+function openLanguageComingSoonNotice() {
+  toast('More languages coming soon');
+}
+function resetJourneyProgress() {
+  resetJourneyProgressState();
+  closeSettingsPanel();
+  closeSaveLevelModal();
+  if (editorMode) setEditorMode(false);
+  currentCustomLevel = null;
+  setLevel('level1');
+  applyCampaignLevel(0);
+  if (!document.body.classList.contains('prestart')) {
+    returnToMainMenu();
+  }
+  updateDebugBadge();
+  toast('Journey progress erased');
+}
+function goToMainMenuFromSettings() {
+  closeSettingsPanel();
+  returnToMainMenu();
+}
 function consumeHardRefreshNotice() {
   try {
     const currentBuild = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || '';
     const pendingBuild = window.sessionStorage?.getItem('boks-hard-refresh-notice') || '';
     if (!pendingBuild || pendingBuild !== currentBuild) return;
     window.sessionStorage?.removeItem('boks-hard-refresh-notice');
-    setTimeout(() => toast(`Hard refresh done · build ${currentBuild}`), 180);
   } catch (_err) {
     // ignore storage errors
   }
@@ -974,17 +1195,139 @@ async function playWinBurst() {
   }, 140);
   await sleep(220);
 }
+function clearScheduledWinFeedback() {
+  if (!scheduledWinFeedbackTimer) return;
+  clearTimeout(scheduledWinFeedbackTimer);
+  scheduledWinFeedbackTimer = null;
+}
 function triggerWinFeedbackNow() {
+  clearScheduledWinFeedback();
   const now = window.performance?.now ? window.performance.now() : Date.now();
   if (activeWinBurstPromise && (now - activeWinFeedbackAt) < 1400) {
     return activeWinBurstPromise;
   }
   activeWinFeedbackAt = now;
-  playWinSfx();
+  playLevelCompleteSfx();
   activeWinBurstPromise = playWinBurst().finally(() => {
     activeWinBurstPromise = null;
   });
   return activeWinBurstPromise;
+}
+function scheduleWinFeedback(delayMs = 0) {
+  if (scheduledWinFeedbackTimer || activeWinBurstPromise) return;
+  scheduledWinFeedbackTimer = setTimeout(() => {
+    scheduledWinFeedbackTimer = null;
+    triggerWinFeedbackNow();
+  }, delayMs);
+}
+function ensureEndingCinematicRoot() {
+  let root = document.getElementById('endingCinematic');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'endingCinematic';
+  root.setAttribute('aria-hidden', 'true');
+  const petals = Array.from({ length: 12 }, (_, idx) => `
+    <span
+      class="ending-cinematic__petal"
+      style="--petal-angle:${idx * 31}deg;--petal-distance:${84 + ((idx % 4) * 18)}px;--petal-delay:${idx * 120}ms;"
+    ></span>
+  `).join('');
+  const sparks = Array.from({ length: 10 }, (_, idx) => `
+    <span
+      class="ending-cinematic__spark"
+      style="--spark-angle:${idx * 36}deg;--spark-distance:${96 + ((idx % 3) * 22)}px;--spark-delay:${idx * 110}ms;"
+    ></span>
+  `).join('');
+  root.innerHTML = `
+    <div class="ending-cinematic__veil"></div>
+    <span class="ending-cinematic__sun"></span>
+    <span class="ending-cinematic__ring ending-cinematic__ring--a"></span>
+    <span class="ending-cinematic__ring ending-cinematic__ring--b"></span>
+    <div class="ending-cinematic__message" aria-hidden="true">
+      <span class="ending-cinematic__thanks">Thank you for playing</span>
+      <span class="ending-cinematic__brand">
+        <span class="logo-letter logo-b">B</span><span class="logo-letter logo-o">Ö</span><span class="logo-letter logo-k">K</span><span class="logo-letter logo-s">S</span>
+      </span>
+    </div>
+    ${sparks}
+    ${petals}
+  `;
+  document.body.appendChild(root);
+  return root;
+}
+function getEndingCinematicAnchor() {
+  const goalCell = getGridCell(GOAL.x, GOAL.y);
+  if (goalCell) {
+    const rect = goalCell.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * 0.5,
+      y: rect.top + rect.height * 0.5
+    };
+  }
+  const wrap = document.getElementById('gridWrap');
+  const rect = wrap?.getBoundingClientRect();
+  if (rect) {
+    return {
+      x: rect.left + rect.width * 0.5,
+      y: rect.top + rect.height * 0.42
+    };
+  }
+  return {
+    x: window.innerWidth * 0.5,
+    y: window.innerHeight * 0.4
+  };
+}
+function prepareEndingCinematicScene() {
+  const anchorCell = getGridCell(GOAL.x, GOAL.y);
+  const anchorX = Number(anchorCell?.dataset?.cx ?? GOAL.x ?? 0);
+  const anchorY = Number(anchorCell?.dataset?.cy ?? GOAL.y ?? 0);
+  document.querySelectorAll('.cell').forEach(cell => {
+    const cx = Number(cell.dataset.cx || 0);
+    const cy = Number(cell.dataset.cy || 0);
+    const distance = Math.abs(cx - anchorX) + Math.abs(cy - anchorY);
+    cell.style.setProperty('--ending-delay', `${distance * 120}ms`);
+  });
+  document.querySelectorAll('#blocksRow .ablock').forEach((block, idx) => {
+    block.style.setProperty('--ending-delay', `${220 + (idx * 70)}ms`);
+  });
+}
+function clearEndingCinematicScene() {
+  document.body.classList.remove('ending-cinematic-active');
+  document.querySelectorAll('.cell').forEach(cell => cell.style.removeProperty('--ending-delay'));
+  document.querySelectorAll('#blocksRow .ablock').forEach(block => block.style.removeProperty('--ending-delay'));
+}
+async function playEndingCinematic({ preview = false } = {}) {
+  if (endingCinematicPromise) return endingCinematicPromise;
+  const root = ensureEndingCinematicRoot();
+  const anchor = getEndingCinematicAnchor();
+  root.style.setProperty('--ending-x', `${Math.round(anchor.x)}px`);
+  root.style.setProperty('--ending-y', `${Math.round(anchor.y)}px`);
+  prepareEndingCinematicScene();
+  endingCinematicPromise = (async () => {
+    document.body.classList.add('ending-cinematic-active');
+    root.classList.remove('show');
+    void root.offsetWidth;
+    root.classList.add('show');
+    await triggerWinFeedbackNow();
+    await sleep(5200);
+    root.classList.remove('show');
+    await sleep(260);
+    clearEndingCinematicScene();
+    if (preview) toast('Ending preview finished');
+  })().finally(() => {
+    endingCinematicPromise = null;
+  });
+  return endingCinematicPromise;
+}
+async function previewEndingCinematic() {
+  if (document.body.classList.contains('prestart')) return;
+  if (running || animating) {
+    toast('Wait for the move to finish');
+    return;
+  }
+  closeSettingsPanel();
+  requestAppFullscreen();
+  await playEndingCinematic({ preview: true });
 }
 
 // ═══ CLIP PATHS ═══
@@ -1405,6 +1748,7 @@ async function animTo(tx, ty) {
     {duration:MOVE_MS, easing:'cubic-bezier(.2,.9,.2,1)', fill:'forwards'}
   );
   if (enteringGoal) {
+    scheduleWinFeedback(1000);
     const popDelay = Math.max(20, Math.round(MOVE_MS * 0.2));
     popTimer = setTimeout(() => {
       popPromise = popGoalBubble();
@@ -1520,9 +1864,43 @@ function getCharacterIds() {
   return ids;
 }
 
+function canUseCharacterInLightweightMode(characterId) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  if (!manifest?.states || typeof manifest.states !== 'object') return false;
+  return Object.values(manifest.states).every(state => (
+    !!state?.svgSrc
+    || !!state?.svgMarkup
+    || !!state?.htmlMarkup
+    || !!state?.src
+  ));
+}
+
+function hasRenderableCharacterState(characterId, stateKey) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  const state = manifest?.states?.[stateKey];
+  return !!state && (
+    !!state.svgSrc
+    || !!state.svgMarkup
+    || !!state.htmlMarkup
+    || !!state.src
+  );
+}
+
+function isCharacterEditorApproved(characterId) {
+  const resolvedId = resolveCharacterId(characterId);
+  const manifest = getCharacterDefs()[resolvedId];
+  if (!manifest?.editorApproved) return false;
+  return ['right', 'left', 'up', 'down'].every(direction => (
+    hasRenderableCharacterState(resolvedId, `idle:${direction}`)
+  ));
+}
+
 function resolveRuntimeCharacterId(characterId) {
   const resolved = resolveCharacterId(characterId);
   if (!FORCE_LIGHTWEIGHT_CHARACTER) return resolved;
+  if (canUseCharacterInLightweightMode(resolved)) return resolved;
   const ids = getCharacterIds();
   return ids.includes(LIGHTWEIGHT_CHARACTER_ID) ? LIGHTWEIGHT_CHARACTER_ID : resolved;
 }
@@ -1565,6 +1943,7 @@ function customIconSVG(icon) {
   const icons = {
     leaf: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="M39 9C26 10 13 18 11 31c-1 7 6 10 12 8 10-2 18-14 16-30Z" fill="#71c85f" stroke="#3f8c33" stroke-width="2"/><path d="M16 32c6-4 12-10 18-18" fill="none" stroke="#3f8c33" stroke-width="2.2" stroke-linecap="round"/></svg>',
     star: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="m24 6 5.2 10.5 11.6 1.7-8.4 8.2 2 11.6L24 32.4 13.6 38l2-11.6-8.4-8.2 11.6-1.7Z" fill="#ffd34d" stroke="#c39217" stroke-width="2"/></svg>',
+    boks: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><defs><linearGradient id="editorBoksFace" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7fda68"/><stop offset="100%" stop-color="#58b44f"/></linearGradient><linearGradient id="editorBoksSide" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2f8f3a"/><stop offset="100%" stop-color="#226c30"/></linearGradient></defs><g transform="translate(4 5)"><path d="M6 7.5C6 4.462 8.462 2 11.5 2h15C29.538 2 32 4.462 32 7.5v19c0 3.038-2.462 5.5-5.5 5.5h-15C8.462 32 6 29.538 6 26.5Z" fill="url(#editorBoksFace)" stroke="#3f8c33" stroke-width="2.2"/><path d="M6 26.5v-19C6 4.462 8.462 2 11.5 2H14v30H11.5C8.462 32 6 29.538 6 26.5Z" fill="url(#editorBoksSide)" opacity="0.98"/><rect x="10.2" y="6.2" width="17.4" height="4.2" rx="2.1" fill="rgba(255,255,255,0.22)"/><ellipse cx="31.2" cy="18.8" rx="5.2" ry="5.8" fill="#fffdf7" stroke="rgba(63,140,51,0.18)" stroke-width="1.2"/><circle cx="32.6" cy="18.8" r="1.55" fill="#2c2a28"/><circle cx="33.1" cy="18.4" r="0.45" fill="#ffffff"/></g></svg>',
     turtle: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><ellipse cx="24" cy="24" rx="12" ry="10" fill="#97dd75" stroke="#58a44a" stroke-width="2"/><circle cx="37" cy="24" r="4" fill="#97dd75" stroke="#58a44a" stroke-width="2"/><circle cx="18" cy="15" r="2.2" fill="#58a44a"/><circle cx="30" cy="15" r="2.2" fill="#58a44a"/><circle cx="17" cy="34" r="2.5" fill="#58a44a"/><circle cx="31" cy="34" r="2.5" fill="#58a44a"/></svg>',
     sun: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><circle cx="24" cy="24" r="9" fill="#ffcf40" stroke="#d79a14" stroke-width="2"/><g stroke="#d79a14" stroke-width="2.5" stroke-linecap="round"><path d="M24 5v7"/><path d="M24 36v7"/><path d="M5 24h7"/><path d="M36 24h7"/><path d="m10 10 5 5"/><path d="m33 33 5 5"/><path d="m38 10-5 5"/><path d="m15 33-5 5"/></g></svg>',
     moon: '<svg viewBox="0 0 48 48" width="24" height="24" aria-hidden="true"><path d="M31 7c-8 2-14 10-14 19 0 6 3 11 8 14-9 1-18-6-18-16C7 14 16 6 27 6c1 0 3 0 4 1Z" fill="#7ea6df" stroke="#4f78b8" stroke-width="2"/></svg>',
@@ -1575,7 +1954,7 @@ function customIconSVG(icon) {
 
 function elementPaletteIcon(type) {
   if (type === 'player') {
-    return customIconSVG('turtle').replace('width="24" height="24"', 'width="38" height="38"');
+    return customIconSVG('boks').replace('width="24" height="24"', 'width="38" height="38"');
   }
   if (type === 'goal') {
     return window.BOKS_GOAL_CHARACTER?.iconMarkup?.({
@@ -1642,6 +2021,47 @@ function sanitizeLevelHints(source = {}) {
   };
 }
 
+function sanitizeStylePresetName(name = '') {
+  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 32);
+}
+
+function sanitizeStylePreset(source = {}) {
+  const id = typeof source?.id === 'string' && source.id.trim()
+    ? source.id.trim()
+    : `style-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const name = sanitizeStylePresetName(source?.name || '');
+  if (!name) return null;
+  return {
+    id,
+    name,
+    baseLevel: resolveThemeLevelId(source?.baseLevel),
+    characterId: resolveCharacterId(source?.characterId),
+    themeOverrides: sanitizeThemeOverrides(source?.themeOverrides || {}),
+    levelHints: sanitizeLevelHints(source?.levelHints || {})
+  };
+}
+
+function readStylePresets() {
+  try {
+    const stored = localStorage.getItem(STYLE_PRESETS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(sanitizeStylePreset).filter(Boolean);
+  } catch (_err) {
+    return [];
+  }
+}
+
+function writeStylePresets(presets) {
+  stylePresets = presets.map(sanitizeStylePreset).filter(Boolean);
+  try {
+    localStorage.setItem(STYLE_PRESETS_STORAGE_KEY, JSON.stringify(stylePresets));
+  } catch (_err) {
+    // ignore persistence issues
+  }
+}
+
 function getCurrentEditorThemeOverrides() {
   if (currentCustomLevel) {
     return sanitizeThemeOverrides(currentCustomLevel.themeOverrides || {});
@@ -1674,6 +2094,7 @@ function setCurrentEditorThemeOverrides(overrides) {
   const normalized = sanitizeThemeOverrides(overrides);
   if (currentCustomLevel) {
     currentCustomLevel.themeOverrides = normalized;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1693,6 +2114,7 @@ function setCurrentEditorThemeOverrides(overrides) {
     name: selectedLevel.name,
     themeOverrides: normalized
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1700,6 +2122,7 @@ function setCurrentEditorLevelHints(levelHints) {
   const normalized = sanitizeLevelHints(levelHints);
   if (currentCustomLevel) {
     currentCustomLevel.levelHints = normalized;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1719,6 +2142,7 @@ function setCurrentEditorLevelHints(levelHints) {
     name: selectedLevel.name,
     levelHints: normalized
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1726,6 +2150,148 @@ function resetCurrentEditorThemeOverrides() {
   if (!setCurrentEditorThemeOverrides({})) return;
   applyLevelSceneVars();
   renderThemeEditorPanel();
+}
+
+function buildCurrentEditorStylePreset(name) {
+  return sanitizeStylePreset({
+    id: `style-${Date.now()}`,
+    name,
+    baseLevel: getCurrentEditorThemeId(),
+    characterId: getCurrentEditorCharacterId(),
+    themeOverrides: getCurrentEditorThemeOverrides(),
+    levelHints: getCurrentEditorLevelHints()
+  });
+}
+
+function applyStylePresetToCurrentEditor(presetId) {
+  const preset = stylePresets.find(entry => entry.id === presetId);
+  if (!preset) {
+    toast('Stile non trovato');
+    return false;
+  }
+
+  if (currentCustomLevel) {
+    currentCustomLevel.baseLevel = preset.baseLevel;
+    currentCustomLevel.characterId = preset.characterId;
+    currentCustomLevel.themeOverrides = sanitizeThemeOverrides(preset.themeOverrides);
+    currentCustomLevel.levelHints = sanitizeLevelHints(preset.levelHints);
+    syncCurrentEditorLevelToSessionCache();
+  } else if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
+    tutorialSceneLevelId = preset.baseLevel;
+    pendingNewLevelCharacterId = preset.characterId;
+    pendingNewLevelThemeOverrides = sanitizeThemeOverrides(preset.themeOverrides);
+    pendingNewLevelHints = sanitizeLevelHints(preset.levelHints);
+  } else {
+    const selectedLevel = findCustomLevel(selectedEditorLevelId || '');
+    if (!selectedLevel) {
+      toast('Seleziona prima un livello');
+      return false;
+    }
+    const draft = collectCurrentEditorLevel();
+    currentCustomLevel = normalizeCustomLevel({
+      ...selectedLevel,
+      ...draft,
+      id: selectedLevel.id,
+      number: selectedLevel.number,
+      campaignIndex: selectedLevel.campaignIndex ?? selectedLevel.baseStepIndex ?? null,
+      baseStepIndex: selectedLevel.baseStepIndex,
+      name: selectedLevel.name,
+      baseLevel: preset.baseLevel,
+      characterId: preset.characterId,
+      themeOverrides: sanitizeThemeOverrides(preset.themeOverrides),
+      levelHints: sanitizeLevelHints(preset.levelHints)
+    });
+    syncCurrentEditorLevelToSessionCache();
+  }
+
+  applyLevelSceneVars();
+  applyEditorBoardChanges();
+  renderThemeEditorPanel();
+  renderCustomLevels();
+  toast(`Stile "${preset.name}" applicato`);
+  return true;
+}
+
+function saveCurrentStylePreset() {
+  if (!LEVEL_EDITOR_ENABLED || !editorMode) return;
+  const input = document.getElementById('stylePresetNameInput');
+  const presetName = sanitizeStylePresetName(input?.value || '');
+  if (!presetName) {
+    toast('Dai un nome allo stile');
+    input?.focus();
+    return;
+  }
+  const nextPreset = buildCurrentEditorStylePreset(presetName);
+  if (!nextPreset) {
+    toast('Impossibile salvare questo stile');
+    return;
+  }
+  const existingIndex = stylePresets.findIndex(entry => entry.name.toLowerCase() === presetName.toLowerCase());
+  const nextList = [...stylePresets];
+  if (existingIndex >= 0) {
+    nextPreset.id = stylePresets[existingIndex].id;
+    nextList[existingIndex] = nextPreset;
+  } else {
+    nextList.unshift(nextPreset);
+  }
+  writeStylePresets(nextList);
+  if (input) input.value = '';
+  renderStylePresetPanel();
+  toast(existingIndex >= 0 ? 'Stile aggiornato' : 'Stile salvato');
+}
+
+function deleteStylePreset(presetId) {
+  const preset = stylePresets.find(entry => entry.id === presetId);
+  if (!preset) return;
+  writeStylePresets(stylePresets.filter(entry => entry.id !== presetId));
+  renderStylePresetPanel();
+  toast(`Stile "${preset.name}" rimosso`);
+}
+
+function renderStylePresetPanel() {
+  const panel = document.getElementById('stylePresetPanel');
+  const list = document.getElementById('stylePresetList');
+  if (!panel || !list) return;
+  if (!editorMode || !editorStylePanelOpen) {
+    list.innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = '';
+  if (!stylePresets.length) {
+    const empty = document.createElement('div');
+    empty.className = 'style-preset-empty';
+    empty.textContent = 'Salva uno stile qui e lo potrai riutilizzare su altri livelli.';
+    list.appendChild(empty);
+    return;
+  }
+
+  stylePresets.forEach(preset => {
+    const item = document.createElement('div');
+    item.className = 'style-preset-item';
+    item.innerHTML = `
+      <div class="style-preset-copy">
+        <span class="style-preset-name">${preset.name}</span>
+        <span class="style-preset-meta">${getThemeLabel(preset.baseLevel)} · ${getCharacterLabel(preset.characterId)}</span>
+      </div>
+    `;
+
+    const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'style-preset-apply';
+    applyBtn.textContent = 'Applica';
+    applyBtn.addEventListener('click', () => applyStylePresetToCurrentEditor(preset.id));
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'style-preset-delete';
+    deleteBtn.textContent = 'Elimina';
+    deleteBtn.addEventListener('click', () => deleteStylePreset(preset.id));
+
+    item.appendChild(applyBtn);
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+  });
 }
 
 async function applyCurrentStyleToSelectedLevel() {
@@ -1834,6 +2400,7 @@ function setCurrentEditorCharacterId(characterId) {
   const resolved = resolveCharacterId(characterId);
   if (currentCustomLevel) {
     currentCustomLevel.characterId = resolved;
+    syncCurrentEditorLevelToSessionCache();
     return true;
   }
   if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) {
@@ -1853,6 +2420,7 @@ function setCurrentEditorCharacterId(characterId) {
     name: selectedLevel.name,
     characterId: resolved
   });
+  syncCurrentEditorLevelToSessionCache();
   return true;
 }
 
@@ -1956,6 +2524,7 @@ function applyEditorTheme(themeId) {
     }
   }
   if (!changed) return;
+  syncCurrentEditorLevelToSessionCache();
   applyLevelSceneVars();
   applyEditorBoardChanges();
   renderThemeEditorPanel();
@@ -2060,6 +2629,10 @@ function writeCustomLevels(levels) {
   return levelStorage.writeCustomLevels(levels);
 }
 
+function updateCachedLevel(level) {
+  return levelStorage.updateCachedLevel(level);
+}
+
 function exportableLevelsPayload(levels = readCustomLevels()) {
   return levelStorage.exportableLevelsPayload(levels);
 }
@@ -2078,6 +2651,25 @@ function normalizeThemeOverrides(source = {}) {
 
 function normalizeCustomLevel(level) {
   return levelStorage.normalizeCustomLevel(level);
+}
+
+function syncCurrentEditorLevelToSessionCache() {
+  if (!LEVEL_EDITOR_ENABLED || !currentCustomLevel?.id) return null;
+  if (selectedEditorLevelId === NEW_EDITOR_LEVEL_ID) return null;
+  const savedLevel = findCustomLevel(currentCustomLevel.id) || currentCustomLevel;
+  const draft = collectCurrentEditorLevel();
+  const merged = normalizeCustomLevel({
+    ...savedLevel,
+    ...draft,
+    id: savedLevel.id,
+    number: savedLevel.number,
+    campaignIndex: savedLevel.campaignIndex ?? savedLevel.baseStepIndex ?? null,
+    baseStepIndex: savedLevel.baseStepIndex,
+    name: savedLevel.name
+  });
+  updateCachedLevel(merged);
+  currentCustomLevel = cloneCustomLevel(merged);
+  return merged;
 }
 
 function findCustomLevel(levelId) {
@@ -2274,6 +2866,11 @@ function applyLevelSceneVars() {
 }
 function setLevel(levelId, { persist = true } = {}) {
   if (!LEVELS[levelId]) return false;
+  if (levelId !== 'level1') {
+    firstLevelOnboardingStage = 'idle';
+    clearFirstLevelOnboardingDelay();
+    clearAppSceneRevealWindow();
+  }
   currentCustomLevel = null;
   currentLevel = levelId;
   tutorialSceneLevelId = resolveThemeLevelId(levelId === 'level1' ? CUSTOM_LEVEL_THEME : levelId);
@@ -2383,6 +2980,7 @@ function updateRunAvailability() {
   btn.classList.toggle('editor-run-locked', locked);
   btn.disabled = locked;
   btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+  queueFirstLevelOnboardingSync();
 }
 function updateDebugBadge() {
   const badge = ensureDebugBadge();
@@ -2561,7 +3159,9 @@ function setEditorMode(enabled) {
     updateRunAvailability();
     renderElementPalette();
   }
+  syncFirstLevelOnboardingDelayForCurrentView();
   updateQuickEditorButton();
+  queueFirstLevelOnboardingSync();
 }
 
 function toggleEditorSlot(zone, idx) {
@@ -2622,12 +3222,206 @@ function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
   if (editorMode) {
     stepStartHintActive = false;
     syncAvailableBlockGlowUI();
+    queueFirstLevelOnboardingSync();
     return stepStartHintActive;
   }
   const draggingAvailableBlock = suspendForActiveDrag && dg?.active && dg.src === 'avail';
   stepStartHintActive = shouldShowAvailableBlockGlow() && !hasAnyPlacedProgramBlock() && !draggingAvailableBlock;
   syncAvailableBlockGlowUI();
+  queueFirstLevelOnboardingSync();
   return stepStartHintActive;
+}
+function renderFirstLevelOnboardingHandSvg(idSuffix = 'main') {
+  return `
+    <svg viewBox="0 0 128 128" aria-hidden="true">
+      <image
+        href="assets/props/hand_drag.png"
+        width="128"
+        height="128"
+        preserveAspectRatio="xMidYMid meet"
+      />
+    </svg>
+  `;
+}
+function ensureFirstLevelOnboardingRoot() {
+  const bottom = document.getElementById('bottom');
+  if (!bottom) return null;
+  let root = document.getElementById('firstLevelOnboarding');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'firstLevelOnboarding';
+  root.setAttribute('aria-hidden', 'true');
+  root.innerHTML = `
+    <svg class="first-level-onboarding__path" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <path></path>
+    </svg>
+    <div class="first-level-onboarding__drag-demo">
+      <div class="first-level-onboarding__ghost"></div>
+      <div class="first-level-onboarding__hand first-level-onboarding__hand--drag">
+        ${renderFirstLevelOnboardingHandSvg('drag')}
+      </div>
+    </div>
+    <div class="first-level-onboarding__tap-demo">
+      <span class="first-level-onboarding__tap-ring first-level-onboarding__tap-ring--a"></span>
+      <span class="first-level-onboarding__tap-ring first-level-onboarding__tap-ring--b"></span>
+      <div class="first-level-onboarding__hand first-level-onboarding__hand--tap">
+        ${renderFirstLevelOnboardingHandSvg('tap')}
+      </div>
+    </div>
+  `;
+  bottom.appendChild(root);
+  return root;
+}
+function clearFirstLevelOnboardingTargets() {
+  document.querySelectorAll('.pslot.first-level-onboarding-slot')
+    .forEach(slot => slot.classList.remove('first-level-onboarding-slot'));
+  document.getElementById('runBtn')?.classList.remove('first-level-onboarding-run');
+}
+function clearFirstLevelOnboardingDelay() {
+  if (firstLevelOnboardingDelayTimer) {
+    clearTimeout(firstLevelOnboardingDelayTimer);
+    firstLevelOnboardingDelayTimer = null;
+  }
+  firstLevelOnboardingReadyAt = 0;
+}
+function clearAppSceneRevealWindow() {
+  if (appSceneRevealTimer) {
+    clearTimeout(appSceneRevealTimer);
+    appSceneRevealTimer = null;
+  }
+  appSceneRevealReadyAt = 0;
+}
+function startAppSceneRevealWindow(durationMs = 4200) {
+  clearAppSceneRevealWindow();
+  appSceneRevealReadyAt = Date.now() + durationMs;
+  appSceneRevealTimer = setTimeout(() => {
+    appSceneRevealTimer = null;
+    queueFirstLevelOnboardingSync();
+    syncFirstLevelOnboardingDelayForCurrentView();
+  }, durationMs + 16);
+}
+function scheduleFirstLevelOnboardingDelay(delayMs = 0) {
+  clearFirstLevelOnboardingDelay();
+  firstLevelOnboardingReadyAt = Date.now() + delayMs;
+  firstLevelOnboardingDelayTimer = setTimeout(() => {
+    firstLevelOnboardingDelayTimer = null;
+    queueFirstLevelOnboardingSync();
+  }, delayMs + 16);
+}
+function syncFirstLevelOnboardingDelayForCurrentView() {
+  if (editorMode || !isFirstLevelOnboardingContext()) {
+    clearFirstLevelOnboardingDelay();
+    return;
+  }
+  if (document.body.classList.contains('prestart')) {
+    clearFirstLevelOnboardingDelay();
+    return;
+  }
+  if (Date.now() < appSceneRevealReadyAt) {
+    clearFirstLevelOnboardingDelay();
+    return;
+  }
+  if (firstLevelOnboardingStage === 'play' || hasAnyPlacedProgramBlock()) {
+    clearFirstLevelOnboardingDelay();
+    return;
+  }
+  scheduleFirstLevelOnboardingDelay(0);
+}
+function isFirstLevelOnboardingContext() {
+  return !currentCustomLevel && currentLevel === 'level1' && tutorialStepIndex === 0;
+}
+function shouldShowFirstLevelOnboarding() {
+  return gameStarted
+    && !document.body.classList.contains('prestart')
+    && !editorMode
+    && isFirstLevelOnboardingContext()
+    && Date.now() >= appSceneRevealReadyAt
+    && (
+      firstLevelOnboardingStage === 'play'
+      || hasAnyPlacedProgramBlock()
+      || Date.now() >= firstLevelOnboardingReadyAt
+    );
+}
+function advanceFirstLevelOnboardingToPlay() {
+  if (editorMode || !isFirstLevelOnboardingContext()) return;
+  clearFirstLevelOnboardingDelay();
+  firstLevelOnboardingStage = 'play';
+  queueFirstLevelOnboardingSync();
+}
+function completeFirstLevelOnboarding() {
+  if (editorMode || !isFirstLevelOnboardingContext()) return;
+  clearFirstLevelOnboardingDelay();
+  firstLevelOnboardingStage = 'done';
+  queueFirstLevelOnboardingSync();
+}
+function syncFirstLevelOnboarding() {
+  firstLevelOnboardingFrame = null;
+  const root = ensureFirstLevelOnboardingRoot();
+  const bottom = document.getElementById('bottom');
+  const pathSvg = root?.querySelector('.first-level-onboarding__path');
+  const path = root?.querySelector('.first-level-onboarding__path path');
+  const ghost = root?.querySelector('.first-level-onboarding__ghost');
+  const dragDemo = root?.querySelector('.first-level-onboarding__drag-demo');
+  const tapDemo = root?.querySelector('.first-level-onboarding__tap-demo');
+  if (!root || !bottom || !pathSvg || !path || !ghost || !dragDemo || !tapDemo) return;
+
+  clearFirstLevelOnboardingTargets();
+  root.classList.remove('active');
+  root.dataset.stage = 'hidden';
+  path.setAttribute('d', '');
+
+  if (!shouldShowFirstLevelOnboarding()) return;
+
+  const bottomRect = bottom.getBoundingClientRect();
+  pathSvg.setAttribute('viewBox', `0 0 ${Math.max(1, Math.round(bottomRect.width))} ${Math.max(1, Math.round(bottomRect.height))}`);
+  const clampX = (value, inset = 40) => Math.max(inset, Math.min(bottomRect.width - inset, value));
+  const stage = hasAnyPlacedProgramBlock() ? 'play' : 'drag';
+  firstLevelOnboardingStage = stage;
+
+  if (stage === 'drag') {
+    const sourceBlock = document.querySelector('#blocksRow .ablock:not(.disabled)');
+    const targetSlot = Array.from(document.querySelectorAll('.pslot[data-zone="main"]:not(.locked)'))
+      .find(slot => !slot.classList.contains('filled'));
+    if (!sourceBlock || !targetSlot) return;
+
+    const sourceRect = sourceBlock.getBoundingClientRect();
+    const targetRect = targetSlot.getBoundingClientRect();
+    const sourceX = sourceRect.left - bottomRect.left + (sourceRect.width * 0.5);
+    const sourceY = sourceRect.top - bottomRect.top + (sourceRect.height * 0.5);
+    const targetX = targetRect.left - bottomRect.left + (targetRect.width * 0.5);
+    const targetY = targetRect.top - bottomRect.top + (targetRect.height * 0.5);
+    const controlX = clampX(Math.min(sourceX, targetX) - Math.max(22, Math.min(42, targetRect.width * 0.8)));
+    const controlY = sourceY + ((targetY - sourceY) * 0.46);
+
+    ghost.innerHTML = sourceBlock.innerHTML;
+    ghost.style.width = `${Math.round(sourceRect.width)}px`;
+    ghost.style.height = `${Math.round(sourceRect.height)}px`;
+    targetSlot.classList.add('first-level-onboarding-slot');
+    root.dataset.stage = 'drag';
+    root.style.setProperty('--first-onboarding-start-x', `${sourceX}px`);
+    root.style.setProperty('--first-onboarding-start-y', `${sourceY}px`);
+    root.style.setProperty('--first-onboarding-end-x', `${targetX}px`);
+    root.style.setProperty('--first-onboarding-end-y', `${targetY}px`);
+    path.setAttribute('d', `M ${sourceX.toFixed(2)} ${sourceY.toFixed(2)} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${targetX.toFixed(2)} ${targetY.toFixed(2)}`);
+    root.classList.add('active');
+    return;
+  }
+
+  const runBtn = document.getElementById('runBtn');
+  if (!runBtn) return;
+  const btnRect = runBtn.getBoundingClientRect();
+  const targetX = btnRect.left - bottomRect.left + (btnRect.width * 0.5);
+  const targetY = btnRect.top - bottomRect.top + (btnRect.height * 0.5);
+
+  runBtn.classList.add('first-level-onboarding-run');
+  root.dataset.stage = 'play';
+  root.style.setProperty('--first-onboarding-end-x', `${targetX}px`);
+  root.style.setProperty('--first-onboarding-end-y', `${targetY}px`);
+  root.classList.add('active');
+}
+function queueFirstLevelOnboardingSync() {
+  if (firstLevelOnboardingFrame) return;
+  firstLevelOnboardingFrame = requestAnimationFrame(() => syncFirstLevelOnboarding());
 }
 function resetPlayerToStepStart() {
   const step = getCurrentCampaignLevel();
@@ -2640,6 +3434,10 @@ function applyTutorialStep(idx = 0) {
   const steps = getTutorialSteps();
   if (!steps.length) return false;
   tutorialStepIndex = ((idx % steps.length) + steps.length) % steps.length;
+  rememberCurrentCampaignStep(tutorialStepIndex);
+  firstLevelOnboardingStage = tutorialStepIndex === 0 ? 'drag' : 'idle';
+  clearFirstLevelOnboardingDelay();
+  if (tutorialStepIndex !== 0) clearAppSceneRevealWindow();
   selectedEditorLevelId = getCampaignLevelIdForIndex(tutorialStepIndex);
   const step = steps[tutorialStepIndex];
   tutorialSceneLevelId = resolveThemeLevelId(step.baseLevel);
@@ -2678,6 +3476,7 @@ function applyTutorialStep(idx = 0) {
     setCharacterAction('idle');
     syncSprite();
   });
+  syncFirstLevelOnboardingDelayForCurrentView();
   updateDebugBadge();
   renderElementPalette();
   return true;
@@ -2685,6 +3484,9 @@ function applyTutorialStep(idx = 0) {
 
 function applyCustomLevel(level, { openEditor = false } = {}) {
   const normalized = normalizeCustomLevel(level);
+  firstLevelOnboardingStage = 'idle';
+  clearFirstLevelOnboardingDelay();
+  clearAppSceneRevealWindow();
   currentCustomLevel = cloneCustomLevel(normalized);
   selectedEditorLevelId = normalized.id;
   currentLevel = 'custom';
@@ -2784,9 +3586,23 @@ function renderEditorSetupControls(palette) {
   const card = document.createElement('div');
   card.className = 'editor-setup-card';
 
+  const orientationLabels = {
+    up: 'Su',
+    right: 'Destra',
+    down: 'Giu',
+    left: 'Sinistra'
+  };
+
+  const setupHint = document.createElement('div');
+  setupHint.className = 'editor-setup-hint';
+  setupHint.innerHTML = playerPlaced
+    ? `BÖKS e pronto. Tocca una cella libera per spostarlo e scegli la direzione iniziale: <strong>${orientationLabels[ori] || 'Destra'}</strong>.`
+    : 'Seleziona <strong>BÖKS</strong> qui sopra e tocca una cella libera della griglia.';
+  card.appendChild(setupHint);
+
   const orientationTitle = document.createElement('div');
   orientationTitle.className = 'editor-setup-title';
-  orientationTitle.textContent = 'Orientamento iniziale';
+  orientationTitle.textContent = 'Direzione iniziale di BÖKS';
   card.appendChild(orientationTitle);
 
   const orientationGrid = document.createElement('div');
@@ -2812,6 +3628,7 @@ function renderEditorSetupControls(palette) {
       ori = option.id;
       setCharacterAction('idle');
       syncSprite();
+      renderElementPalette();
       refreshEditorDebug();
     });
     orientationGrid.appendChild(btn);
@@ -2820,7 +3637,7 @@ function renderEditorSetupControls(palette) {
 
   const characterTitle = document.createElement('div');
   characterTitle.className = 'editor-setup-title';
-  characterTitle.textContent = 'Personaggio test';
+  characterTitle.textContent = 'Personaggio';
   card.appendChild(characterTitle);
 
   const characterRow = document.createElement('div');
@@ -2871,15 +3688,23 @@ function renderElementPalette() {
   const tools = [
     {
       key: 'player',
-      label: 'Giocatore',
+      label: 'BÖKS',
       present: playerPlaced,
-      hint: playerPlaced ? 'Presente: sposta o tocca per rimuovere' : 'Tocca e piazza sulla griglia'
+      hint: playerPlaced
+        ? (selectedElementTool === 'player'
+          ? 'Tocca una cella libera per spostarlo'
+          : 'Seleziona per spostarlo sulla griglia')
+        : 'Seleziona e tocca una cella libera della griglia'
     },
     {
       key: 'goal',
-      label: 'Boks nero',
+      label: 'Goal',
       present: goalPlaced,
-      hint: goalPlaced ? 'Presente: sposta o tocca per rimuovere' : 'Tocca e piazza sulla griglia'
+      hint: goalPlaced
+        ? (selectedElementTool === 'goal'
+          ? 'Tocca una cella libera per spostarlo'
+          : 'Seleziona per spostarlo sulla griglia')
+        : 'Seleziona e tocca una cella libera della griglia'
     },
     {
       key: 'brick',
@@ -2895,10 +3720,13 @@ function renderElementPalette() {
     btn.type = 'button';
     btn.className = 'element-tool' + (selectedElementTool === tool.key ? ' active' : '') + (tool.present ? ' placed' : '');
     btn.dataset.tool = tool.key;
+    const status = tool.key === 'brick'
+      ? 'TOGGLE'
+      : (tool.present ? (selectedElementTool === tool.key ? 'MOVE' : 'SET') : 'PLACE');
     btn.innerHTML = `
       <span class="element-tool-icon">${elementPaletteIcon(tool.key)}</span>
       <span class="element-tool-label">${tool.label}</span>
-      <span class="element-tool-status">${tool.key === 'brick' ? 'TOGGLE' : (tool.present ? 'PRESENTE' : 'AGGIUNGI')}</span>
+      <span class="element-tool-status">${status}</span>
       <span class="element-tool-hint">${tool.hint}</span>
     `;
     btn.addEventListener('click', () => {
@@ -2940,7 +3768,9 @@ function renderThemePicker() {
 }
 
 function getCharacterOptions() {
-  return getCharacterIds().map(id => {
+  return getCharacterIds()
+    .filter(id => isCharacterEditorApproved(id))
+    .map(id => {
     const manifest = getCharacterDefs()[id] || {};
     return {
       id,
@@ -3120,12 +3950,14 @@ function renderThemeEditorPanel() {
   renderThemePicker();
   renderCharacterPicker();
   renderThemeColorControls();
+  renderStylePresetPanel();
 }
 
 function applyEditorBoardChanges() {
   initGrid();
   drawBackground();
   syncSprite();
+  if (editorMode) renderElementPalette();
   refreshEditorDebug();
 }
 
@@ -3232,15 +4064,12 @@ function setupEditorElementPlacement() {
     const isBlocked = isBlockedCell(x, y);
 
     if (selectedElementTool === 'player') {
-      if (playerPlaced) {
-        if (isPlayerCell) {
-          playerPlaced = false;
-          selectedElementTool = null;
-          applyEditorBoardChanges();
-        }
+      if (isBlocked || isGoalCell) return;
+      if (playerPlaced && isPlayerCell) {
+        selectedElementTool = null;
+        renderElementPalette();
         return;
       }
-      if (isBlocked || isGoalCell) return;
       playerPlaced = true;
       START = { x, y };
       pos = { x, y };
@@ -3250,12 +4079,10 @@ function setupEditorElementPlacement() {
     }
 
     if (selectedElementTool === 'goal') {
-      if (goalPlaced) {
-        if (isGoalCell) {
-          goalPlaced = false;
-          selectedElementTool = null;
-          applyEditorBoardChanges();
-        }
+      if (goalPlaced && isGoalCell) {
+        goalPlaced = false;
+        selectedElementTool = null;
+        applyEditorBoardChanges();
         return;
       }
       if (isBlocked || isPlayerCell) return;
@@ -3434,6 +4261,25 @@ async function saveCurrentEditorLevel() {
   return savedLevel;
 }
 
+async function reorderEditorLevels(draggedLevelId, targetLevelId) {
+  if (!draggedLevelId || !targetLevelId || draggedLevelId === targetLevelId) return false;
+  const current = readCustomLevels();
+  const from = current.findIndex(entry => entry.id === draggedLevelId);
+  const to = current.findIndex(entry => entry.id === targetLevelId);
+  if (from === -1 || to === -1) return false;
+
+  const reordered = current.map(normalizeCustomLevel);
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+
+  const persistResult = await persistEditorLevels(reordered, { promptIfMissing: true });
+  syncEditorStateAfterLevelsChange(reordered, { preferredLevelId: moved.id });
+  toast(persistResult.projectFileSaved
+    ? `Livello spostato in posizione ${to + 1}`
+    : `Livello spostato in posizione ${to + 1} solo in questa sessione`);
+  return true;
+}
+
 function renderCustomLevels() {
   const list = document.getElementById('customLevelsList');
   if (!list || !LEVEL_EDITOR_ENABLED) return;
@@ -3482,18 +4328,15 @@ function renderCustomLevels() {
       tile.classList.add('drop-target');
     });
     tile.addEventListener('dragleave', () => tile.classList.remove('drop-target'));
-    tile.addEventListener('drop', e => {
+    tile.addEventListener('drop', async e => {
       e.preventDefault();
       tile.classList.remove('drop-target');
       if (!draggingEditorLevelId || draggingEditorLevelId === normalized.id) return;
-      const current = readCustomLevels();
-      const from = current.findIndex(entry => entry.id === draggingEditorLevelId);
-      const to = current.findIndex(entry => entry.id === normalized.id);
-      if (from === -1 || to === -1) return;
-      const [moved] = current.splice(from, 1);
-      current.splice(to, 0, moved);
-      writeCustomLevels(current);
-      renderCustomLevels();
+      const draggedId = draggingEditorLevelId;
+      draggingEditorLevelId = null;
+      tile.classList.remove('dragging');
+      list.querySelectorAll('.editor-level-tile').forEach(el => el.classList.remove('drop-target', 'dragging'));
+      await reorderEditorLevels(draggedId, normalized.id);
     });
     list.appendChild(tile);
   });
@@ -3545,6 +4388,7 @@ function renderAvail() {
     row.appendChild(el);
   });
   alignAvailBlocksToSlots();
+  queueFirstLevelOnboardingSync();
 }
 
 function alignAvailBlocksToSlots() {
@@ -3672,6 +4516,7 @@ function renderBoard() {
 
   g.appendChild(slotsWrap);
   alignAvailBlocksToSlots();
+  queueFirstLevelOnboardingSync();
 
   // Traccia completa: riga1 → connettore → riga2
   requestAnimationFrame(() => {
@@ -3772,6 +4617,7 @@ function renderBoard() {
     sep.setAttribute('mask', 'url(#trackSlotMask)');
     svg.appendChild(sep);
     alignAvailBlocksToSlots();
+    queueFirstLevelOnboardingSync();
   });
 }
 
@@ -3829,7 +4675,7 @@ function drawTrack(svg, slotH, gapH, totalH, W, mainActive, fnActive) {
 }
 
 // ═══ DRAG ═══
-let dg = {active:false, block:null, src:null, si:null, hover:null};
+let dg = {active:false, block:null, src:null, si:null, hover:null, hoverValidKey:null};
 
 function bindDrag(el, src, idx, sz) {
   el.addEventListener('touchstart',e=>{
@@ -3851,7 +4697,8 @@ function bindDrag(el, src, idx, sz) {
 function startDg(cx,cy,src,idx,sz) {
   const block = src==='avail' ? avail[idx] : src==='fn' ? fnProg[idx] : prog[idx];
   if(!block) return;
-  dg = {active:true, block, src, si:idx, hover:null};
+  dg = {active:true, block, src, si:idx, hover:null, hoverValidKey:null};
+  playBlockDragStartSfx();
   if(src==='avail') refreshAvailableBlockGlowState({ suspendForActiveDrag: true });
   const g = document.getElementById('ghost');
   g.innerHTML=''; g.appendChild(mkB(block,sz,sz));
@@ -3870,6 +4717,24 @@ function startDg(cx,cy,src,idx,sz) {
   }
 }
 
+function getDragHoverValidSlotKey(slot) {
+  if (!slot || !dg.active) return '';
+  const ti = +slot.dataset.slot;
+  const zone = slot.dataset.zone;
+  if (zone === 'main') {
+    if (!mainSlotEnabled[ti]) return '';
+    if (dg.src === 'prog' && dg.si === ti) return '';
+    return `main:${ti}`;
+  }
+  if (zone === 'fn') {
+    if (!fnSlotEnabled[ti]) return '';
+    if (dg.block?.dir === 'function') return '';
+    if (dg.src === 'fn' && dg.si === ti) return '';
+    return `fn:${ti}`;
+  }
+  return '';
+}
+
 function moveDg(cx,cy) {
   if(!dg.active) return;
   const g = document.getElementById('ghost');
@@ -3878,12 +4743,17 @@ function moveDg(cx,cy) {
   const u=document.elementFromPoint(cx,cy);
   g.style.display='block';
   const slot=u?.closest('.pslot');
+  const validHoverKey = getDragHoverValidSlotKey(slot);
   if(dg.hover&&dg.hover!==slot) dg.hover.classList.remove('over');
   if(slot){slot.classList.add('over');dg.hover=slot;} else dg.hover=null;
+  if (validHoverKey && validHoverKey !== dg.hoverValidKey) playBlockHoverSlotSfx();
+  dg.hoverValidKey = validHoverKey || null;
 }
 
 function endDg(cx,cy) {
   if(!dg.active) return;
+  const hadPlacedProgramBlocks = hasAnyPlacedProgramBlock();
+  let didDropSuccessfully = false;
   document.getElementById('ghost').style.display='none';
   if(dg.hover) dg.hover.classList.remove('over');
   document.querySelectorAll('.ablock,.pblock').forEach(e=>{
@@ -3909,13 +4779,16 @@ function endDg(cx,cy) {
     if(zone === 'fn') {
       // blocchi function non possono stare nella fn zone
       if(dg.block.dir === 'function') { dg.active=false; renderAvail(); renderBoard(); renderFn(); return; }
-      if(dg.src==='avail') fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
-      else if(dg.src==='fn'&&dg.si!==ti){ const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp; }
-      else if(dg.src==='prog'){ fnProg[ti]={...dg.block}; prog[dg.si]=null; }
+      if(dg.src==='avail') { fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]}; didDropSuccessfully = true; }
+      else if(dg.src==='fn'&&dg.si!==ti){ const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp; didDropSuccessfully = true; }
+      else if(dg.src==='prog'){ fnProg[ti]={...dg.block}; prog[dg.si]=null; didDropSuccessfully = true; }
     } else {
-      if(dg.src==='avail') prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
-      else if(dg.src==='prog'&&dg.si!==ti){ const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp; }
-      else if(dg.src==='fn'){ prog[ti]={...dg.block}; fnProg[dg.si]=null; }
+      if(dg.src==='avail') { prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]}; didDropSuccessfully = true; }
+      else if(dg.src==='prog'&&dg.si!==ti){ const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp; didDropSuccessfully = true; }
+      else if(dg.src==='fn'){ prog[ti]={...dg.block}; fnProg[dg.si]=null; didDropSuccessfully = true; }
+    }
+    if (!hadPlacedProgramBlocks && zone === 'main' && prog[ti] && firstLevelOnboardingStage === 'drag') {
+      advanceFirstLevelOnboardingToPlay();
     }
   } else {
     if(dg.src==='prog') prog[dg.si]=null;
@@ -3925,6 +4798,7 @@ function endDg(cx,cy) {
     const firstFnForwardPlaced = fnProg.some(b => (b?.dir || b?.direction) === 'forward');
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
+  if (didDropSuccessfully) playBlockDropSuccessSfx();
   dg.active=false;
   refreshAvailableBlockGlowState();
   renderAvail(); renderBoard(); renderFn();
@@ -4024,6 +4898,7 @@ async function moveChar(dir) {
 async function run() {
   if(!gameStarted || running || animating) return;
   if (!playerPlaced || !goalPlaced) return;
+  if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
   const runStartState = editorMode ? { pos: { ...pos }, ori } : null;
   const runStartPrograms = editorMode ? {
     prog: prog.map(block => block ? { ...block } : null),
@@ -4097,12 +4972,18 @@ async function run() {
 
   if(won) {
     if (!currentCustomLevel && currentLevel === 'level1') {
-      playLevelTransitionSfx();
-      const transitionAnchor = getWinBurstAnchor();
-        await sleep(260);
-        await fadeTransition(1850, async () => {
+      rememberCompletedCampaignLevel();
       const campaignLevels = getCampaignLevels();
-      if (campaignLevels.length) {
+      const isFinalCampaignLevel = campaignLevels.length > 0 && tutorialStepIndex >= campaignLevels.length - 1;
+      await sleep(260);
+      if (isFinalCampaignLevel) {
+        await playEndingCinematic();
+        returnToMainMenu();
+        return;
+      }
+      const transitionAnchor = getWinBurstAnchor();
+      await fadeTransition(1850, async () => {
+        if (campaignLevels.length) {
           applyCampaignLevel((tutorialStepIndex + 1) % campaignLevels.length);
         } else {
           resetPrograms();
@@ -4133,6 +5014,7 @@ async function run() {
     resetPlayerToStepStart();
     renderBoard(); renderFn();
   } else {
+    playErrorSfx();
     await sleep(400);
     if (editorMode && runStartPrograms) {
       prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
@@ -4156,7 +5038,7 @@ async function init() {
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
   document.getElementById('gridWrap').style.position = 'relative';
-  if (!applyCampaignLevel(0)) {
+  if (!applyCampaignLevel(progressState.currentCampaignStep || 0)) {
     activeMainSlots = SLOTS;
     activeFnSlots = FSLOTS;
     setSlotMasks(activeMainSlots, activeFnSlots);
@@ -4197,6 +5079,7 @@ function showStartGate() {
   document.body.classList.add('prestart');
   if (LEVEL_EDITOR_ENABLED) renderCustomLevels();
   document.getElementById('startGate')?.classList.add('show');
+  queueFirstLevelOnboardingSync();
 }
 function dismissSplash() {
   const splash = document.getElementById('splash');
@@ -4212,18 +5095,27 @@ function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
   if (gameStarted) return;
   gameStarted = true;
   const shouldOpenEditor = LEVEL_EDITOR_ENABLED && openEditor;
+  const shouldPlayLevelOneIntro = !shouldOpenEditor && !currentCustomLevel && currentLevel === 'level1';
   const gate = document.getElementById('startGate');
-  const gateFadeMs = 1100;
-  const backgroundHoldMs = 500;
+  const gateFadeMs = 1650;
+  const backgroundHoldMs = 850;
   gate?.classList.add('hiding');
   requestAppFullscreen();
+  if (shouldPlayLevelOneIntro) playLevelOneIntroAndQueueBgm();
+  else {
+    stopLevelOneIntro();
+    clearLevelOneIntroBgmTimer();
+    startBackgroundMusicLoop();
+  }
   setTimeout(() => gate?.classList.remove('show', 'hiding'), gateFadeMs);
   setTimeout(() => {
     document.body.classList.remove('prestart');
+    startAppSceneRevealWindow(4200);
     consumeHardRefreshNotice();
     if (onOpen) onOpen();
     else setEditorMode(shouldOpenEditor);
-    fadeInPizzicatoBgm(2200);
+    syncFirstLevelOnboardingDelayForCurrentView();
+    queueFirstLevelOnboardingSync();
   }, gateFadeMs + backgroundHoldMs);
 }
 function startGameFromGate() {
@@ -4239,14 +5131,20 @@ function returnToMainMenu() {
     toast('Aspetta che il movimento finisca');
     return;
   }
+  closeSettingsPanel();
   closeSaveLevelModal();
   if (editorMode) exitEditorMode();
   setEditorStylePanelOpen(false);
   gameStarted = false;
+  stopLevelOneIntro();
+  pauseBackgroundMusicLoop();
+  clearFirstLevelOnboardingDelay();
+  clearAppSceneRevealWindow();
   const gate = document.getElementById('startGate');
   gate?.classList.remove('hiding');
   showStartGate();
   updateQuickEditorButton();
+  queueFirstLevelOnboardingSync();
 }
 function openSpritePreviewTool() {
   const targetUrl = new URL('tools/sprite-preview.html', window.location.href).toString();
@@ -4343,11 +5241,26 @@ document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openS
 document.getElementById('openVfxToolBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('openLottieInspectorBtn')?.addEventListener('click', openLottieInspectorTool);
 document.getElementById('openLottieInspectorBtnEditor')?.addEventListener('click', openLottieInspectorTool);
-document.getElementById('header')?.addEventListener('click', returnToMainMenu);
+document.getElementById('header')?.addEventListener('click', toggleSettingsPanel);
 document.getElementById('header')?.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   e.preventDefault();
-  returnToMainMenu();
+  toggleSettingsPanel();
+});
+document.getElementById('closeSettingsBtn')?.addEventListener('click', closeSettingsPanel);
+document.getElementById('settingsSfxBtn')?.addEventListener('click', () => setSoundEffectsEnabled(!soundEffectsEnabled));
+document.getElementById('settingsMusicVolume')?.addEventListener('input', e => {
+  const nextValue = Number(e.target?.value);
+  setBackgroundMusicVolume(nextValue / 100);
+});
+document.getElementById('settingsLanguageBtn')?.addEventListener('click', openLanguageComingSoonNotice);
+document.getElementById('settingsCreditsBtn')?.addEventListener('click', toggleSettingsCredits);
+document.getElementById('settingsResetProgressBtn')?.addEventListener('click', toggleResetProgressPanel);
+document.getElementById('cancelResetProgressBtn')?.addEventListener('click', toggleResetProgressPanel);
+document.getElementById('confirmResetProgressBtn')?.addEventListener('click', resetJourneyProgress);
+document.getElementById('settingsMenuBtn')?.addEventListener('click', goToMainMenuFromSettings);
+document.getElementById('settingsModal')?.addEventListener('click', e => {
+  if (e.target?.id === 'settingsModal' || e.target?.classList?.contains('settings-shell')) closeSettingsPanel();
 });
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
@@ -4356,6 +5269,12 @@ document.getElementById('openVfxEditorBtn')?.addEventListener('click', openVfxTo
 document.getElementById('closeStyleEditorBtn')?.addEventListener('click', () => setEditorStylePanelOpen(false));
 document.getElementById('applyThemeStyleBtn')?.addEventListener('click', () => { void applyCurrentStyleToSelectedLevel(); });
 document.getElementById('resetThemeColorsBtn')?.addEventListener('click', resetCurrentEditorThemeOverrides);
+document.getElementById('saveStylePresetBtn')?.addEventListener('click', saveCurrentStylePreset);
+document.getElementById('stylePresetNameInput')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  saveCurrentStylePreset();
+});
 document.getElementById('exportLevelsBtn')?.addEventListener('click', exportEditorLevels);
 document.getElementById('importLevelsBtn')?.addEventListener('click', openImportLevelsPicker);
 document.getElementById('resetLevelsBtn')?.addEventListener('click', resetEditorLevels);
@@ -4383,6 +5302,10 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
   const key = (e.key || '').toLowerCase();
   if (key === 'escape') {
+    if (settingsOpen) {
+      closeSettingsPanel();
+      return;
+    }
     if (editorStylePanelOpen) {
       setEditorStylePanelOpen(false);
       return;
@@ -4423,6 +5346,7 @@ window.addEventListener('resize', () => {
     drawBackground();
     syncSprite();
     refreshEditorDebug();
+    queueFirstLevelOnboardingSync();
   });
 });
 window.visualViewport?.addEventListener('resize', syncViewportHeight);
@@ -4430,15 +5354,36 @@ window.visualViewport?.addEventListener('scroll', syncViewportHeight);
 window.addEventListener('orientationchange', syncViewportHeight);
 updateQuickEditorButton();
 updateStyleEditorButtons();
+syncSettingsPanelUi();
+window.BOKS_PREVIEW_ENDING = () => previewEndingCinematic();
+
+function refreshSceneAfterAppResume() {
+  syncViewportHeight();
+  renderAvail();
+  requestAnimationFrame(() => {
+    sizeGrid();
+    renderBoard();
+    renderFn();
+    drawBackground();
+    syncSprite();
+    refreshEditorDebug();
+    syncFirstLevelOnboardingDelayForCurrentView();
+    queueFirstLevelOnboardingSync();
+  });
+}
 
 // ri-entra in fullscreen se l'utente torna sull'app (es. dopo notifica)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (gameStarted) {
-      resumePizzicatoBgm();
+      resumeBackgroundMusicLoop();
       requestAppFullscreen();
     }
+    refreshSceneAfterAppResume();
   } else {
-    pausePizzicatoBgm();
+    pauseBackgroundMusicLoop();
   }
+});
+window.addEventListener('pageshow', () => {
+  refreshSceneAfterAppResume();
 });

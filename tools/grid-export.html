@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOKS Grid Export</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+    body {
+      display: grid;
+      place-items: center;
+      font-family: system-ui, sans-serif;
+    }
+    #stage {
+      position: relative;
+      width: 1024px;
+      height: 1024px;
+      display: grid;
+      place-items: center;
+      background: transparent;
+    }
+    #gridWrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: var(--grid-wrap-radius, 16px);
+      overflow: hidden;
+      background: var(--panel-bg, #ede7d7);
+      border: 2px solid var(--panel-edge, #d2c9b4);
+      box-shadow: 0 2px 0 #cdc2ab, 0 8px 14px rgba(95, 78, 52, 0.18);
+    }
+    #bgCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #gameGrid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 4px;
+      padding: 6px;
+      background: var(--grid-bg, #b7e48c);
+      border-radius: var(--grid-radius, 16px);
+      border: 1px solid #dfd5bf;
+    }
+    .cell {
+      position: relative;
+      overflow: hidden;
+      background: var(--cell-bg, #cfeaa5);
+      border: 1px solid var(--cell-edge, rgba(114, 164, 72, 0.5));
+      border-radius: var(--cell-radius, 8px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(190,172,139,0.35);
+    }
+    body.theme-thomas .cell,
+    body.theme-thomas #gridWrap,
+    body.theme-thomas #gameGrid {
+      border-radius: 0 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="gridWrap">
+      <canvas id="bgCanvas" width="1024" height="1024"></canvas>
+      <div id="gameGrid"></div>
+    </div>
+  </div>
+  <script src="../js/levels/level1.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const theme = params.get('theme') || 'level1';
+    const size = Math.max(256, Number(params.get('size')) || 1024);
+    const stage = document.getElementById('stage');
+    const wrap = document.getElementById('gridWrap');
+    const grid = document.getElementById('gameGrid');
+    const canvas = document.getElementById('bgCanvas');
+    const levels = window.BOKS_LEVELS || {};
+    const level = levels[theme] || levels.level1;
+
+    stage.style.width = `${size}px`;
+    stage.style.height = `${size}px`;
+    wrap.style.width = `${size}px`;
+    wrap.style.height = `${size}px`;
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+
+    const vars = level?.sceneVars || {};
+    Object.entries(vars).forEach(([key, value]) => {
+      document.documentElement.style.setProperty(key, value);
+    });
+    document.body.classList.toggle('theme-thomas', theme === 'level-thomas');
+
+    for (let y = 0; y < 6; y += 1) {
+      for (let x = 0; x < 6; x += 1) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.cx = String(x);
+        cell.dataset.cy = String(y);
+        grid.appendChild(cell);
+      }
+    }
+
+    requestAnimationFrame(() => {
+      level?.renderBackground?.();
+      requestAnimationFrame(() => {
+        document.body.setAttribute('data-export-ready', 'true');
+      });
+    });
+  </script>
+</body>
+</html>

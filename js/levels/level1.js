@@ -491,7 +491,7 @@
 
   window.BOKS_LEVELS['level-city'] = {
     id: 'level-city',
-    characterId: 'boks_green',
+    characterId: 'boks_city',
     name: 'Citta',
     themeSelectable: true,
     themeLabel: 'Citta',
