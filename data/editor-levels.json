@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exportedAt": "2026-04-01T14:05:03.458Z",
+  "exportedAt": "2026-04-01T14:13:07.457Z",
   "levels": [
     {
       "id": "level1-step-1",
@@ -658,7 +658,7 @@
       "name": "Livello 13",
       "icon": "leaf",
       "baseLevel": "level-thomas",
-      "characterId": "boks_green",
+      "characterId": "boks_blu",
       "start": {
         "x": 1,
         "y": 4
@@ -722,7 +722,7 @@
       "name": "Livello 14",
       "icon": "leaf",
       "baseLevel": "level-thomas",
-      "characterId": "boks_green",
+      "characterId": "boks_blu",
       "start": {
         "x": 1,
         "y": 3
@@ -768,7 +768,7 @@
       "name": "Livello 15",
       "icon": "leaf",
       "baseLevel": "level-thomas",
-      "characterId": "boks_green",
+      "characterId": "boks_blu",
       "start": {
         "x": 1,
         "y": 3
@@ -814,7 +814,7 @@
       "name": "Livello 16",
       "icon": "leaf",
       "baseLevel": "level-thomas",
-      "characterId": "boks_green",
+      "characterId": "boks_blu",
       "start": {
         "x": 3,
         "y": 1
