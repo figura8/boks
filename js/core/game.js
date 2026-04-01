@@ -487,6 +487,8 @@ const AUDIO_PATHS = Object.freeze({
     }
   }
 });
+const PLAY_ICON_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><use href="#icon-play-boks"></use></svg>';
+const PAUSE_ICON_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><use href="#icon-pause-boks"></use></svg>';
 const audioPlayers = new Map();
 const FX = () => {
   if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
@@ -4735,6 +4737,27 @@ function getDragHoverValidSlotKey(slot) {
   return '';
 }
 
+const slotCaptureEffectTimers = new Map();
+
+function triggerSlotCaptureEffect(zone, idx) {
+  const slot = document.querySelector(`.pslot[data-zone="${zone}"][data-slot="${idx}"]`);
+  if (!slot) return;
+  const timerKey = `${zone}:${idx}`;
+  const existingTimer = slotCaptureEffectTimers.get(timerKey);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    slotCaptureEffectTimers.delete(timerKey);
+  }
+  slot.classList.remove('slot-capture');
+  void slot.offsetWidth;
+  slot.classList.add('slot-capture');
+  const timer = setTimeout(() => {
+    slot.classList.remove('slot-capture');
+    slotCaptureEffectTimers.delete(timerKey);
+  }, 420);
+  slotCaptureEffectTimers.set(timerKey, timer);
+}
+
 function moveDg(cx,cy) {
   if(!dg.active) return;
   const g = document.getElementById('ghost');
@@ -4802,6 +4825,7 @@ function endDg(cx,cy) {
   dg.active=false;
   refreshAvailableBlockGlowState();
   renderAvail(); renderBoard(); renderFn();
+  if (didDropSuccessfully && slot) triggerSlotCaptureEffect(slot.dataset.zone, +slot.dataset.slot);
   refreshEditorDebug();
 }
 
@@ -4925,7 +4949,7 @@ async function run() {
   running=true;
   playRunPressSfx();
   const btn=document.getElementById('runBtn');
-  btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="4" height="16" rx="1" fill="#00aa50"/><rect x="15" y="4" width="4" height="16" rx="1" fill="#00aa50"/></svg>';
+  btn.innerHTML = PAUSE_ICON_SVG;
   toast(''); await sleep(200);
   let won = false;
 
@@ -4967,7 +4991,7 @@ async function run() {
 
   document.querySelectorAll('.pslot[data-zone="main"]').forEach(s=>s.classList.remove('active','done'));
   document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
-  btn.classList.remove('running'); btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12 L12 7.5 A4.5 4.5 0 0 1 16.5 12 Z" fill="#2B8FD4"/><path d="M12 12 L16.5 12 A4.5 4.5 0 0 1 12 16.5 Z" fill="#FFD31A"/><path d="M12 12 L12 16.5 A4.5 4.5 0 0 1 7.5 12 Z" fill="#FF3B3B"/><path d="M12 12 L7.5 12 A4.5 4.5 0 0 1 12 7.5 Z" fill="#3F9A62"/></svg>'; running=false;
+  btn.classList.remove('running'); btn.innerHTML = PLAY_ICON_SVG; running=false;
   if (!editorMode) resetPrograms();
 
   if(won) {
