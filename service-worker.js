@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -63,6 +63,8 @@ function isStaticAssetRequest(url) {
     || url.pathname.startsWith('/icons/')
     || url.pathname.startsWith('/js/')
     || url.pathname.startsWith('/styles/')
+    || url.pathname.endsWith('.js')
+    || url.pathname.endsWith('.css')
     || url.pathname.endsWith('.json')
     || url.pathname.endsWith('.svg')
     || url.pathname.endsWith('.png')
