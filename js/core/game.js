@@ -1537,6 +1537,7 @@ function ensureEndingCinematicRoot() {
     <div class="ending-cinematic__message" aria-hidden="true">
       <span class="ending-cinematic__thanks">Thank you for playing</span>
       <span class="ending-cinematic__brand">
+        <img class="boks-logo boks-logo--ending" src="assets/ui/brand/boks-logo.svg" alt="BÖKS">
         <span class="logo-letter logo-b">B</span><span class="logo-letter logo-o">Ö</span><span class="logo-letter logo-k">K</span><span class="logo-letter logo-s">S</span>
       </span>
     </div>
