@@ -1273,9 +1273,39 @@ function applyTabletLayoutPreference() {
     setTabletLayout(false, { persist: false, announce: false });
   }
 }
-async function requestAppFullscreen() {
-  // Evita lo snap automatico a schermo intero al primo click.
-  // Se in futuro vuoi reintrodurlo, legalo a un'azione esplicita dell'utente.
+function getCurrentFullscreenElement() {
+  return document.fullscreenElement
+    || document.webkitFullscreenElement
+    || document.msFullscreenElement
+    || null;
+}
+function isStandaloneAppDisplay() {
+  return Boolean(
+    window.matchMedia?.('(display-mode: standalone)').matches
+    || window.navigator?.standalone === true
+  );
+}
+function getFullscreenRequestTarget() {
+  return document.documentElement || document.body;
+}
+function requestFullscreenForUserGesture() {
+  if (isStandaloneAppDisplay() || getCurrentFullscreenElement()) return;
+  const mobileLike = window.matchMedia
+    ? window.matchMedia('(pointer: coarse)').matches
+    : true;
+  if (!mobileLike) return;
+  const target = getFullscreenRequestTarget();
+  const request = target?.requestFullscreen
+    || target?.webkitRequestFullscreen
+    || target?.msRequestFullscreen;
+  if (!request) return;
+  try {
+    const result = request.call(target, { navigationUI: 'hide' });
+    if (result?.catch) result.catch(() => {});
+  } catch (_) {}
+}
+async function requestAppFullscreen({ fromUserGesture = false } = {}) {
+  if (fromUserGesture) requestFullscreenForUserGesture();
   try {
     if (document.body.classList.contains('tablet-layout')) {
       screen.orientation?.unlock?.();
@@ -7283,6 +7313,7 @@ function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
 async function startGameFromGate() {
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
+  requestAppFullscreen({ fromUserGesture: true });
   const btn = document.getElementById('startGameBtn');
   if (btn) btn.disabled = true;
   pulseStartGameButtonPressedState();
@@ -7298,6 +7329,7 @@ async function startGameFromGate() {
 }
 async function startEditorFromGate() {
   if (!LEVEL_EDITOR_ENABLED) return;
+  requestAppFullscreen({ fromUserGesture: true });
   await ensureEditorSupportLoaded();
   openAppFromGate({ openEditor: true });
 }
