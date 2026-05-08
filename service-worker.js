@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   './js/editor/level-editor.js',
   './js/editor/level-storage.js',
   './js/levels/level1.js',
+  './data/editor-levels.json',
   './assets/animations/characters/registry.json',
   './assets/animations/characters/boks_green/manifest.js',
   './assets/animations/characters/boks_city/manifest.js',
@@ -112,10 +113,10 @@ async function networkFirst(request, cacheName, fallbackUrl = '') {
     }
     return response;
   } catch (_err) {
-    const cached = await caches.match(request);
+    const cached = await matchCached(request);
     if (cached) return cached;
     if (fallbackUrl) {
-      const fallback = await caches.match(fallbackUrl);
+      const fallback = await matchCached(fallbackUrl);
       if (fallback) return fallback;
     }
     return Response.error();
@@ -124,7 +125,7 @@ async function networkFirst(request, cacheName, fallbackUrl = '') {
 
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+  const cached = await cache.match(request, { ignoreSearch: true });
   const fetchPromise = fetch(request)
     .then(response => {
       if (isCacheableResponse(response)) {
@@ -145,4 +146,8 @@ async function staleWhileRevalidate(request, cacheName) {
 
 function isCacheableResponse(response) {
   return !!(response && response.ok && response.type !== 'opaque');
+}
+
+function matchCached(requestOrUrl) {
+  return caches.match(requestOrUrl, { ignoreSearch: true });
 }
