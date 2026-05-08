@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -23,6 +23,7 @@ const PRECACHE_URLS = [
   './assets/animations/characters/boks_yellow/manifest.js',
   './assets/animations/characters/boks_red/manifest.js',
   './assets/animations/characters/boks_blu/manifest.js',
+  './assets/ui/brand/boks-logo.svg',
   './assets/audio/music/game_loop_main.mp3',
   './assets/audio/music/level_01_intro_main.ogg',
   './assets/audio/sfx/gameplay/step_move.mp3',

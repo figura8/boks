@@ -356,7 +356,7 @@
         opacity: 0.9;
         transform: translateY(0) scale(1);
       }
-      #header:hover .logo-letter {
+      #header:hover .boks-logo {
         transform: scale(1.03);
       }
     }
@@ -407,6 +407,37 @@
     #quickEditorBtn:active {
       transform: translateY(2px);
       box-shadow: 0 1px 0 #cdc2ab, 0 3px 7px rgba(95, 78, 52, 0.14);
+    }
+    .boks-logo {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      transform: none;
+      transition: transform 0.12s ease;
+      pointer-events: none;
+      user-select: none;
+    }
+    .boks-logo--splash,
+    .boks-logo--start {
+      width: min(72vw, 360px);
+    }
+    .boks-logo--header {
+      width: clamp(86px, 24vw, 124px);
+    }
+    .boks-logo--settings {
+      width: 112px;
+    }
+    .boks-logo--ending {
+      width: min(58vw, 280px);
+      margin: 0 auto;
+    }
+    #splash-logo > span,
+    #startGate .start-title > span,
+    #header > .logo-letter,
+    .settings-brand > .logo-letter,
+    .ending-cinematic__brand > .logo-letter {
+      display: none;
     }
     .logo-letter {
       font-family: 'Lilita One', cursive;
