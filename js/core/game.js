@@ -384,7 +384,7 @@ async function popGoalBubble() {
   await sleep(GOAL_BUBBLE_POP_DURATION_MS);
 }
 let ori = 'right';
-const MOVE_MS = 650, TURN_MS = 520, STEP_MS = 180;
+const MOVE_MS = 1050, TURN_MS = 1050, STEP_MS = 180;
 const POOL = {
   forward:  {dir:'forward',  color:'#5BC85A', dark:'#3a8a39', light:'#8de88c'},
   left:     {dir:'left',     color:'#F5C842', dark:'#b8920a', light:'#ffe87a'},
@@ -395,6 +395,7 @@ const CUSTOM_LEVELS_STORAGE_KEY = 'boks-custom-levels';
 const EDITOR_LEVELS_STORAGE_KEY = 'boks-editor-levels-v1';
 const PROJECT_LEVELS_CACHE_KEY = 'boks-project-levels-cache-v1';
 const STYLE_PRESETS_STORAGE_KEY = 'boks-style-presets-v1';
+const TABLET_LAYOUT_STORAGE_KEY = 'boks-tablet-layout-enabled';
 const EDITOR_LEVELS_FILE_PATH = './data/editor-levels.json';
 const EDITOR_LEVELS_FILE_PICKER_SUGGESTED_NAME = 'editor-levels.json';
 const FILE_HANDLE_DB_NAME = 'boks-file-handles';
@@ -413,7 +414,7 @@ const DECORATION_TOUCH_REACTION_COOLDOWN_MS = 760;
 const DECORATION_TOUCH_SPRITE_INSET_RATIO = 0.04;
 const CUSTOM_ICONS = ['leaf', 'star', 'turtle', 'sun', 'moon', 'flower'];
   const DEFAULT_CHARACTER_ID = 'boks_green';
-const LOCKED_THEME_SCENE_VAR_KEYS = ['--scene-body-bg', '--bg-base'];
+const LOCKED_THEME_SCENE_VAR_KEYS = ['--scene-body-bg', '--bg-base', '--panel-bg', '--panel-edge'];
 const EDITOR_THEME_COLOR_CONTROLS = [
   { key: '--panel-bg', label: 'Pannelli' },
   { key: '--panel-edge', label: 'Bordo pannelli' },
@@ -501,7 +502,10 @@ const DECOR_CLASSES = [
   'decor-city-road',
   'decor-city-light',
   'decor-space-dust',
-  'decor-space-crater'
+  'decor-space-crater',
+  'decor-greek-glyph',
+  'decor-greek-crystal',
+  'decor-greek-gleam'
 ];
 let tutorialStepIndex = 0;
 let blockedCells = new Set();
@@ -647,6 +651,7 @@ const AUDIO_PATHS = Object.freeze({
       stepMove: 'assets/audio/sfx/gameplay/step_move.mp3',
       errorAction: 'assets/audio/sfx/gameplay/error_action.mp3',
       boksAnnoyed: 'assets/audio/sfx/gameplay/boks_annoyed.ogg',
+      welcome: 'assets/audio/sfx/gameplay/wellcome.mp3',
       decorRubberTap: [
         'assets/audio/sfx/gameplay/decor_rubber_tap_01.ogg',
         'assets/audio/sfx/gameplay/decor_rubber_tap_02.ogg'
@@ -657,8 +662,80 @@ const AUDIO_PATHS = Object.freeze({
     }
   }
 });
-const PLAY_ICON_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><use href="#icon-play-boks"></use></svg>';
-const PAUSE_ICON_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><use href="#icon-pause-boks"></use></svg>';
+const RUN_PROGRESS_LED_COUNT = 8;
+let runButtonPressedTimer = null;
+let activeRunLedSlotOrder = [];
+let startGameButtonPressedTimer = null;
+let startGameGateAnimating = false;
+function buildRunLedDots(count = RUN_PROGRESS_LED_COUNT) {
+  return Array.from({ length: count }, (_, idx) =>
+    `<span class="run-step-dot" data-run-led="${idx}" aria-hidden="true"></span>`
+  ).join('');
+}
+function renderRunButtonHud() {
+  const btn = document.getElementById('runBtn');
+  if (!btn) return;
+  btn.innerHTML = `
+    <span class="run-btn-shell" aria-hidden="true">
+      <span class="run-btn-progress">${buildRunLedDots()}</span>
+    </span>
+  `;
+  clearRunProgressIndicators();
+}
+function setRunButtonRunningState(isRunning) {
+  document.getElementById('runBtn')?.classList.toggle('running', Boolean(isRunning));
+}
+function pulseRunButtonPressedState(durationMs = 150) {
+  const btn = document.getElementById('runBtn');
+  if (!btn) return;
+  btn.classList.add('is-pressed');
+  if (runButtonPressedTimer) clearTimeout(runButtonPressedTimer);
+  runButtonPressedTimer = setTimeout(() => {
+    btn.classList.remove('is-pressed');
+    runButtonPressedTimer = null;
+  }, durationMs);
+}
+function setRunButtonPressedState(isPressed) {
+  const btn = document.getElementById('runBtn');
+  if (!btn) return;
+  if (runButtonPressedTimer) {
+    clearTimeout(runButtonPressedTimer);
+    runButtonPressedTimer = null;
+  }
+  btn.classList.toggle('is-pressed', Boolean(isPressed));
+}
+function syncRunProgressAvailability() {
+  clearRunProgressIndicators();
+}
+function clearRunProgressIndicators() {
+  document.querySelectorAll('#runBtn .run-step-dot')
+    .forEach(dot => dot.classList.remove('is-active', 'is-done'));
+}
+function updateRunProgressIndicator(zone = 'main', activeSlot = -1) {
+  if (zone !== 'main') return;
+  const dots = Array.from(document.querySelectorAll('#runBtn .run-step-dot'));
+  if (!dots.length) return;
+  const activeLedIndex = activeRunLedSlotOrder.indexOf(activeSlot);
+  dots.forEach((dot, ledIndex) => {
+    dot.classList.toggle('is-done', activeLedIndex >= 0 && ledIndex < activeLedIndex);
+    dot.classList.toggle('is-active', ledIndex === activeLedIndex);
+  });
+}
+function pulseStartGameButtonPressedState(durationMs = 160) {
+  const btn = document.getElementById('startGameBtn');
+  if (!btn) return;
+  btn.classList.add('is-pressed');
+  if (startGameButtonPressedTimer) clearTimeout(startGameButtonPressedTimer);
+  startGameButtonPressedTimer = setTimeout(() => {
+    btn.classList.remove('is-pressed');
+    startGameButtonPressedTimer = null;
+  }, durationMs);
+}
+function resetStartGameButtonVisualState() {
+  const btn = document.getElementById('startGameBtn');
+  if (!btn) return;
+  btn.classList.remove('is-popping', 'is-pressed');
+}
 const audioPlayers = new Map();
 const FX = () => {
   if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
@@ -898,6 +975,9 @@ function playGoalBubbleBounceSfx() {
 }
 function playBubblePopSfx() {
   playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.bubblePop, 0.26);
+}
+function playWelcomeSfx() {
+  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.welcome, 0.34);
 }
 function playLevelCompleteSfx() {
   playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.levelComplete, 0.5);
@@ -1166,13 +1246,39 @@ function updateOrientationGuard() {
   const mobileLike = window.matchMedia
     ? window.matchMedia('(pointer: coarse)').matches || Math.max(window.innerWidth, window.innerHeight) <= 1366
     : true;
-  document.body.classList.toggle('landscape-block', !portrait && mobileLike);
+  const tabletLayout = document.body.classList.contains('tablet-layout');
+  document.body.classList.toggle('landscape-block', !tabletLayout && !portrait && mobileLike);
+}
+function setTabletLayout(enabled, { persist = true, announce = true } = {}) {
+  document.body.classList.toggle('tablet-layout', Boolean(enabled));
+  if (persist) {
+    try {
+      localStorage.setItem(TABLET_LAYOUT_STORAGE_KEY, enabled ? '1' : '0');
+    } catch (_) {}
+  }
+  updateOrientationGuard();
+  requestAppFullscreen();
+  scheduleSceneRefresh({ syncOnboarding: true, label: enabled ? 'tablet-layout-on' : 'tablet-layout-off' });
+  if (announce) toast(enabled ? 'Layout tablet attivo' : 'Layout portrait attivo');
+}
+function toggleTabletLayout() {
+  setTabletLayout(!document.body.classList.contains('tablet-layout'));
+}
+function applyTabletLayoutPreference() {
+  try {
+    setTabletLayout(localStorage.getItem(TABLET_LAYOUT_STORAGE_KEY) === '1', { persist: false, announce: false });
+  } catch (_) {
+    setTabletLayout(false, { persist: false, announce: false });
+  }
 }
 async function requestAppFullscreen() {
   // Evita lo snap automatico a schermo intero al primo click.
   // Se in futuro vuoi reintrodurlo, legalo a un'azione esplicita dell'utente.
-  // blocca orientamento portrait su Android
   try {
+    if (document.body.classList.contains('tablet-layout')) {
+      screen.orientation?.unlock?.();
+      return;
+    }
     if (screen.orientation?.lock) await screen.orientation.lock('portrait');
   } catch (_) {}
 }
@@ -1519,6 +1625,13 @@ const clip = dir =>
   dir==='left'    ? 'polygon(50% 0,100% 32%,100% 100%,0 100%,0 32%)' :
                     'polygon(0 0,100% 0,100% 68%,50% 100%,0 68%)';
 
+const BLOCK_ICON_PATHS = {
+  forward: 'assets/ui/elements/icon_forward.svg',
+  left: 'assets/ui/elements/icon_turn_left.svg',
+  right: 'assets/ui/elements/icon_turn_right.svg',
+  function: 'assets/ui/elements/icon_function.svg'
+};
+
 // ═══ BUILD BLOCK ═══
 function mkB(block, w, h, cls='') {
   const el = document.createElement('div');
@@ -1527,42 +1640,14 @@ function mkB(block, w, h, cls='') {
   el.dataset.bid = block.id;
   const dir = el.dataset.dir;
   el.style.cssText = `width:${w}px;height:${h}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;`;
-
-  const c  = block.color;
-  const dk = block.dark  || '#666';
-  const lt = block.light || '#fff';
-
-  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.setAttribute('viewBox','0 0 40 32');
-  svg.setAttribute('width', w); svg.setAttribute('height', h);
-
-  const isThomasTheme = document.body?.classList.contains('theme-thomas');
-  const blockShape = isThomasTheme
-    ? `M4,4 L36,4 L36,28 L4,28 Z`
-    : `M4,8 Q4,4 8,4 L32,4 Q36,4 36,8 L36,24 Q36,28 32,28 L8,28 Q4,28 4,24 Z`;
-
-  // ombra
-  const shadow = document.createElementNS('http://www.w3.org/2000/svg','path');
-  shadow.setAttribute('d', blockShape);
-  shadow.setAttribute('fill', dk);
-  shadow.setAttribute('transform','translate(0,3)');
-  svg.appendChild(shadow);
-
-  // corpo
-  const body = document.createElementNS('http://www.w3.org/2000/svg','path');
-  body.setAttribute('d', blockShape);
-  body.setAttribute('fill', c);
-  svg.appendChild(body);
-
-  // highlight
-  const hi = document.createElementNS('http://www.w3.org/2000/svg','path');
-  hi.setAttribute('d', blockShape);
-  hi.setAttribute('fill', lt);
-  hi.setAttribute('opacity','0.35');
-  hi.setAttribute('clip-path','inset(0 0 55% 0)');
-  svg.appendChild(hi);
-
-  el.appendChild(svg);
+  const icon = document.createElement('img');
+  icon.className = 'block-art';
+  icon.src = BLOCK_ICON_PATHS[dir] || BLOCK_ICON_PATHS.forward;
+  icon.alt = '';
+  icon.draggable = false;
+  icon.width = w;
+  icon.height = h;
+  el.appendChild(icon);
 
   if (cls.includes('ablock')) {
     const fx = document.createElement('span');
@@ -1617,14 +1702,25 @@ function sizeGrid() {
   const grid  = document.getElementById('gameGrid');
   const app   = document.getElementById('app');
   const bot   = document.getElementById('bottom');
+  const header = document.getElementById('header');
+  const runBtn = document.getElementById('runBtn');
   const desktopLike = window.matchMedia ? window.matchMedia('(pointer: fine)').matches : false;
+  const tabletLayout = document.body.classList.contains('tablet-layout') && !document.body.classList.contains('editor-mode');
 
   // Measure what bottom actually needs
   const appH  = app.clientHeight;
   const botH  = bot.offsetHeight;
   const availH = appH - botH - 6 - 6 - 6; // gaps + padding
   const availW = wrap.clientWidth;
-  const sq = Math.max(120, Math.floor(desktopLike ? availW : Math.min(availH, availW)));
+  let sq;
+  if (tabletLayout) {
+    const headerH = header?.offsetHeight || 0;
+    const runH = runBtn?.offsetHeight || 0;
+    const verticalRoom = appH - headerH - runH - 72;
+    sq = Math.max(220, Math.floor(Math.min(availW, verticalRoom)));
+  } else {
+    sq = Math.max(120, Math.floor(desktopLike ? availW : Math.min(availH, availW)));
+  }
 
   grid.style.width  = sq + 'px';
   grid.style.height = sq + 'px';
@@ -3614,6 +3710,25 @@ function setCurrentEditorCharacterId(characterId) {
 
 function buildThemePreviewSVG(themeId) {
   const resolvedId = resolveThemeLevelId(themeId);
+  if (resolvedId === 'level-base') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <rect x="0" y="0" width="48" height="48" fill="#ede7d7"/>
+      <rect x="6" y="6" width="36" height="36" rx="5" fill="#d2c9b4"/>
+      <g stroke="#d2c9b4" stroke-width="1">
+        <rect x="9" y="9" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="19" y="9" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="29" y="9" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="9" y="19" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="19" y="19" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="29" y="19" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="9" y="29" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="19" y="29" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+        <rect x="29" y="29" width="8" height="8" rx="1.8" fill="#f7f1e5"/>
+      </g>
+      <circle cx="33" cy="33" r="3" fill="#5bc85a" stroke="#3a8a39" stroke-width="1"/>
+      <rect x="11" y="11" width="5" height="5" rx="1" fill="#fdb515" opacity="0.55"/>
+    </svg>`;
+  }
   if (resolvedId === 'level-city') {
     return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
       <defs>
@@ -3650,6 +3765,41 @@ function buildThemePreviewSVG(themeId) {
       <circle cx="41" cy="31" r="1" fill="#c8b5ff"/>
       <circle cx="8" cy="34" r="1.1" fill="#c4f7ff"/>
       <ellipse cx="18" cy="33" rx="9" ry="3.4" fill="none" stroke="#a794ff" stroke-width="1.4" opacity="0.52"/>
+    </svg>`;
+  }
+  if (resolvedId === 'level-zelda-greco') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <defs>
+        <linearGradient id="themeGreekSky" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#0f7a86"/>
+          <stop offset="58%" stop-color="#126f7b"/>
+          <stop offset="100%" stop-color="#c08e5f"/>
+        </linearGradient>
+        <linearGradient id="themeGreekStone" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f3e0b2"/>
+          <stop offset="100%" stop-color="#b59667"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="48" height="48" fill="url(#themeGreekSky)"/>
+      <path d="M3 34h30v7H3z" fill="url(#themeGreekStone)"/>
+      <path d="M4 32h28l-2 2H6z" fill="#7b5e3e" opacity="0.55"/>
+      <path d="M5 39h26" stroke="#7b5e3e" stroke-width="1.4" stroke-dasharray="3 2" opacity="0.7"/>
+      <path d="M34 14h10l2 5-2 5H33l-1-5z" fill="#6b5640" opacity="0.86"/>
+      <path d="M35 13h8l2 4-1.7 4H34l-1-4z" fill="#d7bf8f"/>
+      <path d="M37 10h4l1 3h-6z" fill="#85d6d7"/>
+      <path d="M13 41l2.8-6 2.8 6-2.8 4z" fill="#bb67ff" opacity="0.88"/>
+      <circle cx="22" cy="24" r="5" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.72)" stroke-width="1.1"/>
+      <circle cx="22" cy="24" r="2.1" fill="#ffd95a"/>
+    </svg>`;
+  }
+  if (resolvedId === 'level-manuale01') {
+    return `<svg viewBox="0 0 48 48" width="54" height="54" aria-hidden="true">
+      <rect x="0" y="0" width="48" height="48" fill="#d8c082"/>
+      <rect x="5" y="5" width="38" height="38" rx="6" fill="#d8c082" stroke="#876947" stroke-width="1.4"/>
+      <path d="M8 17h32" stroke="#7b5e3e" stroke-width="1.3" opacity="0.45"/>
+      <path d="M8 30h32" stroke="#7b5e3e" stroke-width="1.3" opacity="0.45"/>
+      <path d="M17 8v32" stroke="#7b5e3e" stroke-width="1.3" opacity="0.45"/>
+      <path d="M30 8v32" stroke="#7b5e3e" stroke-width="1.3" opacity="0.45"/>
     </svg>`;
   }
   if (resolvedId === 'level-thomas') {
@@ -4185,7 +4335,7 @@ function updateAnimationDebugBadge(extra = '') {
 function updateRunAvailability() {
   const btn = document.getElementById('runBtn');
   if (!btn) return;
-  const locked = !!(editorMode && (!playerPlaced || !goalPlaced));
+  const locked = !!(editorMode && !playerPlaced);
   btn.classList.toggle('editor-run-locked', locked);
   btn.disabled = locked;
   btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
@@ -5248,6 +5398,16 @@ function renderElementPalette() {
   ];
 
   palette.innerHTML = '';
+
+  function removeEditorGoal() {
+    if (!goalPlaced) return;
+    goalPlaced = false;
+    selectedElementTool = null;
+    applyEditorBoardChanges();
+    renderBoard();
+    renderCustomLevels();
+  }
+
   tools.forEach(tool => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -5268,6 +5428,15 @@ function renderElementPalette() {
       renderElementPalette();
     });
     palette.appendChild(btn);
+
+    if (tool.key === 'goal' && goalPlaced) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'element-tool-action element-tool-action--danger';
+      removeBtn.textContent = 'Rimuovi goal';
+      removeBtn.addEventListener('click', removeEditorGoal);
+      palette.appendChild(removeBtn);
+    }
   });
   renderDecorationPalette(palette);
   renderEditorSetupControls(palette);
@@ -6151,6 +6320,7 @@ function renderBoard() {
 
   g.appendChild(slotsWrap);
   alignAvailBlocksToSlots();
+  syncRunProgressAvailability();
   queueFirstLevelOnboardingSync();
 
   // Traccia completa: riga1 → connettore → riga2
@@ -6332,6 +6502,7 @@ function showGhost({ width, height, html = '', node = null, x = -9999, y = -9999
   if (Number.isFinite(width)) ghost.style.width = `${width}px`;
   if (Number.isFinite(height)) ghost.style.height = `${height}px`;
   ghost.style.borderRadius = '5px';
+  ghost.style.filter = dg?.pointerType === 'touch' ? 'none' : '';
   if (extraCssText) ghost.style.cssText += `;${extraCssText}`;
   setGhostPosition(x, y);
   return ghost;
@@ -6344,6 +6515,7 @@ function hideGhost() {
   ghost.style.removeProperty('width');
   ghost.style.removeProperty('height');
   ghost.style.removeProperty('border-radius');
+  ghost.style.removeProperty('filter');
   ghost.style.transform = 'translate3d(-9999px, -9999px, 0) translate(-50%, -50%)';
 }
 
@@ -6360,11 +6532,21 @@ function isPointInsideRect(x, y, rect) {
 
 function findDragSlotRectAt(x, y) {
   if (!dg?.slotRects?.length) return null;
-  if (dg.hoverRect && isPointInsideRect(x, y, dg.hoverRect.r)) return dg.hoverRect;
+  if (dg.hoverRect && isPointInsideRect(x, y, dg.hoverRect.hitR || dg.hoverRect.r)) return dg.hoverRect;
   for (const sr of dg.slotRects) {
-    if (isPointInsideRect(x, y, sr.r)) return sr;
+    if (isPointInsideRect(x, y, sr.hitR || sr.r)) return sr;
   }
   return null;
+}
+
+function getExpandedRect(rect, padX = 0, padY = padX) {
+  if (!rect) return null;
+  return {
+    left: rect.left - padX,
+    top: rect.top - padY,
+    right: rect.right + padX,
+    bottom: rect.bottom + padY
+  };
 }
 
 function getDragGhostPoint(x, y) {
@@ -6374,6 +6556,12 @@ function getDragGhostPoint(x, y) {
     x: x + Math.round(size * 0.32),
     y: y - Math.round(size * 0.9)
   };
+}
+
+function getDragSlotHitPadding(pointerType = 'mouse') {
+  return pointerType === 'touch'
+    ? { x: 14, y: 16 }
+    : { x: 8, y: 10 };
 }
 
 function restoreDragVisualState() {
@@ -6457,6 +6645,7 @@ function startDg(cx,cy,src,idx,sz,pointerType='mouse') {
   if(!block) return;
   if (dg.active) finishDragCleanup();
   restoreDragVisualState();
+  const slotHitPadding = getDragSlotHitPadding(pointerType);
   dg = {
     active:true,
     block,
@@ -6470,12 +6659,14 @@ function startDg(cx,cy,src,idx,sz,pointerType='mouse') {
     hover:null,
     hoverRect:null,
     hoverValidKey:null,
+    boardHoverBounds: getExpandedRect(document.getElementById('boardRow')?.getBoundingClientRect(), 28, 40),
     // Cache dei rettangoli degli slot per evitare elementFromPoint nel move loop
     slotRects: Array.from(document.querySelectorAll('.pslot')).map(el => ({
       el,
       zone: el.dataset.zone,
       idx: +el.dataset.slot,
-      r: el.getBoundingClientRect()
+      r: el.getBoundingClientRect(),
+      hitR: getExpandedRect(el.getBoundingClientRect(), slotHitPadding.x, slotHitPadding.y)
     }))
   };
   cancelDragMoveFrame();
@@ -6557,6 +6748,14 @@ function moveDg(cx,cy) {
     const ghostPointNow = getDragGhostPoint(cx, cy);
     setGhostPosition(ghostPointNow.x, ghostPointNow.y);
   }
+  if (dg.pointerType === 'touch') {
+    if (dg.hover) dg.hover.classList.remove('over');
+    dg.hover = null;
+    dg.hoverRect = null;
+    dg.hoverValidKey = null;
+    cancelDragMoveFrame();
+    return;
+  }
   if (dgMoveFrame) return;
   dgMoveFrame = requestAnimationFrame(() => {
     dgMoveFrame = 0;
@@ -6564,6 +6763,14 @@ function moveDg(cx,cy) {
     const x = dgPendingX;
     const y = dgPendingY;
     if (!dg.draggingVisuals) {
+      return;
+    }
+
+    if (dg.boardHoverBounds && !isPointInsideRect(x, y, dg.boardHoverBounds)) {
+      if (dg.hover) dg.hover.classList.remove('over');
+      dg.hover = null;
+      dg.hoverRect = null;
+      dg.hoverValidKey = null;
       return;
     }
 
@@ -6578,7 +6785,7 @@ function moveDg(cx,cy) {
 
     const validHoverKey = getDragHoverValidSlotKeyFromRect(slotRect);
     if (validHoverKey !== dg.hoverValidKey) {
-      if (validHoverKey) playBlockHoverSlotSfx();
+      if (validHoverKey && dg.pointerType !== 'touch') playBlockHoverSlotSfx();
       dg.hoverValidKey = validHoverKey || null;
     }
   });
@@ -6630,6 +6837,7 @@ function updateDraggedBoardState(dirtySlots = []) {
     renderFn();
   } else {
     alignAvailBlocksToSlots();
+    syncRunProgressAvailability();
     queueFirstLevelOnboardingSync();
   }
 }
@@ -6663,15 +6871,8 @@ function endDg(cx,cy) {
   }
   if(dg.hover) dg.hover.classList.remove('over');
   // Usa le coordinate reali del rilascio, non dg.hover (potenzialmente stale dall'ultimo RAF)
-  let slot = null;
-  if (dg.slotRects) {
-    for (const sr of dg.slotRects) {
-      if (releaseX >= sr.r.left && releaseX <= sr.r.right && releaseY >= sr.r.top && releaseY <= sr.r.bottom) {
-        slot = sr.el;
-        break;
-      }
-    }
-  }
+  const releaseSlotRect = findDragSlotRectAt(releaseX, releaseY);
+  let slot = releaseSlotRect?.el || null;
   if(slot) {
     const ti = +slot.dataset.slot;
     const zone = slot.dataset.zone;
@@ -6748,11 +6949,13 @@ function hlSlot(i, zone='main') {
     for(let j = 0; j < i; j++)
       document.querySelector(`.pslot[data-zone="main"][data-slot="${j}"]`)?.classList.add('done');
     document.querySelector(`.pslot[data-zone="main"][data-slot="${i}"]`)?.classList.add('active');
+    updateRunProgressIndicator('main', i);
   } else {
     document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s => s.classList.remove('fn-active','fn-done'));
     for(let j = 0; j < i; j++)
       document.querySelector(`.pslot[data-zone="fn"][data-slot="${j}"]`)?.classList.add('fn-done');
     document.querySelector(`.pslot[data-zone="fn"][data-slot="${i}"]`)?.classList.add('fn-active');
+    updateRunProgressIndicator('fn', i);
   }
   // no SVG track to redraw
 }
@@ -6833,7 +7036,7 @@ async function moveChar(dir) {
 }
 async function run() {
   if(!gameStarted || running || animating) return;
-  if (!playerPlaced || !goalPlaced) return;
+  if (!playerPlaced) return;
   if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
   const runStartState = editorMode ? { pos: { ...pos }, ori } : null;
   const runStartPrograms = editorMode ? {
@@ -6858,10 +7061,12 @@ async function run() {
     triggerEmptyRunHint();
     return;
   }
+  activeRunLedSlotOrder = activeMainIndexes.filter(i => i <= last);
+  setRunButtonPressedState(true);
   running=true;
   playRunPressSfx();
-  const btn=document.getElementById('runBtn');
-  btn.innerHTML = PAUSE_ICON_SVG;
+  setRunButtonRunningState(true);
+  clearRunProgressIndicators();
   toast(''); await sleep(200);
   let won = false;
 
@@ -6888,6 +7093,7 @@ async function run() {
             }
           }
           document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
+          updateRunProgressIndicator('fn', -1);
           if(won) break;
         }
       } else {
@@ -6903,8 +7109,28 @@ async function run() {
 
   document.querySelectorAll('.pslot[data-zone="main"]').forEach(s=>s.classList.remove('active','done'));
   document.querySelectorAll('.pslot[data-zone="fn"]').forEach(s=>s.classList.remove('fn-active','fn-done'));
-  btn.classList.remove('running'); btn.innerHTML = PLAY_ICON_SVG; running=false;
+  clearRunProgressIndicators();
+  activeRunLedSlotOrder = [];
+  setRunButtonPressedState(false);
+  setRunButtonRunningState(false);
+  running=false;
   if (!editorMode) resetPrograms();
+
+  if (!goalPlaced) {
+    if (editorMode && runStartPrograms) {
+      prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
+      fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
+      renderBoard();
+      renderFn();
+    }
+    if (!editorMode) {
+      resetPlayerToStepStart();
+      renderBoard();
+      renderFn();
+    }
+    syncSprite();
+    return;
+  }
 
   if(won) {
     if (!currentCustomLevel && currentLevel === 'level1') {
@@ -7007,6 +7233,7 @@ void init();
 
 function showStartGate() {
   document.body.classList.add('prestart');
+  resetStartGameButtonVisualState();
   document.getElementById('startGate')?.classList.add('show');
   queueFirstLevelOnboardingSync();
 }
@@ -7050,8 +7277,21 @@ function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
     startFpsProbe(shouldOpenEditor ? 'editor-open' : 'game-open');
   }, gateFadeMs + backgroundHoldMs);
 }
-function startGameFromGate() {
+async function startGameFromGate() {
+  if (startGameGateAnimating) return;
+  startGameGateAnimating = true;
+  const btn = document.getElementById('startGameBtn');
+  if (btn) btn.disabled = true;
+  pulseStartGameButtonPressedState();
+  btn?.classList.add('is-popping');
+  playWelcomeSfx();
+  playBubblePopSfx();
+  await sleep(720);
   openAppFromGate({ openEditor: false });
+  window.setTimeout(() => {
+    startGameGateAnimating = false;
+    if (btn) btn.disabled = false;
+  }, 0);
 }
 async function startEditorFromGate() {
   if (!LEVEL_EDITOR_ENABLED) return;
@@ -7252,6 +7492,11 @@ document.addEventListener('keydown', e => {
     toggleEditorFromCurrentLevel();
     return;
   }
+  if (key === 't') {
+    e.preventDefault();
+    toggleTabletLayout();
+    return;
+  }
   if (key === 'l') {
     toggleDebugBadge();
     return;
@@ -7270,6 +7515,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
+renderRunButtonHud();
 updateQuickEditorButton();
 updateStyleEditorButtons();
 syncSettingsPanelUi();
@@ -7301,6 +7547,8 @@ function refreshSceneAfterAppResume() {
   renderGridDecorations();
   scheduleSceneRefresh({ label: 'resume' });
 }
+
+applyTabletLayoutPreference();
 
 // ri-entra in fullscreen se l'utente torna sull'app (es. dopo notifica)
 document.addEventListener('visibilitychange', () => {

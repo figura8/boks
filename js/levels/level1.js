@@ -86,6 +86,12 @@
     });
   }
 
+  function goalSVGZeldaGreco() {
+    return renderGoalCharacterBadge({
+      shadow: 'rgba(255, 220, 136, 0.34)'
+    });
+  }
+
   function renderCharacter(state) {
     const resolvedState = typeof state === 'string'
       ? { direction: state, action: 'idle' }
@@ -120,6 +126,19 @@
     const cx = canvas.getContext('2d');
     if (!cx) return null;
     return { cx, size };
+  }
+
+  const backgroundImageCache = new Map();
+
+  function getBackgroundImage(src) {
+    if (!src) return null;
+    if (!backgroundImageCache.has(src)) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+      backgroundImageCache.set(src, img);
+    }
+    return backgroundImageCache.get(src) || null;
   }
 
   function drawBackgroundLevel1() {
@@ -382,6 +401,217 @@
     cx.restore();
   }
 
+  function drawBackgroundZeldaGreco() {
+    const prepared = prepareBackgroundCanvas();
+    if (!prepared) return;
+    const { cx, size: S } = prepared;
+    const gridTexture = getBackgroundImage('assets/ui/grids/grid_01.png');
+
+    const bg = cx.createLinearGradient(0, 0, S, S);
+    bg.addColorStop(0, '#0f7a86');
+    bg.addColorStop(0.54, '#116f7b');
+    bg.addColorStop(1, '#c29262');
+    cx.fillStyle = bg;
+    cx.fillRect(0, 0, S, S);
+
+    cx.save();
+    const hazeA = cx.createRadialGradient(S * 0.22, S * 0.18, S * 0.04, S * 0.22, S * 0.18, S * 0.38);
+    hazeA.addColorStop(0, 'rgba(125, 243, 255, 0.2)');
+    hazeA.addColorStop(1, 'rgba(125, 243, 255, 0)');
+    cx.fillStyle = hazeA;
+    cx.fillRect(0, 0, S, S);
+    const hazeB = cx.createRadialGradient(S * 0.82, S * 0.68, S * 0.05, S * 0.82, S * 0.68, S * 0.44);
+    hazeB.addColorStop(0, 'rgba(255, 224, 164, 0.22)');
+    hazeB.addColorStop(1, 'rgba(255, 224, 164, 0)');
+    cx.fillStyle = hazeB;
+    cx.fillRect(0, 0, S, S);
+    cx.restore();
+
+    function drawCloud(x, y, scale, alpha) {
+      cx.save();
+      cx.globalAlpha = alpha;
+      cx.fillStyle = '#dbeff0';
+      cx.beginPath();
+      cx.ellipse(x, y, S * 0.06 * scale, S * 0.028 * scale, 0, 0, Math.PI * 2);
+      cx.ellipse(x + S * 0.04 * scale, y - S * 0.008 * scale, S * 0.048 * scale, S * 0.024 * scale, 0, 0, Math.PI * 2);
+      cx.ellipse(x - S * 0.038 * scale, y + S * 0.004 * scale, S * 0.04 * scale, S * 0.02 * scale, 0, 0, Math.PI * 2);
+      cx.fill();
+      cx.restore();
+    }
+
+    function drawIsland(x, y, scale, variant = 0) {
+      const w = S * 0.18 * scale;
+      const h = S * 0.06 * scale;
+      const rock = '#5f4a38';
+      const rockShade = '#493729';
+      const grass = variant === 1 ? '#d3be7d' : '#d8c987';
+      const moss = variant === 1 ? '#8ba55d' : '#9db56b';
+
+      cx.save();
+      cx.translate(x, y);
+
+      cx.fillStyle = grass;
+      cx.beginPath();
+      cx.moveTo(-w * 0.54, -h * 0.24);
+      cx.quadraticCurveTo(-w * 0.12, -h * 0.5, w * 0.4, -h * 0.28);
+      cx.quadraticCurveTo(w * 0.56, -h * 0.22, w * 0.52, -h * 0.06);
+      cx.lineTo(-w * 0.5, -h * 0.02);
+      cx.closePath();
+      cx.fill();
+
+      cx.fillStyle = moss;
+      cx.fillRect(-w * 0.45, -h * 0.08, w * 0.76, h * 0.12);
+
+      cx.fillStyle = rock;
+      cx.beginPath();
+      cx.moveTo(-w * 0.5, 0);
+      cx.lineTo(w * 0.5, 0);
+      cx.lineTo(w * 0.3, h * 1.75);
+      cx.lineTo(-w * 0.18, h * 2.35);
+      cx.lineTo(-w * 0.54, h * 1.28);
+      cx.closePath();
+      cx.fill();
+
+      cx.fillStyle = rockShade;
+      cx.beginPath();
+      cx.moveTo(-w * 0.08, 0);
+      cx.lineTo(w * 0.5, 0);
+      cx.lineTo(w * 0.3, h * 1.75);
+      cx.lineTo(w * 0.03, h * 1.22);
+      cx.closePath();
+      cx.fill();
+
+      cx.strokeStyle = 'rgba(255, 248, 217, 0.22)';
+      cx.lineWidth = Math.max(1, S * 0.0045 * scale);
+      cx.beginPath();
+      cx.moveTo(-w * 0.28, h * 0.5);
+      cx.lineTo(-w * 0.08, h * 0.85);
+      cx.lineTo(w * 0.08, h * 0.48);
+      cx.stroke();
+
+      if (variant === 0) {
+        cx.fillStyle = '#c694ff';
+        cx.beginPath();
+        cx.moveTo(-w * 0.1, -h * 0.36);
+        cx.lineTo(-w * 0.02, -h * 0.74);
+        cx.lineTo(w * 0.02, -h * 0.34);
+        cx.lineTo(-w * 0.02, -h * 0.14);
+        cx.closePath();
+        cx.fill();
+      } else {
+        cx.strokeStyle = '#8e6f44';
+        cx.lineWidth = Math.max(1.2, S * 0.006 * scale);
+        cx.lineCap = 'round';
+        cx.beginPath();
+        cx.moveTo(-w * 0.18, -h * 0.14);
+        cx.lineTo(-w * 0.18, -h * 0.7);
+        cx.moveTo(-w * 0.04, -h * 0.12);
+        cx.lineTo(-w * 0.04, -h * 0.62);
+        cx.stroke();
+      }
+
+      cx.restore();
+    }
+
+    drawIsland(S * 0.18, S * 0.2, 0.92, 0);
+    drawIsland(S * 0.81, S * 0.22, 0.82, 1);
+    drawIsland(S * 0.66, S * 0.1, 0.48, 0);
+
+    drawCloud(S * 0.14, S * 0.14, 1.05, 0.42);
+    drawCloud(S * 0.84, S * 0.82, 1.2, 0.36);
+    drawCloud(S * 0.19, S * 0.86, 0.8, 0.3);
+
+    cx.save();
+    for (let i = 0; i < 26; i++) {
+      const x = (((i + 4) * 127) % 997) / 997 * S;
+      const y = (((i + 7) * 233) % 991) / 991 * S;
+      const r = Math.max(1.1, S * 0.0045);
+      cx.fillStyle = i % 3 === 0 ? 'rgba(255, 244, 198, 0.8)' : 'rgba(190, 245, 255, 0.7)';
+      cx.beginPath();
+      cx.arc(x, y, r, 0, Math.PI * 2);
+      cx.fill();
+      if (i % 5 === 0) {
+        cx.strokeStyle = 'rgba(255,255,255,0.72)';
+        cx.lineWidth = Math.max(0.8, S * 0.0028);
+        cx.beginPath();
+        cx.moveTo(x - r * 1.8, y);
+        cx.lineTo(x + r * 1.8, y);
+        cx.moveTo(x, y - r * 1.8);
+        cx.lineTo(x, y + r * 1.8);
+        cx.stroke();
+      }
+    }
+    cx.restore();
+
+    cx.save();
+    if (gridTexture?.complete && gridTexture.naturalWidth > 0) {
+      cx.globalAlpha = 0.96;
+      cx.drawImage(gridTexture, 0, 0, S, S);
+      cx.fillStyle = 'rgba(255, 236, 186, 0.08)';
+      cx.fillRect(0, 0, S, S);
+    } else if (gridTexture && !gridTexture._boksBound) {
+      gridTexture.addEventListener('load', () => {
+        window.drawBackgroundZeldaGreco?.();
+      }, { once: true });
+      gridTexture._boksBound = true;
+    }
+    cx.restore();
+
+    cx.save();
+    const ribbon = cx.createLinearGradient(S * 0.72, S * 0.38, S * 0.9, S * 0.85);
+    ribbon.addColorStop(0, 'rgba(255, 220, 110, 0)');
+    ribbon.addColorStop(0.28, 'rgba(255, 220, 110, 0.55)');
+    ribbon.addColorStop(0.56, 'rgba(126, 250, 255, 0.62)');
+    ribbon.addColorStop(1, 'rgba(210, 118, 255, 0)');
+    cx.strokeStyle = ribbon;
+    cx.lineWidth = Math.max(5, S * 0.024);
+    cx.lineCap = 'round';
+    cx.beginPath();
+    cx.moveTo(S * 0.76, S * 0.46);
+    cx.bezierCurveTo(S * 0.9, S * 0.54, S * 0.92, S * 0.7, S * 0.78, S * 0.82);
+    cx.stroke();
+    cx.restore();
+
+    cx.save();
+    const gridSize = S / 6;
+    cx.strokeStyle = 'rgba(227, 243, 238, 0.13)';
+    cx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      cx.beginPath();
+      cx.moveTo(i * gridSize, 0);
+      cx.lineTo(i * gridSize, S);
+      cx.stroke();
+      cx.beginPath();
+      cx.moveTo(0, i * gridSize);
+      cx.lineTo(S, i * gridSize);
+      cx.stroke();
+    }
+    cx.restore();
+  }
+
+  function drawBackgroundManuale01() {
+    const prepared = prepareBackgroundCanvas();
+    if (!prepared) return;
+    const { cx, size: S } = prepared;
+    const gridTexture = getBackgroundImage('assets/ui/grids/grid_01.png');
+    cx.clearRect(0, 0, S, S);
+
+    cx.save();
+    if (gridTexture?.complete && gridTexture.naturalWidth > 0) {
+      cx.globalAlpha = 1;
+      cx.drawImage(gridTexture, 0, 0, S, S);
+    } else if (gridTexture && !gridTexture._boksBound) {
+      gridTexture.addEventListener('load', () => {
+        window.drawBackgroundManuale01?.();
+      }, { once: true });
+      gridTexture._boksBound = true;
+    } else {
+      cx.fillStyle = '#d8c082';
+      cx.fillRect(0, 0, S, S);
+    }
+    cx.restore();
+  }
+
   function drawBackgroundThomas() {
     const prepared = prepareBackgroundCanvas();
     if (!prepared) return;
@@ -411,6 +641,18 @@
     cx.restore();
   }
 
+  function drawBackgroundBase() {
+    const prepared = prepareBackgroundCanvas();
+    if (!prepared) return;
+    const { cx, size: S } = prepared;
+
+    const bg = cx.createLinearGradient(0, 0, 0, S);
+    bg.addColorStop(0, '#f3ecdd');
+    bg.addColorStop(1, '#e8dfcc');
+    cx.fillStyle = bg;
+    cx.fillRect(0, 0, S, S);
+  }
+
   function decorateLevel1(cell, x, y) {
     if ((x + y) % 2 === 0) cell.classList.add('decor-grass');
     if ((x * 3 + y * 2) % 7 === 0) {
@@ -429,7 +671,14 @@
     if ((x * 7 + y * 5) % 9 === 0) cell.classList.add('decor-space-crater');
   }
 
+  function decorateZeldaGreco(cell, x, y) {
+    if ((x + y * 2) % 4 === 0) cell.classList.add('decor-greek-glyph');
+    if ((x * 5 + y * 3) % 7 === 0) cell.classList.add('decor-greek-crystal');
+    if ((x * 7 + y * 4) % 11 === 0) cell.classList.add('decor-greek-gleam');
+  }
+
   function decorateThomas() {}
+  function decorateBase() {}
 
   window.goalSVGLevel1 = goalSVGLevel1;
   window.BOKS_GOAL_CHARACTER = {
@@ -440,8 +689,56 @@
   };
   window.renderCharacterLevel1 = renderCharacter;
   window.drawBackgroundLevel1 = drawBackgroundLevel1;
+  window.drawBackgroundZeldaGreco = drawBackgroundZeldaGreco;
+  window.drawBackgroundManuale01 = drawBackgroundManuale01;
 
   window.BOKS_LEVELS = window.BOKS_LEVELS || {};
+
+  window.BOKS_LEVELS['level-base'] = {
+    id: 'level-base',
+    characterId: 'boks_green',
+    name: 'Base',
+    themeSelectable: true,
+    themeLabel: 'Base',
+    themeHint: 'Griglia semplice e neutra',
+    thumbnailPalette: {
+      scene: '#ede7d7',
+      cellA: '#f7f1e5',
+      cellB: '#efe6d4',
+      cellStroke: '#d2c9b4',
+      obstacleFill: '#d6c0a0',
+      obstacleStroke: '#9d7b51',
+      goalFill: '#5bc85a',
+      goalStroke: '#3a8a39',
+      startFill: '#fff8ee',
+      startStroke: '#5aa24e'
+    },
+    sceneVars: {
+      '--scene-body-bg': 'radial-gradient(140% 95% at 50% 0%, #f3ecdd 0%, #ece3d1 48%, #e8dfcc 100%)',
+      '--bg-base': '#e8dfcc',
+      '--panel-bg': '#ede7d7',
+      '--panel-edge': '#d2c9b4',
+      '--scene-grid-wrap-bg': '#ede7d7',
+      '--grid-bg': '#d2c9b4',
+      '--cell-bg': '#f7f1e5',
+      '--cell-edge': 'rgba(156, 139, 109, 0.48)',
+      '--cell-hi-bg': 'rgba(253, 181, 21, 0.22)',
+      '--cell-hi-edge': '#fdb515',
+      '--cell-hi-ring': 'rgba(253, 181, 21, 0.3)',
+      '--grid-wrap-radius': '16px',
+      '--grid-radius': '14px',
+      '--cell-radius': '8px',
+      '--obstacle-pattern-radius': '5px',
+      '--obstacle-bg-top': 'rgba(214,192,160,0.96)',
+      '--obstacle-bg-bottom': 'rgba(190,164,126,0.96)',
+      '--obstacle-edge': 'rgba(133,104,67,0.74)',
+      '--obstacle-pattern': 'rgba(125,95,57,0.32)'
+    },
+    decorateCell: decorateBase,
+    renderGoal: goalSVGLevel1,
+    renderSprite: renderCharacter,
+    renderBackground: drawBackgroundLevel1
+  };
 
   window.BOKS_LEVELS.level1 = {
     id: 'level1',
@@ -532,7 +829,7 @@
     decorateCell: decorateCity,
     renderGoal: goalSVGCity,
     renderSprite: renderCharacter,
-    renderBackground: drawBackgroundCity
+    renderBackground: drawBackgroundLevel1
   };
 
   window.BOKS_LEVELS['level-universe'] = {
@@ -578,7 +875,99 @@
     decorateCell: decorateUniverse,
     renderGoal: goalSVGUniverse,
     renderSprite: renderCharacter,
-    renderBackground: drawBackgroundUniverse
+    renderBackground: drawBackgroundLevel1
+  };
+
+  window.BOKS_LEVELS['level-zelda-greco'] = {
+    id: 'level-zelda-greco',
+    characterId: 'boks_green',
+    name: 'Zelda Greco',
+    themeSelectable: true,
+    themeLabel: 'Zelda Greco',
+    themeHint: 'Rovine sospese, cristalli e cielo teal-oro',
+    thumbnailPalette: {
+      scene: '#116f7b',
+      cellA: '#dbc88f',
+      cellB: '#cdb378',
+      cellStroke: '#8f724c',
+      obstacleFill: '#76604a',
+      obstacleStroke: '#4b3929',
+      goalFill: '#ffe48b',
+      goalStroke: '#b98235',
+      startFill: '#f9f6ef',
+      startStroke: '#497b74'
+    },
+    sceneVars: {
+      '--scene-body-bg': 'linear-gradient(135deg, #0b7583 0%, #106f7b 52%, #c18f5f 100%)',
+      '--bg-base': '#106f7b',
+      '--panel-bg': '#f2e2b8',
+      '--panel-edge': '#b89560',
+      '--scene-grid-wrap-bg': '#d8c485',
+      '--grid-bg': '#b6935d',
+      '--cell-bg': '#dcc993',
+      '--cell-edge': 'rgba(131, 105, 67, 0.6)',
+      '--cell-hi-bg': 'rgba(255, 241, 177, 0.92)',
+      '--cell-hi-edge': '#dfb552',
+      '--cell-hi-ring': 'rgba(223,181,82,0.44)',
+      '--grid-wrap-radius': '18px',
+      '--grid-radius': '18px',
+      '--cell-radius': '8px',
+      '--obstacle-pattern-radius': '4px',
+      '--obstacle-bg-top': 'rgba(124,101,76,0.96)',
+      '--obstacle-bg-bottom': 'rgba(90,70,51,0.98)',
+      '--obstacle-edge': 'rgba(71,53,37,0.9)',
+      '--obstacle-pattern': 'rgba(239,217,174,0.36)'
+    },
+    decorateCell: decorateZeldaGreco,
+    renderGoal: goalSVGZeldaGreco,
+    renderSprite: renderCharacter,
+    renderBackground: drawBackgroundLevel1
+  };
+
+  window.BOKS_LEVELS['level-manuale01'] = {
+    id: 'level-manuale01',
+    characterId: 'boks_green',
+    name: 'Manuale01',
+    themeSelectable: true,
+    themeLabel: 'Manuale01',
+    themeHint: 'Usa la griglia custom grid_01.png',
+    thumbnailPalette: {
+      scene: '#3c7b80',
+      cellA: '#ddc788',
+      cellB: '#d3b877',
+      cellStroke: '#8a6d4b',
+      obstacleFill: '#7b624a',
+      obstacleStroke: '#4f3c2d',
+      goalFill: '#ffe095',
+      goalStroke: '#bf8b3e',
+      startFill: '#faf6ee',
+      startStroke: '#45756f'
+    },
+    sceneVars: {
+      '--scene-body-bg': 'linear-gradient(180deg, #f0e1b8 0%, #e1cb92 100%)',
+      '--bg-base': '#e1cb92',
+      '--panel-bg': '#f1dfb0',
+      '--panel-edge': '#b08b59',
+      '--scene-grid-wrap-bg': '#d9c281',
+      '--grid-bg': 'transparent',
+      '--cell-bg': 'transparent',
+      '--cell-edge': 'transparent',
+      '--cell-hi-bg': 'rgba(255, 241, 183, 0.9)',
+      '--cell-hi-edge': '#d9b257',
+      '--cell-hi-ring': 'rgba(217,178,87,0.42)',
+      '--grid-wrap-radius': '18px',
+      '--grid-radius': '18px',
+      '--cell-radius': '8px',
+      '--obstacle-pattern-radius': '4px',
+      '--obstacle-bg-top': 'rgba(128,104,79,0.96)',
+      '--obstacle-bg-bottom': 'rgba(93,73,54,0.98)',
+      '--obstacle-edge': 'rgba(73,55,39,0.9)',
+      '--obstacle-pattern': 'rgba(240,220,180,0.28)'
+    },
+    decorateCell: decorateBase,
+    renderGoal: goalSVGZeldaGreco,
+    renderSprite: renderCharacter,
+    renderBackground: drawBackgroundLevel1
   };
 
   window.BOKS_LEVELS['level-thomas'] = {
@@ -624,6 +1013,6 @@
     decorateCell: decorateThomas,
     renderGoal: goalSVGLevel1,
     renderSprite: renderCharacter,
-    renderBackground: drawBackgroundThomas
+    renderBackground: drawBackgroundLevel1
   };
 })();
