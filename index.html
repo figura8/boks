@@ -68,30 +68,54 @@
     <div class="start-title">
       <img class="boks-logo boks-logo--start" src="assets/ui/brand/boks-logo.svg" alt="BÖKS">
     </div>
-    <button id="startGameBtn" type="button" aria-label="Entra nel gioco">
-      <span class="start-goal-trigger__visual" aria-hidden="true">
-        <span class="goal-bubble">
-          <span class="goal-light">
-            <span class="goal-light__bloom"></span>
-            <span class="goal-light__rays"></span>
-            <span class="goal-light__core"></span>
-            <span class="goal-light__speck goal-light__speck--a"></span>
-            <span class="goal-light__speck goal-light__speck--b"></span>
-            <span class="goal-light__speck goal-light__speck--c"></span>
-            <span class="goal-light__speck goal-light__speck--d"></span>
-          </span>
-          <span class="goal-bubble__glow"></span>
-          <span class="goal-bubble__burst goal-bubble__burst--ring"></span>
-          <span class="goal-bubble__burst goal-bubble__burst--a"></span>
-          <span class="goal-bubble__burst goal-bubble__burst--b"></span>
-          <span class="goal-bubble__burst goal-bubble__burst--c"></span>
-          <span class="goal-bubble__burst goal-bubble__burst--d"></span>
-          <span class="goal-bubble__shell">
-            <span class="goal-bubble__flower"></span>
+    <div class="start-bubble-row" aria-label="Azioni principali">
+      <button id="startBoksBtn" type="button" aria-label="Entra nella modalita libera">
+        <span class="start-goal-trigger__visual start-boks-trigger__visual" aria-hidden="true">
+          <span class="goal-bubble start-boks-bubble">
+            <span class="goal-light">
+              <span class="goal-light__bloom"></span>
+              <span class="goal-light__rays"></span>
+              <span class="goal-light__core"></span>
+              <span class="goal-light__speck goal-light__speck--a"></span>
+              <span class="goal-light__speck goal-light__speck--b"></span>
+              <span class="goal-light__speck goal-light__speck--c"></span>
+              <span class="goal-light__speck goal-light__speck--d"></span>
+            </span>
+            <span class="goal-bubble__glow"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--ring"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--a"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--b"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--c"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--d"></span>
+            <span class="goal-bubble__shell"></span>
           </span>
         </span>
-      </span>
-    </button>
+      </button>
+      <button id="startGameBtn" type="button" aria-label="Entra nel gioco">
+        <span class="start-goal-trigger__visual" aria-hidden="true">
+          <span class="goal-bubble">
+            <span class="goal-light">
+              <span class="goal-light__bloom"></span>
+              <span class="goal-light__rays"></span>
+              <span class="goal-light__core"></span>
+              <span class="goal-light__speck goal-light__speck--a"></span>
+              <span class="goal-light__speck goal-light__speck--b"></span>
+              <span class="goal-light__speck goal-light__speck--c"></span>
+              <span class="goal-light__speck goal-light__speck--d"></span>
+            </span>
+            <span class="goal-bubble__glow"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--ring"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--a"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--b"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--c"></span>
+            <span class="goal-bubble__burst goal-bubble__burst--d"></span>
+            <span class="goal-bubble__shell">
+              <span class="goal-bubble__flower"></span>
+            </span>
+          </span>
+        </span>
+      </button>
+    </div>
   </div>
   <div class="start-actions">
     <button id="startEditorBtn" type="button">Level Editor</button>
@@ -162,6 +186,7 @@
         <div id="header" role="button" tabindex="0" aria-label="Open settings" title="Open settings">
           <img class="boks-logo boks-logo--header" src="assets/ui/brand/boks-logo.svg" alt="BÖKS">
         </div>
+        <div id="sandboxToolbar" aria-label="Strumenti modalita libera"></div>
         <!-- Row 1: grid (flexible) -->
         <div id="gridWrap">
           <canvas id="bgCanvas" style="position:absolute;inset:0;pointer-events:none;border-radius:7px;"></canvas>
@@ -173,7 +198,7 @@
         <div id="bottom">
           <div id="blocksRow"></div>
           <div id="boardRow"><div id="boardGrid"></div></div>
-          <button id="runBtn" onclick="run()" onmousedown="this.blur()">
+          <button id="runBtn" type="button">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <use href="#icon-play-boks"></use>
             </svg>
