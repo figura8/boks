@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v25-live-20260510-202835';
+const CACHE_VERSION = 'v25-live-20260510-225229';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
