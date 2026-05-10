@@ -127,6 +127,9 @@
   const CORE_STARTUP_SCRIPTS = [
     'js/core/character/character-renderer.js',
     'js/levels/level1.js',
+    'js/core/debug-tools.js',
+    'js/core/audio-manager.js',
+    'js/core/settings-panel.js',
     'js/editor/level-storage.js',
     'js/core/game.js'
   ];

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v12-live-20260508-235701';
+const CACHE_VERSION = 'v25';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -10,6 +10,9 @@ const PRECACHE_URLS = [
   './styles/character.css',
   './js/core/app-loader.js',
   './js/core/sw-register.js',
+  './js/core/debug-tools.js',
+  './js/core/audio-manager.js',
+  './js/core/settings-panel.js',
   './js/core/game.js',
   './js/core/character/character-renderer.js',
   './js/editor/level-storage.js',

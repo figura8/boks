@@ -4,9 +4,11 @@ let GOAL = {x:5,y:5};
 let START = {x:2,y:2};
 const gridCellEls = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 const coarsePointer = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : true;
-const runtimePerf = window.BOKS_RUNTIME_CONFIG?.perf || null;
 const LOW_END_DEVICE = window.BOKS_RUNTIME_CONFIG?.lowEndDevice === true;
 let appSceneVisible = document.visibilityState !== 'hidden';
+let debugTools = null;
+
+const now = () => window.performance?.now?.() || Date.now();
 
 function getCanvasDprCap() {
   if (LOW_END_DEVICE) return 1.15;
@@ -18,15 +20,15 @@ function getEffectiveCanvasDpr() {
 }
 
 function recordPerfMetric(name, durationMs, detail = {}) {
-  return runtimePerf?.record?.(name, durationMs, detail) || null;
+  return debugTools?.recordPerfMetric?.(name, durationMs, detail) || null;
 }
 
 function markPerfMetricStart(name) {
-  runtimePerf?.markStart?.(name);
+  debugTools?.markPerfMetricStart?.(name);
 }
 
 function markPerfMetricEnd(name, detail = {}) {
-  return runtimePerf?.markEnd?.(name, detail) || null;
+  return debugTools?.markPerfMetricEnd?.(name, detail) || null;
 }
 
 function getGridCell(x, y) {
@@ -48,16 +50,25 @@ function moveGoal() {
     old.style.position = '';
     old.style.overflow = '';
   }
-  let nx, ny, attempts = 0;
-  do {
-    nx = Math.floor(Math.random()*COLS);
-    ny = Math.floor(Math.random()*ROWS);
-    attempts++;
-  } while(
-    attempts < 100 &&
-    (Math.abs(nx-pos.x)+Math.abs(ny-pos.y) < 3 ||
-     (nx===START.x && ny===START.y))
-  );
+  let nx, ny;
+  const validPositions = [];
+  for (let x = 0; x < COLS; x++) {
+    for (let y = 0; y < ROWS; y++) {
+      const isStart = (x === START.x && y === START.y);
+      const tooClose = (Math.hypot(x - pos.x, y - pos.y) < 2);
+      const isObstacle = isBlockedCell(x, y);
+      if (!isStart && !tooClose && !isObstacle) {
+        validPositions.push({x, y});
+      }
+    }
+  }
+
+  const target = validPositions.length > 0 
+    ? validPositions[Math.floor(Math.random() * validPositions.length)]
+    : {x: COLS - 1, y: ROWS - 1};
+
+  nx = target.x;
+  ny = target.y;
   GOAL = {x:nx, y:ny};
   const cell = getGridCell(nx, ny);
   if(cell) {
@@ -495,8 +506,8 @@ const FORCE_LIGHTWEIGHT_CHARACTER = RUNTIME_CONFIG.lightweightCharacterMode !== 
 let pos = {...START};
 let running = false, animating = false, idN = 0;
 const avail = [];
-const prog  = Array(SLOTS).fill(null);
-const fnProg = Array(FSLOTS).fill(null);
+let prog  = Array(SLOTS).fill(null);
+let fnProg = Array(FSLOTS).fill(null);
 const DECOR_CLASSES = [
   'decor-grass',
   'decor-flower',
@@ -525,9 +536,8 @@ let editorBlockEnabled = {
 let fnUnlockHintActive = false;
 let stepStartHintActive = false;
 let gameStarted = false;
-let debugVisible = DEBUG_TOOLS_ENABLED;
-let animationDebugVisible = false;
 let editorMode = false;
+let sandboxMode = false;
 let currentCustomLevel = null;
 let tutorialSceneLevelId = CUSTOM_LEVEL_THEME;
 let selectedSaveIcon = CUSTOM_ICONS[0];
@@ -569,7 +579,7 @@ let activeWinBurstPromise = null;
 let activeWinFeedbackAt = 0;
 let scheduledWinFeedbackTimer = null;
 let endingCinematicPromise = null;
-let settingsOpen = false;
+let settingsPanel = null;
 let boksTouchRebukeUntil = 0;
 let boksTouchRebukeCooldownUntil = 0;
 let boksTouchRebukeTimer = null;
@@ -579,93 +589,24 @@ let goalTapAnnoyanceUntil = 0;
 let goalTapAnnoyanceCooldownUntil = 0;
 let goalTapAnnoyanceTimer = null;
 document.body?.classList.add('prestart');
-document.body?.classList.toggle('debug-visible', DEBUG_TOOLS_ENABLED && debugVisible);
-if (DEBUG_TOOLS_ENABLED && animationDebugVisible) {
-  document.body?.classList.add('animation-debug-visible');
-  requestAnimationFrame(() => updateAnimationDebugBadge());
-} else {
-  document.body?.classList.remove('animation-debug-visible');
-}
+debugTools = window.BOKS_DEBUG_TOOLS.create({
+  enabled: DEBUG_TOOLS_ENABLED,
+  debugVisible: true,
+  animationDebugVisible: false,
+  isSceneVisible: () => appSceneVisible,
+  getDebugText: () => getDebugBadgeText(),
+  getAnimationState: () => readCurrentAnimationState(),
+  onStepJump: delta => performDebugStepJump(delta)
+});
 
 // ═══ UTILS ═══
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
-let fpsProbeRaf = 0;
-let fxAc;
-let backgroundMusicAudio = null;
-let backgroundMusicStarted = false;
-let levelOneIntroAudio = null;
-let levelOneIntroBgmTimer = null;
-const BACKGROUND_MUSIC_VOLUME = 0.18;
-const LEVEL_ONE_INTRO_VOLUME = 0.72;
-
-function startFpsProbe(label = 'scene', sampleMs = 2200) {
-  if (!appSceneVisible || fpsProbeRaf) return;
-  const startedAt = window.performance?.now?.() || Date.now();
-  let lastAt = startedAt;
-  let frames = 0;
-  let worstFrameMs = 0;
-
-  const step = now => {
-    frames += 1;
-    const delta = now - lastAt;
-    lastAt = now;
-    if (delta > worstFrameMs) worstFrameMs = delta;
-    if ((now - startedAt) >= sampleMs) {
-      fpsProbeRaf = 0;
-      const elapsed = Math.max(1, now - startedAt);
-      recordPerfMetric('fps-probe', 0, {
-        label,
-        frames,
-        avgFps: Math.round((frames * 1000) / elapsed),
-        worstFrameMs: Math.round(worstFrameMs * 100) / 100
-      });
-      return;
-    }
-    fpsProbeRaf = requestAnimationFrame(step);
-  };
-
-  fpsProbeRaf = requestAnimationFrame(step);
-}
-
-function stopFpsProbe() {
-  if (!fpsProbeRaf) return;
-  cancelAnimationFrame(fpsProbeRaf);
-  fpsProbeRaf = 0;
-}
-const BACKGROUND_MUSIC_STORAGE_KEY = 'boks-bgm-enabled';
-const BACKGROUND_MUSIC_VOLUME_STORAGE_KEY = 'boks-bgm-volume';
-const SOUND_EFFECTS_STORAGE_KEY = 'boks-sfx-enabled';
-const PROGRESS_STORAGE_KEY = 'boks-progress-v1';
-const AUDIO_PATHS = Object.freeze({
-  music: {
-    gameLoop: 'assets/audio/music/game_loop_main.mp3',
-    level01Intro: 'assets/audio/music/level_01_intro_main.ogg'
-  },
-  sfx: {
-    ui: {
-      blockDetach: 'assets/audio/sfx/ui/block_detach.ogg',
-      blockDropSuccess: 'assets/audio/sfx/ui/block_drop_success.mp3',
-      slotHover: 'assets/audio/sfx/ui/slot_hover.mp3',
-      playPress: 'assets/audio/sfx/ui/play_press_main.mp3'
-    },
-    gameplay: {
-      stepMove: 'assets/audio/sfx/gameplay/step_move.mp3',
-      errorAction: 'assets/audio/sfx/gameplay/error_action.mp3',
-      boksAnnoyed: 'assets/audio/sfx/gameplay/boks_annoyed.ogg',
-      welcome: 'assets/audio/sfx/gameplay/wellcome.mp3',
-      decorRubberTap: [
-        'assets/audio/sfx/gameplay/decor_rubber_tap_01.ogg',
-        'assets/audio/sfx/gameplay/decor_rubber_tap_02.ogg'
-      ],
-      goalBubbleBounce: 'assets/audio/sfx/gameplay/goal_bubble_bounce.ogg',
-      bubblePop: 'assets/audio/sfx/gameplay/bubble_pop_main.ogg',
-      levelComplete: 'assets/audio/sfx/gameplay/level_complete_main.mp3'
-    }
-  }
-});
+const startFpsProbe = (label = 'scene', sampleMs = 2200) => debugTools.startFpsProbe(label, sampleMs);
+const stopFpsProbe = () => debugTools.stopFpsProbe();
 const RUN_PROGRESS_LED_COUNT = 8;
 let runButtonPressedTimer = null;
+let runButtonPointerId = null;
 let activeRunLedSlotOrder = [];
 let startGameButtonPressedTimer = null;
 let startGameGateAnimating = false;
@@ -706,6 +647,52 @@ function setRunButtonPressedState(isPressed) {
   }
   btn.classList.toggle('is-pressed', Boolean(isPressed));
 }
+function canShowRunButtonPressFeedback() {
+  const btn = document.getElementById('runBtn');
+  return !!(btn && !btn.disabled && gameStarted && !running && !animating && playerPlaced);
+}
+function beginRunButtonPressFeedback(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (!canShowRunButtonPressFeedback()) return;
+  const btn = document.getElementById('runBtn');
+  runButtonPointerId = e.pointerId;
+  try {
+    btn?.setPointerCapture?.(e.pointerId);
+  } catch (_err) {
+    // ignore pointer capture issues
+  }
+  setRunButtonPressedState(true);
+}
+function finishRunButtonPressFeedback(e) {
+  if (runButtonPointerId != null && e.pointerId !== runButtonPointerId) return;
+  const btn = document.getElementById('runBtn');
+  try {
+    btn?.releasePointerCapture?.(e.pointerId);
+  } catch (_err) {
+    // ignore pointer capture issues
+  }
+  runButtonPointerId = null;
+  if (!running) pulseRunButtonPressedState(110);
+}
+function cancelRunButtonPressFeedback(e) {
+  if (runButtonPointerId == null) return;
+  if (e.pointerId !== runButtonPointerId) return;
+  runButtonPointerId = null;
+  if (!running) setRunButtonPressedState(false);
+}
+function bindRunButtonControls() {
+  const btn = document.getElementById('runBtn');
+  if (!btn) return;
+  btn.addEventListener('pointerdown', beginRunButtonPressFeedback);
+  btn.addEventListener('pointerup', finishRunButtonPressFeedback);
+  btn.addEventListener('pointercancel', cancelRunButtonPressFeedback);
+  btn.addEventListener('lostpointercapture', cancelRunButtonPressFeedback);
+  btn.addEventListener('click', e => {
+    e.preventDefault();
+    btn.blur();
+    void run();
+  });
+}
 function syncRunProgressAvailability() {
   clearRunProgressIndicators();
 }
@@ -738,83 +725,23 @@ function resetStartGameButtonVisualState() {
   if (!btn) return;
   btn.classList.remove('is-popping', 'is-pressed');
 }
-const audioPlayers = new Map();
-const FX = () => {
-  if (!fxAc) fxAc = new (window.AudioContext || window.webkitAudioContext)();
-  if (fxAc.state === 'suspended') fxAc.resume();
-  return fxAc;
-};
-function getVersionedAudioPath(path) {
-  const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
-  return `${path}?v=${encodeURIComponent(build)}`;
-}
-function readSoundEffectsEnabledPreference() {
-  try {
-    const stored = localStorage.getItem(SOUND_EFFECTS_STORAGE_KEY);
-    return stored == null ? true : stored !== 'false';
-  } catch (_err) {
-    return true;
+
+const audioManager = window.BOKS_AUDIO_MANAGER.create({
+  isGameStarted: () => gameStarted,
+  onSettingsChange: () => {
+    syncAudioState();
+    syncSettingsPanelUi();
   }
+});
+let { backgroundMusicVolume, backgroundMusicEnabled, soundEffectsEnabled, progressState } = audioManager.state;
+
+function syncAudioState() {
+  ({ backgroundMusicVolume, backgroundMusicEnabled, soundEffectsEnabled, progressState } = audioManager.state);
 }
-function clampUnitVolume(value, fallback = 1) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(0, Math.min(1, numeric));
-}
-function readBackgroundMusicVolumePreference() {
-  try {
-    const storedVolume = localStorage.getItem(BACKGROUND_MUSIC_VOLUME_STORAGE_KEY);
-    if (storedVolume != null && storedVolume !== '') return clampUnitVolume(storedVolume, 1);
-    const storedEnabled = localStorage.getItem(BACKGROUND_MUSIC_STORAGE_KEY);
-    if (storedEnabled == null) return 1;
-    return storedEnabled === 'false' ? 0 : 1;
-  } catch (_err) {
-    return 1;
-  }
-}
-function sanitizeProgressState(raw) {
-  const currentCampaignStep = Number.isFinite(raw?.currentCampaignStep)
-    ? Math.max(0, Math.floor(raw.currentCampaignStep))
-    : 0;
-  const completedLevelIds = Array.isArray(raw?.completedLevelIds)
-    ? [...new Set(raw.completedLevelIds.filter(id => typeof id === 'string' && id.trim()))]
-    : [];
-  const seenJourneyHints = Array.isArray(raw?.seenJourneyHints)
-    ? [...new Set(raw.seenJourneyHints.filter(id => typeof id === 'string' && id.trim()))]
-    : [];
-  return {
-    currentCampaignStep,
-    completedLevelIds,
-    seenJourneyHints
-  };
-}
-function readProgressState() {
-  try {
-    const stored = localStorage.getItem(PROGRESS_STORAGE_KEY);
-    if (!stored) return sanitizeProgressState({});
-    return sanitizeProgressState(JSON.parse(stored));
-  } catch (_err) {
-    return sanitizeProgressState({});
-  }
-}
-let backgroundMusicVolume = readBackgroundMusicVolumePreference();
-let backgroundMusicEnabled = backgroundMusicVolume > 0.001;
-let soundEffectsEnabled = readSoundEffectsEnabledPreference();
-let progressState = readProgressState();
-function getBackgroundMusicLoopVolume() {
-  return BACKGROUND_MUSIC_VOLUME * backgroundMusicVolume;
-}
-function getLevelOneIntroMixVolume() {
-  return LEVEL_ONE_INTRO_VOLUME * backgroundMusicVolume;
-}
+
 function setProgressState(nextState, { persist = true } = {}) {
-  progressState = sanitizeProgressState(nextState);
-  if (!persist) return;
-  try {
-    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(progressState));
-  } catch (_err) {
-    // ignore persistence issues
-  }
+  audioManager.setProgressState(nextState, { persist });
+  syncAudioState();
 }
 function rememberCurrentCampaignStep(stepIndex = tutorialStepIndex) {
   if (currentCustomLevel || currentLevel !== 'level1') return;
@@ -832,227 +759,39 @@ function rememberCompletedCampaignLevel(levelId = getCampaignLevelIdForIndex(tut
   });
 }
 function resetJourneyProgressState() {
-  setProgressState({
-    currentCampaignStep: 0,
-    completedLevelIds: [],
-    seenJourneyHints: []
-  });
-}
-function applyBackgroundMusicVolumeToActiveAudio() {
-  if (backgroundMusicAudio) {
-    backgroundMusicAudio.muted = !backgroundMusicEnabled;
-    backgroundMusicAudio.volume = getBackgroundMusicLoopVolume();
-  }
-  if (levelOneIntroAudio) {
-    levelOneIntroAudio.muted = !backgroundMusicEnabled;
-    levelOneIntroAudio.volume = getLevelOneIntroMixVolume();
-  }
+  audioManager.resetJourneyProgressState();
+  syncAudioState();
 }
 function setBackgroundMusicVolume(nextVolume, { persist = true } = {}) {
-  backgroundMusicVolume = clampUnitVolume(nextVolume, backgroundMusicVolume);
-  backgroundMusicEnabled = backgroundMusicVolume > 0.001;
-  if (persist) {
-    try {
-      localStorage.setItem(BACKGROUND_MUSIC_VOLUME_STORAGE_KEY, String(backgroundMusicVolume));
-      localStorage.setItem(BACKGROUND_MUSIC_STORAGE_KEY, backgroundMusicEnabled ? 'true' : 'false');
-    } catch (_err) {
-      // ignore persistence issues
-    }
-  }
-  applyBackgroundMusicVolumeToActiveAudio();
-  if (!backgroundMusicEnabled) {
-    stopLevelOneIntro();
-    pauseBackgroundMusicLoop();
-  } else if (gameStarted) {
-    startBackgroundMusicLoop();
-  }
-  syncSettingsPanelUi();
+  audioManager.setBackgroundMusicVolume(nextVolume, { persist });
+  syncAudioState();
 }
 function setSoundEffectsEnabled(enabled, { persist = true } = {}) {
-  soundEffectsEnabled = !!enabled;
-  if (persist) {
-    try {
-      localStorage.setItem(SOUND_EFFECTS_STORAGE_KEY, soundEffectsEnabled ? 'true' : 'false');
-    } catch (_err) {
-      // ignore persistence issues
-    }
-  }
-  syncSettingsPanelUi();
+  audioManager.setSoundEffectsEnabled(enabled, { persist });
+  syncAudioState();
 }
-function getBackgroundMusicAudio() {
-  if (backgroundMusicAudio) return backgroundMusicAudio;
-  const audio = new Audio(getVersionedAudioPath(AUDIO_PATHS.music.gameLoop));
-  audio.preload = 'auto';
-  audio.loop = true;
-  audio.muted = !backgroundMusicEnabled;
-  audio.volume = getBackgroundMusicLoopVolume();
-  backgroundMusicAudio = audio;
-  return backgroundMusicAudio;
-}
-function startBackgroundMusicLoop() {
-  if (!backgroundMusicEnabled) return;
-  const audio = getBackgroundMusicAudio();
-  audio.volume = getBackgroundMusicLoopVolume();
-  backgroundMusicStarted = true;
-  if (!audio.paused) return;
-  const playAttempt = audio.play();
-  if (playAttempt?.catch) playAttempt.catch(() => {});
-}
-function pauseBackgroundMusicLoop() {
-  if (!backgroundMusicAudio) return;
-  try {
-    backgroundMusicAudio.pause();
-  } catch (_err) {
-    // ignore media pause issues
-  }
-}
-function clearLevelOneIntroBgmTimer() {
-  if (!levelOneIntroBgmTimer) return;
-  clearTimeout(levelOneIntroBgmTimer);
-  levelOneIntroBgmTimer = null;
-}
-function getLevelOneIntroAudio() {
-  if (levelOneIntroAudio) return levelOneIntroAudio;
-  const audio = new Audio(getVersionedAudioPath(AUDIO_PATHS.music.level01Intro));
-  audio.preload = 'auto';
-  audio.muted = !backgroundMusicEnabled;
-  audio.volume = getLevelOneIntroMixVolume();
-  levelOneIntroAudio = audio;
-  return levelOneIntroAudio;
-}
-function getUiAudioSfxPlayer(path) {
-  const cacheKey = getVersionedAudioPath(path);
-  if (audioPlayers.has(cacheKey)) return audioPlayers.get(cacheKey);
-  const audio = new Audio(cacheKey);
-  audio.preload = 'auto';
-  audioPlayers.set(cacheKey, audio);
-  return audio;
-}
-function playUiAudioSfx(path, volume = 0.5, { mode = 'oneshot' } = {}) {
-  if (!soundEffectsEnabled) return;
-  try {
-    const audio = mode === 'restart'
-      ? getUiAudioSfxPlayer(path)
-      : new Audio(getUiAudioSfxPlayer(path).src);
-    audio.volume = volume;
-    if (mode === 'restart') {
-      audio.pause();
-      try {
-        audio.currentTime = 0;
-      } catch (_err) {
-        // ignore seek issues
-      }
-    }
-    const playAttempt = audio.play();
-    if (playAttempt?.catch) playAttempt.catch(() => {});
-  } catch (_err) {
-    // ignore ui audio failures
-  }
-}
-function playBlockDragStartSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDetach, 0.42);
-}
-function playBlockHoverSlotSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.ui.slotHover, 0.22);
-}
-function playBlockDropSuccessSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDropSuccess, 0.48);
-}
-function playStepSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.stepMove, 0.16, { mode: 'restart' });
-}
-function playErrorSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.errorAction, 0.3);
-}
-function playBoksAnnoyedSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.boksAnnoyed, 0.34);
-}
-function playDecorationRubberSfx() {
-  const variants = AUDIO_PATHS.sfx.gameplay.decorRubberTap;
-  const path = variants[Math.floor(Math.random() * variants.length)] || variants[0];
-  playUiAudioSfx(path, 0.26);
-}
-function playGoalBubbleBounceSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.goalBubbleBounce, 0.28);
-}
-function playBubblePopSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.bubblePop, 0.26);
-}
-function playWelcomeSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.welcome, 0.34);
-}
-function playLevelCompleteSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.levelComplete, 0.5);
-}
-function stopLevelOneIntro({ reset = true } = {}) {
-  clearLevelOneIntroBgmTimer();
-  if (!levelOneIntroAudio) return;
-  try {
-    levelOneIntroAudio.onended = null;
-    levelOneIntroAudio.pause();
-    if (reset) levelOneIntroAudio.currentTime = 0;
-  } catch (_err) {
-    // ignore media stop errors
-  }
-}
-function playLevelOneIntroAndQueueBgm() {
-  if (!backgroundMusicEnabled) {
-    stopLevelOneIntro();
-    clearLevelOneIntroBgmTimer();
-    return;
-  }
-  stopLevelOneIntro();
-  const audio = getLevelOneIntroAudio();
-  clearLevelOneIntroBgmTimer();
-  try {
-    audio.currentTime = 0;
-  } catch (_err) {
-    // ignore seek issues
-  }
-  const playAttempt = audio.play();
-  if (playAttempt?.catch) {
-    playAttempt.catch(() => {});
-  }
-  const startLoop = () => {
-    clearLevelOneIntroBgmTimer();
-    startBackgroundMusicLoop();
-  };
-  audio.onended = startLoop;
-  levelOneIntroBgmTimer = setTimeout(startLoop, 3200);
-}
-function resumeBackgroundMusicLoop() {
-  if (!backgroundMusicEnabled || !backgroundMusicStarted) return;
-  const audio = getBackgroundMusicAudio();
-  audio.volume = getBackgroundMusicLoopVolume();
-  const playAttempt = audio.play();
-  if (playAttempt?.catch) playAttempt.catch(() => {});
-}
-function playRunPressSfx() {
-  playUiAudioSfx(AUDIO_PATHS.sfx.ui.playPress, 0.34);
-}
-function playTurnSfx(dir = 'right') {
-  if (!soundEffectsEnabled) return;
-  try {
-    const c = FX();
-    const t = c.currentTime;
-    const o = c.createOscillator();
-    const g = c.createGain();
-    o.type = 'square';
-    if (dir === 'left') {
-      o.frequency.setValueAtTime(470, t);
-      o.frequency.exponentialRampToValueAtTime(320, t + 0.08);
-    } else {
-      o.frequency.setValueAtTime(320, t);
-      o.frequency.exponentialRampToValueAtTime(470, t + 0.08);
-    }
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.036, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.095);
-    o.connect(g);
-    g.connect(c.destination);
-    o.start(t);
-    o.stop(t + 0.1);
-  } catch (_) {}
+const startBackgroundMusicLoop = () => audioManager.startBackgroundMusicLoop();
+const pauseBackgroundMusicLoop = () => audioManager.pauseBackgroundMusicLoop();
+const clearLevelOneIntroBgmTimer = () => audioManager.clearLevelOneIntroBgmTimer();
+const stopLevelOneIntro = options => audioManager.stopLevelOneIntro(options);
+const playLevelOneIntroAndQueueBgm = () => audioManager.playLevelOneIntroAndQueueBgm();
+const resumeBackgroundMusicLoop = () => audioManager.resumeBackgroundMusicLoop();
+const playBlockDragStartSfx = () => audioManager.playBlockDragStartSfx();
+const playBlockHoverSlotSfx = () => audioManager.playBlockHoverSlotSfx();
+const playBlockDropSuccessSfx = () => audioManager.playBlockDropSuccessSfx();
+const playStepSfx = () => audioManager.playStepSfx();
+const playErrorSfx = () => audioManager.playErrorSfx();
+const playBoksAnnoyedSfx = () => audioManager.playBoksAnnoyedSfx();
+const playDecorationRubberSfx = () => audioManager.playDecorationRubberSfx();
+const playGoalBubbleBounceSfx = () => audioManager.playGoalBubbleBounceSfx();
+const playBubblePopSfx = () => audioManager.playBubblePopSfx();
+const playWelcomeSfx = () => audioManager.playWelcomeSfx();
+const playLevelCompleteSfx = () => audioManager.playLevelCompleteSfx();
+const playRunPressSfx = () => audioManager.playRunPressSfx();
+const playTurnSfx = dir => audioManager.playTurnSfx(dir);
+function getAudioSettingsState() {
+  syncAudioState();
+  return { backgroundMusicVolume, backgroundMusicEnabled, soundEffectsEnabled };
 }
 const LEVEL_CLOUD_BASE_W = 440;
 const LEVEL_CLOUD_BASE_H = 440;
@@ -1330,93 +1069,13 @@ function toast(msg, cls='', aboveEl=null) {
   clearTimeout(el._t); if(msg) el._t = setTimeout(() => el.className='', 3000);
 }
 function syncSettingsPanelUi() {
-  const header = document.getElementById('header');
-  const settingsModal = document.getElementById('settingsModal');
-  const sfxBtn = document.getElementById('settingsSfxBtn');
-  const sfxSwitch = document.getElementById('settingsSfxSwitch');
-  const musicSlider = document.getElementById('settingsMusicVolume');
-  const musicValue = document.getElementById('settingsMusicVolumeValue');
-  const creditsMeta = document.getElementById('settingsBuildMeta');
-  const creditsBtn = document.getElementById('settingsCreditsBtn');
-  const creditsPanel = document.getElementById('settingsCreditsPanel');
-  const creditsPill = creditsBtn?.querySelector('.settings-pill');
-  const resetBtn = document.getElementById('settingsResetProgressBtn');
-  const resetPanel = document.getElementById('settingsResetProgressPanel');
-  const resetPill = resetBtn?.querySelector('.settings-pill');
-  if (settingsModal) {
-    settingsModal.classList.toggle('show', settingsOpen);
-    settingsModal.setAttribute('aria-hidden', settingsOpen ? 'false' : 'true');
-  }
-  if (header) {
-    const headerLabel = settingsOpen ? 'Close settings' : 'Open settings';
-    header.setAttribute('aria-label', headerLabel);
-    header.setAttribute('title', headerLabel);
-  }
-  if (sfxBtn) sfxBtn.setAttribute('aria-pressed', soundEffectsEnabled ? 'true' : 'false');
-  if (sfxSwitch) sfxSwitch.classList.toggle('is-on', soundEffectsEnabled);
-  if (musicSlider) musicSlider.value = String(Math.round(backgroundMusicVolume * 100));
-  if (musicValue) musicValue.textContent = `${Math.round(backgroundMusicVolume * 100)}%`;
-  if (creditsBtn && creditsPanel) {
-    const expanded = !creditsPanel.hidden;
-    creditsBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    if (creditsPill) creditsPill.textContent = expanded ? 'Close' : 'Open';
-  }
-  if (resetBtn && resetPanel) {
-    const expanded = !resetPanel.hidden;
-    resetBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-    if (resetPill) resetPill.textContent = expanded ? 'Close' : 'Open';
-  }
-  if (creditsMeta) {
-    const build = window.BOKS_RUNTIME_CONFIG?.build || document.body?.dataset?.build || 'dev';
-    const channel = window.BOKS_RUNTIME_CONFIG?.releaseChannel || document.body?.dataset?.releaseChannel || 'main';
-    creditsMeta.textContent = `Build ${build}\nChannel ${channel}`;
-  }
+  settingsPanel?.sync();
 }
+
 function closeSettingsPanel() {
-  if (!settingsOpen) return;
-  document.getElementById('settingsCreditsPanel')?.setAttribute('hidden', '');
-  document.getElementById('settingsResetProgressPanel')?.setAttribute('hidden', '');
-  settingsOpen = false;
-  syncSettingsPanelUi();
+  settingsPanel?.close();
 }
-function openSettingsPanel() {
-  if (document.body.classList.contains('prestart')) return;
-  if (running || animating) {
-    toast('Wait for the move to finish');
-    return;
-  }
-  closeSaveLevelModal();
-  settingsOpen = true;
-  syncSettingsPanelUi();
-}
-function toggleSettingsPanel() {
-  if (settingsOpen) {
-    closeSettingsPanel();
-    return;
-  }
-  openSettingsPanel();
-}
-function toggleSettingsCredits() {
-  const panel = document.getElementById('settingsCreditsPanel');
-  const resetPanel = document.getElementById('settingsResetProgressPanel');
-  if (!panel) return;
-  const shouldOpen = panel.hidden;
-  panel.hidden = !shouldOpen;
-  if (resetPanel) resetPanel.hidden = true;
-  syncSettingsPanelUi();
-}
-function toggleResetProgressPanel() {
-  const panel = document.getElementById('settingsResetProgressPanel');
-  const creditsPanel = document.getElementById('settingsCreditsPanel');
-  if (!panel) return;
-  const shouldOpen = panel.hidden;
-  panel.hidden = !shouldOpen;
-  if (creditsPanel) creditsPanel.hidden = true;
-  syncSettingsPanelUi();
-}
-function openLanguageComingSoonNotice() {
-  toast('More languages coming soon');
-}
+
 function resetJourneyProgress() {
   resetJourneyProgressState();
   closeSettingsPanel();
@@ -1430,10 +1089,6 @@ function resetJourneyProgress() {
   }
   updateDebugBadge();
   toast('Journey progress erased');
-}
-function goToMainMenuFromSettings() {
-  closeSettingsPanel();
-  returnToMainMenu();
 }
 function consumeHardRefreshNotice() {
   try {
@@ -2260,8 +1915,32 @@ async function animTo(tx, ty) {
 // ═══ SPRITE DRAG ═══
 function setupSpriteDrag() {
   const s = document.getElementById('sprite');
+  let sandboxDragActive = false;
+  let sandboxDragStartBox = null;
+  let sandboxDragPointerOffset = null;
   function start(cx,cy) {
-    if(!editorMode||running||animating||!playerPlaced) return false;
+    if(!(editorMode || sandboxMode)||running||animating||!playerPlaced) return false;
+    if (sandboxMode) {
+      const wrap = document.getElementById('gridWrap');
+      if (!wrap) return false;
+      s.style.removeProperty('transform');
+      const rect = s.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      sandboxDragActive = true;
+      sandboxDragStartBox = {
+        width: rect.width,
+        height: rect.height
+      };
+      sandboxDragPointerOffset = {
+        x: cx - rect.left,
+        y: cy - rect.top
+      };
+      s.style.transition = 'none';
+      s.style.zIndex = '80';
+      s.style.opacity = '1';
+      setSpriteDragPosition(cx, cy);
+      return true;
+    }
     const g = document.getElementById('ghost');
     const w = s.offsetWidth;
     const h = s.offsetHeight;
@@ -2273,6 +1952,10 @@ function setupSpriteDrag() {
     s.style.opacity = '0.3'; return true;
   }
   function move(cx,cy) {
+    if (sandboxMode && sandboxDragActive) {
+      setSpriteDragPosition(cx, cy);
+      return;
+    }
     const g = document.getElementById('ghost');
     g.style.left=cx+'px'; g.style.top=cy+'px';
     g.style.display='none';
@@ -2282,55 +1965,243 @@ function setupSpriteDrag() {
     u?.closest('.cell')?.classList.add('hi');
   }
   async function end(cx,cy) {
-    document.getElementById('ghost').style.display='none';
-    window.BOKS_CHARACTER_RENDERER?.destroyIn?.(document.getElementById('ghost'));
+    if (!sandboxMode) {
+      document.getElementById('ghost').style.display='none';
+      window.BOKS_CHARACTER_RENDERER?.destroyIn?.(document.getElementById('ghost'));
+    }
     s.style.opacity='1';
     document.querySelectorAll('.cell.hi').forEach(c=>c.classList.remove('hi'));
-    const u = document.elementFromPoint(cx,cy);
-    const cell = u?.closest('.cell');
+    const snapPoint = sandboxMode ? getSandboxSpriteDragCenter(cx, cy) : null;
+    const snap = snapPoint ? getNearestGridCellFromPoint(snapPoint.x, snapPoint.y) : null;
+    const u = sandboxMode ? null : document.elementFromPoint(cx,cy);
+    const cell = snap?.cell || u?.closest('.cell');
+    let didPlaceInSandbox = false;
     if(cell) {
-      const tx = +cell.dataset.cx;
-      const ty = +cell.dataset.cy;
+      const tx = snap ? snap.x : +cell.dataset.cx;
+      const ty = snap ? snap.y : +cell.dataset.cy;
       const blocked = isBlockedCell(tx, ty);
       const overlapsGoal = goalPlaced && tx === GOAL.x && ty === GOAL.y;
-      if (!blocked && (!editorMode || !overlapsGoal)) {
-        await animTo(tx, ty);
+      if (!blocked && !overlapsGoal) {
+        if (sandboxMode) {
+          pos = { x: tx, y: ty };
+          START = { x: tx, y: ty };
+          setCharacterAction('idle');
+          didPlaceInSandbox = true;
+        } else {
+          await animTo(tx, ty);
+        }
       }
+    }
+    if (sandboxMode) {
+      sandboxDragActive = false;
+      sandboxDragStartBox = null;
+      sandboxDragPointerOffset = null;
+      s.style.transition = '';
+      s.style.zIndex = '';
+      s.style.removeProperty('transform');
+      syncSprite();
+      if (!didPlaceInSandbox) requestAnimationFrame(() => triggerTouchedDecorationReactions());
+      refreshEditorDebug();
+      return;
     }
     syncSprite();
     requestAnimationFrame(() => triggerTouchedDecorationReactions());
     refreshEditorDebug();
   }
+  function setSpriteDragPosition(cx, cy) {
+    if (!sandboxDragPointerOffset) return;
+    const wrap = document.getElementById('gridWrap');
+    if (!wrap) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    s.style.left = `${cx - wrapRect.left - sandboxDragPointerOffset.x}px`;
+    s.style.top = `${cy - wrapRect.top - sandboxDragPointerOffset.y}px`;
+  }
+  function getSandboxSpriteDragCenter(cx, cy) {
+    if (!sandboxDragStartBox || !sandboxDragPointerOffset) return null;
+    return {
+      x: cx - sandboxDragPointerOffset.x + sandboxDragStartBox.width / 2,
+      y: cy - sandboxDragPointerOffset.y + sandboxDragStartBox.height / 2
+    };
+  }
+  let lastTapAt = 0;
+  let suppressNextStart = false;
+
   s.addEventListener('touchstart',e=>{
-    if (!editorMode) {
+    if (!editorMode && !sandboxMode) {
       e.preventDefault();
       e.stopPropagation();
       triggerBoksTouchRebuke();
       return;
     }
     e.preventDefault(); e.stopPropagation();
+    if (sandboxMode && !running && !animating) {
+      const now = Date.now();
+      if (now - lastTapAt < 350) {
+        lastTapAt = 0;
+        rotateSpriteClockwise();
+        return;
+      }
+      lastTapAt = now;
+    }
     const t=e.touches[0]; if(!start(t.clientX,t.clientY)) return;
-    const mm=e=>{e.preventDefault();move(e.touches[0].clientX,e.touches[0].clientY);};
-    const mu=e=>{e.preventDefault();end(e.changedTouches[0].clientX,e.changedTouches[0].clientY);s.removeEventListener('touchmove',mm);s.removeEventListener('touchend',mu);};
+    let lastTouch = { clientX: t.clientX, clientY: t.clientY };
+    const mm=e=>{
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (!touch) return;
+      lastTouch = { clientX: touch.clientX, clientY: touch.clientY };
+      move(touch.clientX,touch.clientY);
+    };
+    const mu=e=>{
+      e.preventDefault();
+      const touch = e.changedTouches[0] || lastTouch;
+      end(touch.clientX,touch.clientY);
+      s.removeEventListener('touchmove',mm);
+      s.removeEventListener('touchend',mu);
+      s.removeEventListener('touchcancel',mu);
+    };
     s.addEventListener('touchmove',mm,{passive:false});
     s.addEventListener('touchend',mu,{passive:false});
+    s.addEventListener('touchcancel',mu,{passive:false});
   },{passive:false});
   s.addEventListener('mousedown',e=>{
-    if (!editorMode) {
+    if (!editorMode && !sandboxMode) {
       e.preventDefault();
       triggerBoksTouchRebuke();
       return;
     }
-    e.preventDefault(); if(!start(e.clientX,e.clientY)) return;
+    e.preventDefault();
+    if (suppressNextStart) { suppressNextStart = false; return; }
+    if(!start(e.clientX,e.clientY)) return;
     const mm=e=>move(e.clientX,e.clientY);
     const mu=e=>{end(e.clientX,e.clientY);document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
     document.addEventListener('mousemove',mm);
     document.addEventListener('mouseup',mu);
   });
+  s.addEventListener('dblclick', e => {
+    if (!sandboxMode || running || animating) return;
+    e.preventDefault();
+    e.stopPropagation();
+    suppressNextStart = false;
+    rotateSpriteClockwise();
+  });
+  s.addEventListener('mousedown', e => {
+    if (!sandboxMode || running || animating) return;
+    const now = Date.now();
+    if (now - lastTapAt < 350) suppressNextStart = true;
+    lastTapAt = now;
+  }, { capture: true });
+}
+
+function rotateSpriteClockwise() {
+  const order = ['right', 'down', 'left', 'up'];
+  ori = order[(order.indexOf(ori) + 1) % order.length];
+  START = { ...pos };
+  syncSprite();
 }
 
 function setupGoalDrag() {
   getLevelEditor()?.setupGoalDrag();
+}
+
+function setupSandboxGoalDrag() {
+  const grid = document.getElementById('gameGrid');
+  if (!grid || grid.dataset.sandboxGoalDragBound === 'true') return;
+  grid.dataset.sandboxGoalDragBound = 'true';
+  let draggingGoal = false;
+  let dragPreview = null;
+
+  function getGoalDragPreview() {
+    if (dragPreview) return dragPreview;
+    dragPreview = document.createElement('div');
+    dragPreview.id = 'sandboxGoalDragPreview';
+    dragPreview.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(dragPreview);
+    return dragPreview;
+  }
+
+  function start(cx, cy, target) {
+    if (!sandboxMode || running || animating || !goalPlaced || !target?.closest('.goal-cell')) return false;
+    const goalCell = target.closest('.goal-cell');
+    const preview = getGoalDragPreview();
+    const rect = goalCell.getBoundingClientRect();
+    draggingGoal = true;
+    preview.innerHTML = goalSVG();
+    preview.style.width = `${rect.width}px`;
+    preview.style.height = `${rect.height}px`;
+    preview.style.display = 'block';
+    document.body.classList.add('sandbox-goal-dragging');
+    setGoalDragPosition(cx, cy);
+    return true;
+  }
+
+  function move(cx, cy) {
+    setGoalDragPosition(cx, cy);
+  }
+
+  function end(cx, cy) {
+    if (!draggingGoal) return;
+    draggingGoal = false;
+    const snap = getNearestGridCellFromPoint(cx, cy);
+    const tx = snap?.x;
+    const ty = snap?.y;
+    const valid = !!snap && !isBlockedCell(tx, ty) && !(playerPlaced && tx === pos.x && ty === pos.y);
+    if (dragPreview) {
+      dragPreview.style.display = 'none';
+      dragPreview.innerHTML = '';
+    }
+    document.body.classList.remove('sandbox-goal-dragging');
+    if (!valid) return;
+    GOAL = { x: tx, y: ty };
+    initGrid();
+    drawBackground();
+    syncSprite();
+  }
+
+  function setGoalDragPosition(cx, cy) {
+    if (!draggingGoal || !dragPreview) return;
+    dragPreview.style.left = `${cx}px`;
+    dragPreview.style.top = `${cy}px`;
+  }
+
+  grid.addEventListener('touchstart', e => {
+    const touch = e.touches[0];
+    if (!touch || !start(touch.clientX, touch.clientY, e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    let lastTouch = { clientX: touch.clientX, clientY: touch.clientY };
+    const mm = ev => {
+      ev.preventDefault();
+      const currentTouch = ev.touches[0];
+      if (!currentTouch) return;
+      lastTouch = { clientX: currentTouch.clientX, clientY: currentTouch.clientY };
+      move(currentTouch.clientX, currentTouch.clientY);
+    };
+    const mu = ev => {
+      ev.preventDefault();
+      const endTouch = ev.changedTouches[0] || lastTouch;
+      end(endTouch.clientX, endTouch.clientY);
+      grid.removeEventListener('touchmove', mm);
+      grid.removeEventListener('touchend', mu);
+      grid.removeEventListener('touchcancel', mu);
+    };
+    grid.addEventListener('touchmove', mm, { passive: false });
+    grid.addEventListener('touchend', mu, { passive: false });
+    grid.addEventListener('touchcancel', mu, { passive: false });
+  }, { passive: false });
+
+  grid.addEventListener('mousedown', e => {
+    if (!start(e.clientX, e.clientY, e.target)) return;
+    e.preventDefault();
+    const mm = ev => move(ev.clientX, ev.clientY);
+    const mu = ev => {
+      end(ev.clientX, ev.clientY);
+      document.removeEventListener('mousemove', mm);
+      document.removeEventListener('mouseup', mu);
+    };
+    document.addEventListener('mousemove', mm);
+    document.addEventListener('mouseup', mu);
+  });
 }
 
 function normalizeLevelName(name = '') {
@@ -3163,6 +3034,18 @@ function getGridPointerAnchor(clientX, clientY) {
     anchorX: Math.max(0, Math.min(1, Math.round(relX * 1000) / 1000)),
     anchorY: Math.max(0, Math.min(1, Math.round(relY * 1000) / 1000))
   };
+}
+
+function getNearestGridCellFromPoint(clientX, clientY) {
+  const grid = document.getElementById('gameGrid');
+  if (!grid) return null;
+  const rect = grid.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const rawX = ((clientX - rect.left) / rect.width) * COLS - 0.5;
+  const rawY = ((clientY - rect.top) / rect.height) * ROWS - 0.5;
+  const x = Math.max(0, Math.min(COLS - 1, Math.round(rawX)));
+  const y = Math.max(0, Math.min(ROWS - 1, Math.round(rawY)));
+  return { x, y, cell: getGridCell(x, y) };
 }
 
 function getDecorationHitAtPoint(clientX, clientY) {
@@ -4271,36 +4154,8 @@ function setLevel(levelId, { persist = true } = {}) {
   updateDebugBadge();
   return true;
 }
-function ensureDebugBadge() {
-  let badge = document.getElementById('debugBadge');
-  if (badge) return badge;
-  badge = document.createElement('div');
-  badge.id = 'debugBadge';
-  document.body.appendChild(badge);
-  return badge;
-}
-
-function ensureAnimationDebugBadge() {
-  let badge = document.getElementById('animationDebugBadge');
-  if (badge) return badge;
-  badge = document.createElement('div');
-  badge.id = 'animationDebugBadge';
-  document.body.appendChild(badge);
-  return badge;
-}
-
-function trimBuildQuery(src = '') {
-  const clean = String(src || '').trim();
-  if (!clean) return '';
-  return clean.split('?')[0];
-}
-
 function compactAssetLabel(src = '') {
-  const clean = trimBuildQuery(src);
-  if (!clean) return '-';
-  const parts = clean.split('/');
-  if (parts.length <= 3) return clean;
-  return `${parts[parts.length - 3]}/${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+  return debugTools.compactAssetLabel(src);
 }
 
 function readCurrentAnimationState() {
@@ -4351,18 +4206,7 @@ function readCurrentAnimationState() {
 }
 
 function updateAnimationDebugBadge(extra = '') {
-  if (!animationDebugVisible) return;
-  const badge = ensureAnimationDebugBadge();
-  const info = readCurrentAnimationState();
-  const lines = [
-    `Anim now  : ${info.resolved}`,
-    `Requested : ${info.requested}`,
-    `Char/pose : ${info.character} | ${info.action}:${info.direction} | visual:${info.visualDirection}`,
-    `Mode      : ${info.mode} | loop:${info.loop} | mounted:${info.mounted} | ready:${info.ready ?? '-'} | fallback:${info.fallback ?? '-'}`,
-    `Asset     : ${info.asset}`
-  ];
-  if (extra) lines.push(`Note      : ${extra}`);
-  badge.textContent = lines.join('\n');
+  debugTools.updateAnimationDebugBadge(extra);
 }
 
 function updateRunAvailability() {
@@ -4374,23 +4218,23 @@ function updateRunAvailability() {
   btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
   queueFirstLevelOnboardingSync();
 }
-function updateDebugBadge() {
-  const badge = ensureDebugBadge();
+function getDebugBadgeText() {
   if (editorMode) {
-    badge.textContent = `Editor | Program ${countEnabledMainSlots()}/${SLOTS} | Function ${countEnabledFnSlots()}/${FSLOTS} | Soluzioni possibili: ${lastEditorSolutionCount}`;
-    return;
+    return `Editor | Program ${countEnabledMainSlots()}/${SLOTS} | Function ${countEnabledFnSlots()}/${FSLOTS} | Soluzioni possibili: ${lastEditorSolutionCount}`;
   }
   if (currentCustomLevel) {
-    badge.textContent = `${currentCustomLevel.name} | Livello custom`;
-    return;
+    return `${currentCustomLevel.name} | Livello custom`;
   }
   const lv = getLevel();
   const campaignLevels = getCampaignLevels();
   if (campaignLevels.length) {
-    badge.textContent = `${lv?.name || currentLevel} | Livello ${tutorialStepIndex + 1}/${campaignLevels.length}`;
-    return;
+    return `${lv?.name || currentLevel} | Livello ${tutorialStepIndex + 1}/${campaignLevels.length}`;
   }
-  badge.textContent = `${lv?.name || currentLevel} | Livello singolo`;
+  return `${lv?.name || currentLevel} | Livello singolo`;
+}
+
+function updateDebugBadge() {
+  debugTools.updateDebugBadge();
 }
 
 function setSlotMasks(mainCount = SLOTS, fnCount = FSLOTS) {
@@ -4398,35 +4242,22 @@ function setSlotMasks(mainCount = SLOTS, fnCount = FSLOTS) {
   fnSlotEnabled = Array.from({ length: FSLOTS }, (_, i) => i < fnCount);
 }
 function toggleDebugBadge() {
-  if (!DEBUG_TOOLS_ENABLED) return;
-  debugVisible = !debugVisible;
-  document.body.classList.toggle('debug-visible', debugVisible);
-  if (debugVisible) {
-    updateDebugBadge();
-  }
+  debugTools.toggleDebugBadge();
 }
 
 function toggleAnimationDebugBadge(force = null) {
-  if (!DEBUG_TOOLS_ENABLED) {
-    animationDebugVisible = false;
-    document.body.classList.remove('animation-debug-visible');
-    return;
-  }
-  const next = typeof force === 'boolean' ? force : !animationDebugVisible;
-  animationDebugVisible = next;
-  document.body.classList.toggle('animation-debug-visible', animationDebugVisible);
-  if (animationDebugVisible) {
-    updateAnimationDebugBadge();
-  }
+  debugTools.toggleAnimationDebugBadge(force);
 }
-function debugStepJump(delta) {
-  if (!DEBUG_TOOLS_ENABLED) return;
+function performDebugStepJump(delta) {
   if (running || animating) return;
   if (editorMode) return;
   if (currentLevel !== 'level1') return;
   const campaignLevels = getCampaignLevels();
   if (!campaignLevels.length) return;
   applyCampaignLevel(tutorialStepIndex + delta);
+}
+function debugStepJump(delta) {
+  debugTools.debugStepJump(delta);
 }
 
 function cellKey(x, y) {
@@ -4598,6 +4429,19 @@ function toggleEditorBlock(dir) {
   getLevelEditor()?.toggleEditorBlock(dir);
 }
 
+function setSandboxMode(enabled) {
+  sandboxMode = !!enabled;
+  document.body?.classList.toggle('sandbox-mode', sandboxMode);
+  if (sandboxMode) {
+    fnUnlockHintActive = false;
+    stepStartHintActive = false;
+    syncAvailableBlockGlowUI();
+  } else {
+    selectedDecorationBrush = null;
+  }
+  renderSandboxToolbar();
+}
+
 function setEditorMode(enabled) {
   if (!LEVEL_EDITOR_ENABLED && enabled) return;
   getLevelEditor()?.setEditorMode(enabled);
@@ -4611,6 +4455,8 @@ function setEditorMode(enabled) {
     renderFn();
     setEditorStylePanelOpen(false);
     selectedElementTool = null;
+    selectedDecorationBrush = null;
+    if (sandboxMode) setSandboxMode(false);
     lastEditorSolutionCount = 0;
     updateRunAvailability();
     renderElementPalette();
@@ -4675,7 +4521,7 @@ function syncAvailableBlockGlowUI() {
   });
 }
 function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
-  if (editorMode) {
+  if (editorMode || sandboxMode) {
     stepStartHintActive = false;
     syncAvailableBlockGlowUI();
     queueFirstLevelOnboardingSync();
@@ -4765,7 +4611,7 @@ function scheduleFirstLevelOnboardingDelay(delayMs = 0) {
   }, delayMs + 16);
 }
 function syncFirstLevelOnboardingDelayForCurrentView() {
-  if (editorMode || !isFirstLevelOnboardingContext()) {
+  if (editorMode || sandboxMode || !isFirstLevelOnboardingContext()) {
     clearFirstLevelOnboardingDelay();
     return;
   }
@@ -4790,6 +4636,7 @@ function shouldShowFirstLevelOnboarding() {
   return gameStarted
     && !document.body.classList.contains('prestart')
     && !editorMode
+    && !sandboxMode
     && isFirstLevelOnboardingContext()
     && Date.now() >= appSceneRevealReadyAt
     && (
@@ -5732,6 +5579,80 @@ function startBlankEditorLevel() {
   renderThemeEditorPanel();
 }
 
+function startSandboxLevel() {
+  setSandboxMode(true);
+  selectedEditorLevelId = NEW_EDITOR_LEVEL_ID;
+  currentCustomLevel = null;
+  pendingNewLevelThemeOverrides = {};
+  currentLevel = resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+  tutorialSceneLevelId = currentLevel;
+  pendingNewLevelCharacterId = resolveCharacterId(getLevel()?.characterId);
+  pendingNewLevelHints = {};
+  editorStylePanelOpen = false;
+  applyLevelSceneVars();
+  playerPlaced = true;
+  goalPlaced = true;
+  selectedElementTool = null;
+  selectedDecorationBrush = null;
+  START = { x: 1, y: 3 };
+  GOAL = { x: 4, y: 2 };
+  pos = { ...START };
+  ori = 'right';
+  setCharacterAction('idle');
+  setBlockedCells([]);
+  activeLevelDecorations = [];
+  resetPrograms();
+  activeMainSlots = SLOTS;
+  activeFnSlots = FSLOTS;
+  mainSlotEnabled = Array(SLOTS).fill(true);
+  fnSlotEnabled = Array(FSLOTS).fill(true);
+  editorBlockEnabled = { forward: true, left: true, right: true, function: true };
+  setAvailableBlocks(['forward', 'left', 'right', 'function']);
+  applyEditorBoardChanges();
+  setupEditorElementPlacement();
+  renderSandboxToolbar();
+  renderAvail();
+  renderBoard();
+  renderFn();
+  updateRunAvailability();
+}
+
+function renderSandboxToolbar() {
+  const toolbar = document.getElementById('sandboxToolbar');
+  if (!toolbar) return;
+  const tools = [
+    { key: 'tree_small', label: 'Albero', markup: getDecorationPreviewMarkup('tree_small') },
+    { key: 'daisy_flower', label: 'Fiore', markup: getDecorationPreviewMarkup('daisy_flower') },
+    { key: 'bee_hover', label: 'Api', markup: getDecorationPreviewMarkup('bee_hover') },
+    { key: DECORATION_ERASE_TOOL, label: 'Cancella', markup: customIconSVG('moon') },
+    { key: '__clear_sandbox__', label: 'Pulisci', markup: customIconSVG('sun') }
+  ];
+  toolbar.innerHTML = tools.map(tool => (
+    `<button class="sandbox-tool${selectedDecorationBrush === tool.key ? ' active' : ''}" type="button" data-sandbox-tool="${tool.key}" aria-label="${tool.label}">${tool.markup}</button>`
+  )).join('');
+}
+
+function bindSandboxToolbar() {
+  const toolbar = document.getElementById('sandboxToolbar');
+  if (!toolbar || toolbar.dataset.bound === 'true') return;
+  toolbar.dataset.bound = 'true';
+  toolbar.addEventListener('click', e => {
+    const btn = e.target?.closest?.('[data-sandbox-tool]');
+    if (!btn || !sandboxMode) return;
+    const tool = btn.dataset.sandboxTool;
+    if (tool === '__clear_sandbox__') {
+      activeLevelDecorations = [];
+      selectedDecorationBrush = null;
+      applyEditorBoardChanges();
+      renderSandboxToolbar();
+      return;
+    }
+    selectedDecorationBrush = selectedDecorationBrush === tool ? null : tool;
+    selectedElementTool = null;
+    renderSandboxToolbar();
+  });
+}
+
 function setupEditorElementPlacement() {
   const grid = document.getElementById('gameGrid');
   const sprite = document.getElementById('sprite');
@@ -5815,7 +5736,7 @@ function setupEditorElementPlacement() {
   }
 
   grid.addEventListener('click', e => {
-    if (!editorMode || running || animating) return;
+    if (!(editorMode || sandboxMode) || running || animating) return;
     if (suppressNextClick) {
       suppressNextClick = false;
       return;
@@ -5885,6 +5806,18 @@ function setupEditorElementPlacement() {
 
   sprite?.addEventListener('click', () => {
     if (!editorMode || !playerPlaced || selectedElementTool !== 'player' || running || animating) return;
+    if (running || animating) return;
+    
+    // Se siamo in sandbox, cliccare BÖKS cambia l'orientamento in senso orario
+    if (sandboxMode && playerPlaced) {
+      const directions = ['up', 'right', 'down', 'left'];
+      const nextIdx = (directions.indexOf(ori) + 1) % 4;
+      ori = directions[nextIdx];
+      syncSprite();
+      return;
+    }
+
+    if (!editorMode || !playerPlaced || selectedElementTool !== 'player') return;
     playerPlaced = false;
     selectedElementTool = null;
     applyEditorBoardChanges();
@@ -7070,18 +7003,16 @@ async function moveChar(dir) {
 async function run() {
   if(!gameStarted || running || animating) return;
   if (!playerPlaced) return;
+  if (!document.getElementById('runBtn')?.classList.contains('is-pressed')) {
+    pulseRunButtonPressedState(140);
+  }
   if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
-  const runStartState = editorMode ? { pos: { ...pos }, ori } : null;
-  const runStartPrograms = editorMode ? {
+  const shouldRestoreAfterRun = editorMode || sandboxMode;
+  const runStartState = shouldRestoreAfterRun ? { pos: { ...pos }, ori } : null;
+  const runStartPrograms = shouldRestoreAfterRun ? {
     prog: prog.map(block => block ? { ...block } : null),
     fnProg: fnProg.map(block => block ? { ...block } : null)
   } : null;
-  requestAppFullscreen();
-  sizeGrid();
-  drawBackground();
-  syncSprite();
-  await nextFrame();
-  syncSprite();
   let last=-1;
   const activeMainIndexes = mainSlotEnabled
     .map((enabled, idx) => enabled ? idx : -1)
@@ -7096,6 +7027,12 @@ async function run() {
   }
   activeRunLedSlotOrder = activeMainIndexes.filter(i => i <= last);
   setRunButtonPressedState(true);
+  requestAppFullscreen();
+  sizeGrid();
+  drawBackground();
+  syncSprite();
+  await nextFrame();
+  syncSprite();
   running=true;
   playRunPressSfx();
   setRunButtonRunningState(true);
@@ -7147,16 +7084,16 @@ async function run() {
   setRunButtonPressedState(false);
   setRunButtonRunningState(false);
   running=false;
-  if (!editorMode) resetPrograms();
+  if (!editorMode && !sandboxMode) resetPrograms();
 
   if (!goalPlaced) {
-    if (editorMode && runStartPrograms) {
+    if (shouldRestoreAfterRun && runStartPrograms) {
       prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
       fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
       renderBoard();
       renderFn();
     }
-    if (!editorMode) {
+    if (!editorMode && !sandboxMode) {
       resetPlayerToStepStart();
       renderBoard();
       renderFn();
@@ -7166,6 +7103,14 @@ async function run() {
   }
 
   if(won) {
+    if (sandboxMode) {
+      if (runStartPrograms) {
+        prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
+        fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
+      }
+      renderBoard(); renderFn();
+      return;
+    }
     if (!currentCustomLevel && currentLevel === 'level1') {
       rememberCompletedCampaignLevel();
       const campaignLevels = getCampaignLevels();
@@ -7209,17 +7154,17 @@ async function run() {
     resetPlayerToStepStart();
     renderBoard(); renderFn();
   } else {
-    playErrorSfx();
+    if (!sandboxMode) playErrorSfx();
     await sleep(400);
-    if (editorMode && runStartPrograms) {
+    if (shouldRestoreAfterRun && runStartPrograms) {
       prog = runStartPrograms.prog.map(block => block ? { ...block } : null);
       fnProg = runStartPrograms.fnProg.map(block => block ? { ...block } : null);
     }
-    if (editorMode && runStartState) {
+    if (!sandboxMode && shouldRestoreAfterRun && runStartState) {
       pos = { ...runStartState.pos };
       ori = runStartState.ori;
       syncSprite();
-    } else {
+    } else if (!sandboxMode) {
       resetPlayerToStepStart();
     }
     renderBoard(); renderFn();
@@ -7253,6 +7198,7 @@ async function init() {
       drawBackground();
       syncSprite();
       setupSpriteDrag();
+      setupSandboxGoalDrag();
       startFpsProbe('initial-scene');
     });
   }));
@@ -7280,12 +7226,12 @@ function dismissSplash() {
   splash.classList.add('hide');
   setTimeout(() => splash.remove(), 120);
 }
-function openAppFromGate({ openEditor = false, onOpen = null } = {}) {
+function openAppFromGate({ openEditor = false, onOpen = null, playLevelIntro = true } = {}) {
   if (gameStarted) return;
   gameStarted = true;
   markPerfMetricStart('app-open-to-interactive');
   const shouldOpenEditor = LEVEL_EDITOR_ENABLED && openEditor;
-  const shouldPlayLevelOneIntro = !shouldOpenEditor && !currentCustomLevel && currentLevel === 'level1';
+  const shouldPlayLevelOneIntro = playLevelIntro && !shouldOpenEditor && !currentCustomLevel && currentLevel === 'level1';
   const gate = document.getElementById('startGate');
   const gateFadeMs = 1650;
   const backgroundHoldMs = 850;
@@ -7333,6 +7279,22 @@ async function startEditorFromGate() {
   await ensureEditorSupportLoaded();
   openAppFromGate({ openEditor: true });
 }
+async function startSandboxFromGate() {
+  if (startGameGateAnimating) return;
+  startGameGateAnimating = true;
+  const btn = document.getElementById('startBoksBtn');
+  if (btn) btn.disabled = true;
+  pulseStartGameButtonPressedState();
+  btn?.classList.add('is-popping');
+  playWelcomeSfx();
+  playBubblePopSfx();
+  await sleep(720);
+  openAppFromGate({ openEditor: false, onOpen: startSandboxLevel, playLevelIntro: false });
+  window.setTimeout(() => {
+    startGameGateAnimating = false;
+    if (btn) btn.disabled = false;
+  }, 0);
+}
 function returnToMainMenu() {
   if (document.body.classList.contains('prestart')) return;
   if (running || animating) {
@@ -7342,6 +7304,7 @@ function returnToMainMenu() {
   closeSettingsPanel();
   closeSaveLevelModal();
   if (editorMode) exitEditorMode();
+  if (sandboxMode) setSandboxMode(false);
   setEditorStylePanelOpen(false);
   gameStarted = false;
   stopLevelOneIntro();
@@ -7443,34 +7406,26 @@ function exitEditorMode() {
 // ── Splash dismiss ──
 setTimeout(dismissSplash, 0);
 
+settingsPanel = window.BOKS_SETTINGS_PANEL.create({
+  isBlocked: () => running || animating,
+  getAudioState: getAudioSettingsState,
+  setSoundEffectsEnabled,
+  setBackgroundMusicVolume,
+  onBeforeOpen: () => closeSaveLevelModal(),
+  onResetProgress: resetJourneyProgress,
+  onMainMenu: () => returnToMainMenu(),
+  toast
+});
+settingsPanel.bindEvents();
+
 // tap to skip
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
+document.getElementById('startBoksBtn')?.addEventListener('click', startSandboxFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
 document.getElementById('openVfxToolBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('openLottieInspectorBtn')?.addEventListener('click', openLottieInspectorTool);
 document.getElementById('openLottieInspectorBtnEditor')?.addEventListener('click', openLottieInspectorTool);
-document.getElementById('header')?.addEventListener('click', toggleSettingsPanel);
-document.getElementById('header')?.addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  e.preventDefault();
-  toggleSettingsPanel();
-});
-document.getElementById('closeSettingsBtn')?.addEventListener('click', closeSettingsPanel);
-document.getElementById('settingsSfxBtn')?.addEventListener('click', () => setSoundEffectsEnabled(!soundEffectsEnabled));
-document.getElementById('settingsMusicVolume')?.addEventListener('input', e => {
-  const nextValue = Number(e.target?.value);
-  setBackgroundMusicVolume(nextValue / 100);
-});
-document.getElementById('settingsLanguageBtn')?.addEventListener('click', openLanguageComingSoonNotice);
-document.getElementById('settingsCreditsBtn')?.addEventListener('click', toggleSettingsCredits);
-document.getElementById('settingsResetProgressBtn')?.addEventListener('click', toggleResetProgressPanel);
-document.getElementById('cancelResetProgressBtn')?.addEventListener('click', toggleResetProgressPanel);
-document.getElementById('confirmResetProgressBtn')?.addEventListener('click', resetJourneyProgress);
-document.getElementById('settingsMenuBtn')?.addEventListener('click', goToMainMenuFromSettings);
-document.getElementById('settingsModal')?.addEventListener('click', e => {
-  if (e.target?.id === 'settingsModal' || e.target?.classList?.contains('settings-shell')) closeSettingsPanel();
-});
 document.getElementById('quickEditorBtn')?.addEventListener('click', toggleEditorFromCurrentLevel);
 document.getElementById('saveLevelBtn')?.addEventListener('click', openSaveLevelModal);
 document.getElementById('openStyleEditorBtn')?.addEventListener('click', toggleStyleEditorPanel);
@@ -7511,7 +7466,7 @@ document.addEventListener('keydown', e => {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
   const key = (e.key || '').toLowerCase();
   if (key === 'escape') {
-    if (settingsOpen) {
+    if (settingsPanel?.isOpen()) {
       closeSettingsPanel();
       return;
     }
@@ -7551,6 +7506,8 @@ document.addEventListener('keydown', e => {
 });
 
 renderRunButtonHud();
+bindRunButtonControls();
+bindSandboxToolbar();
 updateQuickEditorButton();
 updateStyleEditorButtons();
 syncSettingsPanelUi();

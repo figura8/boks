@@ -1146,6 +1146,21 @@
     #goalPopCanvas {
       z-index: 30;
     }
+    #sandboxGoalDragPreview {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 13000;
+      display: none;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      touch-action: none;
+      will-change: left, top;
+    }
+    body.sandbox-goal-dragging #goalIdleCanvas,
+    body.sandbox-goal-dragging #goalPopCanvas {
+      opacity: 0;
+    }
     body.editor-mode #sprite { cursor: grab; }
     body.editor-mode #sprite:active { cursor: grabbing; }
 
@@ -2169,6 +2184,40 @@
     body.editor-disabled #elementPalettePanel {
       display: none !important;
     }
+    body.sandbox-mode #customLevelsPanel,
+    body.sandbox-mode #saveLevelBtn,
+    body.sandbox-mode #quickEditorBtn {
+      display: none !important;
+    }
+    #sandboxToolbar {
+      display: none;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 4px 0;
+    }
+    body.sandbox-mode #sandboxToolbar {
+      display: flex;
+    }
+    .sandbox-tool {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(190, 174, 144, 0.95);
+      border-radius: 13px;
+      background: linear-gradient(180deg, #fffdf6 0%, #efe3cb 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), 0 2px 0 #c7b894;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sandbox-tool.active {
+      background: linear-gradient(180deg, #dfffe9 0%, #bdeccd 100%);
+      border-color: rgba(74, 168, 104, 0.82);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), 0 2px 0 rgba(69, 139, 89, 0.56), 0 0 0 3px rgba(109, 213, 139, 0.22);
+    }
     body.debug-tools-disabled #openSpritePreviewBtn,
     body.debug-tools-disabled #openVfxToolBtn,
     body.debug-tools-disabled #openLottieInspectorBtn,
@@ -2356,6 +2405,13 @@
       justify-content: flex-start;
       gap: 10px;
       margin-bottom: 4px;
+    }
+    #startGate .start-bubble-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(14px, 5vw, 34px);
+      width: 100%;
     }
     #startGate .start-actions {
       display: flex;
@@ -3268,7 +3324,8 @@
     .custom-level-actions button {
       flex: 1;
     }
-    #startGameBtn {
+    #startGameBtn,
+    #startBoksBtn {
       position: relative;
       right: auto;
       top: auto;
@@ -3289,6 +3346,13 @@
       touch-action: manipulation;
       animation: startGoalDrift 5.2s ease-in-out infinite;
     }
+    #startBoksBtn {
+      width: clamp(92px, 17vw, 124px);
+      height: clamp(92px, 17vw, 124px);
+      animation-duration: 5.8s;
+      animation-delay: -2.1s;
+      cursor: pointer;
+    }
     .start-goal-trigger__visual {
       position: relative;
       width: 100%;
@@ -3296,7 +3360,13 @@
       display: block;
       filter: drop-shadow(0 12px 18px rgba(255, 204, 105, 0.14));
     }
+    .start-boks-trigger__visual {
+      filter: drop-shadow(0 12px 18px rgba(72, 161, 126, 0.18));
+    }
     #startGameBtn .goal-bubble {
+      inset: 0;
+    }
+    #startBoksBtn .goal-bubble {
       inset: 0;
     }
     #startGameBtn .goal-light__bloom {
@@ -3313,6 +3383,28 @@
       box-shadow:
         0 0 8px rgba(255, 237, 143, 0.64),
         0 0 14px rgba(255, 225, 112, 0.32);
+    }
+    #startBoksBtn .goal-light__bloom {
+      inset: 8%;
+      opacity: 0.24;
+      background:
+        radial-gradient(circle, rgba(212, 255, 230, 0.78) 0%, rgba(127, 224, 180, 0.42) 28%, rgba(98, 191, 232, 0.24) 56%, rgba(98, 191, 232, 0) 76%);
+      filter: blur(4px);
+    }
+    #startBoksBtn .goal-light__core {
+      width: 16%;
+      height: 16%;
+      opacity: 0.42;
+      background:
+        radial-gradient(circle, rgba(255,255,255,0.96) 0%, rgba(199,255,224,0.82) 38%, rgba(81,199,151,0.5) 68%, rgba(81,199,151,0) 100%);
+      box-shadow:
+        0 0 9px rgba(165, 245, 204, 0.6),
+        0 0 16px rgba(43, 143, 212, 0.24);
+    }
+    #startBoksBtn .goal-light__speck {
+      opacity: 0.24;
+      background: radial-gradient(circle, rgba(255,255,255,0.96) 0%, rgba(197,255,223,0.74) 44%, rgba(197,255,223,0) 72%);
+      box-shadow: 0 0 10px rgba(94, 220, 164, 0.36);
     }
     #startGameBtn .goal-bubble__glow {
       width: 86%;
@@ -3334,6 +3426,28 @@
         inset 0 1px 3px rgba(255,255,255,0.52),
         0 0 10px rgba(189, 245, 255, 0.2);
     }
+    #startBoksBtn .goal-bubble__glow {
+      width: 88%;
+      height: 88%;
+      opacity: 0.58;
+      background:
+        radial-gradient(circle, rgba(196,255,222,0.86) 0%, rgba(77, 199, 145, 0.32) 35%, rgba(43, 143, 212, 0.18) 60%, rgba(43, 143, 212, 0) 76%);
+      filter: blur(1.5px);
+    }
+    #startBoksBtn .goal-bubble__shell {
+      width: 88%;
+      height: 88%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 24%, rgba(255,255,255,0.98) 0 8%, rgba(255,255,255,0) 11%),
+        radial-gradient(circle at 71% 72%, rgba(92, 194, 230, 0.5) 0 17%, rgba(92, 194, 230, 0) 20%),
+        radial-gradient(circle at 50% 54%, rgba(232, 255, 225, 0.54) 0 48%, rgba(164, 238, 210, 0.24) 64%, rgba(255,255,255,0.08) 79%, rgba(255,255,255,0) 85%);
+      border: 1px solid rgba(235,255,245,0.86);
+      box-shadow:
+        inset 0 1px 4px rgba(255,255,255,0.58),
+        0 0 12px rgba(112, 224, 178, 0.26),
+        0 0 26px rgba(43, 143, 212, 0.12);
+    }
     #startGameBtn .goal-bubble__flower {
       width: 50%;
       height: 50%;
@@ -3351,6 +3465,9 @@
         transform: scale(1.06) translateY(-4px);
         filter: saturate(1.06) brightness(1.03);
       }
+      #startBoksBtn:hover {
+        filter: saturate(1.05) brightness(1.02);
+      }
       #startGameBtn:hover .goal-bubble__shell {
         box-shadow:
           inset 0 1px 3px rgba(255,255,255,0.58),
@@ -3365,9 +3482,15 @@
         opacity: 0.82;
         transform: scale(1.05);
       }
+      #startBoksBtn:hover .goal-bubble__glow {
+        opacity: 0.72;
+        transform: scale(1.04);
+      }
     }
     #startGameBtn:active,
-    #startGameBtn.is-pressed {
+    #startGameBtn.is-pressed,
+    #startBoksBtn:active,
+    #startBoksBtn.is-pressed {
       transform: scale(0.96);
       filter: saturate(0.98) brightness(0.98);
     }
@@ -3381,7 +3504,8 @@
       outline: 2px solid rgba(95, 78, 52, 0.55);
       outline-offset: 4px;
     }
-    #startGameBtn.is-popping {
+    #startGameBtn.is-popping,
+    #startBoksBtn.is-popping {
       pointer-events: none;
       animation: none;
     }
@@ -3391,61 +3515,85 @@
     #startGameBtn.is-popping .goal-light__bloom,
     #startGameBtn.is-popping .goal-light__core,
     #startGameBtn.is-popping .goal-light__rays,
-    #startGameBtn.is-popping .goal-light__speck {
+    #startGameBtn.is-popping .goal-light__speck,
+    #startBoksBtn.is-popping .goal-bubble__shell,
+    #startBoksBtn.is-popping .goal-bubble__glow,
+    #startBoksBtn.is-popping .goal-light__bloom,
+    #startBoksBtn.is-popping .goal-light__core,
+    #startBoksBtn.is-popping .goal-light__rays,
+    #startBoksBtn.is-popping .goal-light__speck {
       animation: none;
     }
-    #startGameBtn.is-popping .goal-light__bloom {
+    #startGameBtn.is-popping .goal-light__bloom,
+    #startBoksBtn.is-popping .goal-light__bloom {
       animation: goalLightBloomPop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__core {
+    #startGameBtn.is-popping .goal-light__core,
+    #startBoksBtn.is-popping .goal-light__core {
       animation: goalLightCorePop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__rays {
+    #startGameBtn.is-popping .goal-light__rays,
+    #startBoksBtn.is-popping .goal-light__rays {
       animation: goalLightRaysPop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__speck--a {
+    #startGameBtn.is-popping .goal-light__speck--a,
+    #startBoksBtn.is-popping .goal-light__speck--a {
       animation: goalLightSpeckA 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__speck--b {
+    #startGameBtn.is-popping .goal-light__speck--b,
+    #startBoksBtn.is-popping .goal-light__speck--b {
       animation: goalLightSpeckB 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__speck--c {
+    #startGameBtn.is-popping .goal-light__speck--c,
+    #startBoksBtn.is-popping .goal-light__speck--c {
       animation: goalLightSpeckC 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-light__speck--d {
+    #startGameBtn.is-popping .goal-light__speck--d,
+    #startBoksBtn.is-popping .goal-light__speck--d {
       animation: goalLightSpeckD 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__shell {
+    #startGameBtn.is-popping .goal-bubble__shell,
+    #startBoksBtn.is-popping .goal-bubble__shell {
       animation: goalBubblePop 0.74s ease-out forwards;
     }
     #startGameBtn.is-popping .goal-bubble__flower {
       animation: goalBubbleFlowerPop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__glow {
+    #startGameBtn.is-popping .goal-bubble__glow,
+    #startBoksBtn.is-popping .goal-bubble__glow {
       animation: goalBubbleGlowPop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__burst--ring {
+    #startGameBtn.is-popping .goal-bubble__burst--ring,
+    #startBoksBtn.is-popping .goal-bubble__burst--ring {
       animation: goalBubbleRingPop 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__burst--a {
+    #startGameBtn.is-popping .goal-bubble__burst--a,
+    #startBoksBtn.is-popping .goal-bubble__burst--a {
       animation: goalBubbleShardA 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__burst--b {
+    #startGameBtn.is-popping .goal-bubble__burst--b,
+    #startBoksBtn.is-popping .goal-bubble__burst--b {
       animation: goalBubbleShardB 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__burst--c {
+    #startGameBtn.is-popping .goal-bubble__burst--c,
+    #startBoksBtn.is-popping .goal-bubble__burst--c {
       animation: goalBubbleShardC 0.74s ease-out forwards;
     }
-    #startGameBtn.is-popping .goal-bubble__burst--d {
+    #startGameBtn.is-popping .goal-bubble__burst--d,
+    #startBoksBtn.is-popping .goal-bubble__burst--d {
       animation: goalBubbleShardD 0.74s ease-out forwards;
     }
     @media (max-width: 520px) {
       #startGate .start-hero {
         min-height: 172px;
       }
-      #startGameBtn {
+      #startGameBtn,
+      #startBoksBtn {
         width: 104px;
         height: 104px;
+      }
+      #startGate .start-bubble-row {
+        gap: 16px;
       }
     }
     #startEditorBtn,
