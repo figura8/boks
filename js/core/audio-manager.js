@@ -18,7 +18,7 @@
         playPress: 'assets/audio/sfx/ui/play_press_main.mp3'
       },
       gameplay: {
-        stepMove: 'assets/audio/sfx/gameplay/step_move.mp3',
+        stepMove: 'assets/audio/sfx/gameplay/step_move_02.mp3',
         errorAction: 'assets/audio/sfx/gameplay/error_action.mp3',
         boksAnnoyed: 'assets/audio/sfx/gameplay/boks_annoyed.ogg',
         welcome: 'assets/audio/sfx/gameplay/wellcome.mp3',
@@ -26,6 +26,7 @@
           'assets/audio/sfx/gameplay/decor_rubber_tap_01.ogg',
           'assets/audio/sfx/gameplay/decor_rubber_tap_02.ogg'
         ],
+        rotationPosition: 'assets/audio/sfx/gameplay/rotation_position_02.mp3',
         goalBubbleBounce: 'assets/audio/sfx/gameplay/goal_bubble_bounce.ogg',
         bubblePop: 'assets/audio/sfx/gameplay/bubble_pop_main.ogg',
         levelComplete: 'assets/audio/sfx/gameplay/level_complete_main.mp3'
@@ -370,6 +371,7 @@
         const path = variants[Math.floor(Math.random() * variants.length)] || variants[0];
         playUiAudioSfx(path, 0.26);
       },
+      playRotationPositionSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.rotationPosition, 0.28),
       playGoalBubbleBounceSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.goalBubbleBounce, 0.28),
       playBubblePopSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.bubblePop, 0.26),
       playWelcomeSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.welcome, 0.34),
