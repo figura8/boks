@@ -2276,7 +2276,9 @@
       filter: blur(16px) saturate(0.94);
     }
     body.prestart {
-      background: var(--bg-base);
+      background: var(--notebook-page-bg);
+      background-color: #f7f7f1;
+      background-size: var(--notebook-page-bg-size);
     }
     #app,
     #toast,

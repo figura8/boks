@@ -7288,7 +7288,6 @@ function openAppFromGate({ openEditor = false, onOpen = null, playLevelIntro = t
   const shouldPlayLevelOneIntro = playLevelIntro && !shouldOpenEditor && !currentCustomLevel && currentLevel === 'level1';
   const gate = document.getElementById('startGate');
   const gateFadeMs = 1650;
-  const backgroundHoldMs = 850;
   gate?.classList.add('hiding');
   requestAppFullscreen();
   if (shouldPlayLevelOneIntro) playLevelOneIntroAndQueueBgm();
@@ -7308,7 +7307,7 @@ function openAppFromGate({ openEditor = false, onOpen = null, playLevelIntro = t
     queueFirstLevelOnboardingSync();
     markPerfMetricEnd('app-open-to-interactive', { type: 'interactive', editor: shouldOpenEditor });
     startFpsProbe(shouldOpenEditor ? 'editor-open' : 'game-open');
-  }, gateFadeMs + backgroundHoldMs);
+  }, gateFadeMs);
 }
 async function startGameFromGate() {
   if (startGameGateAnimating) return;
