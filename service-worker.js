@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v25-live-20260511-111245';
+const CACHE_VERSION = 'v25-live-20260511-115035';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -26,7 +26,6 @@ const PRECACHE_URLS = [
   './assets/animations/characters/boks_blu/manifest.js',
   './assets/ui/brand/boks-logo.svg',
   './assets/audio/sfx/gameplay/step_move_02.mp3',
-  './assets/audio/sfx/gameplay/error_action.mp3',
   './assets/audio/sfx/gameplay/rotation_position.mp3',
   './assets/audio/sfx/gameplay/rotation_position_02.mp3',
   './assets/ui/grids/grid_01.png',
