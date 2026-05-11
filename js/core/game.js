@@ -2105,6 +2105,7 @@ function rotateSpriteClockwise() {
   ori = order[(order.indexOf(ori) + 1) % order.length];
   START = { ...pos };
   syncSprite();
+  audioManager.playRotationPositionSfx();
 }
 
 function setupGoalDrag() {
