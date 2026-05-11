@@ -710,8 +710,8 @@ function updateRunProgressIndicator(zone = 'main', activeSlot = -1) {
     dot.classList.toggle('is-active', ledIndex === activeLedIndex);
   });
 }
-function pulseStartGameButtonPressedState(durationMs = 160) {
-  const btn = document.getElementById('startGameBtn');
+function pulseStartGameButtonPressedState(buttonId = 'startGameBtn', durationMs = 160) {
+  const btn = document.getElementById(buttonId);
   if (!btn) return;
   btn.classList.add('is-pressed');
   if (startGameButtonPressedTimer) clearTimeout(startGameButtonPressedTimer);
@@ -721,10 +721,16 @@ function pulseStartGameButtonPressedState(durationMs = 160) {
   }, durationMs);
 }
 function resetStartGameButtonVisualState() {
-  const btn = document.getElementById('startGameBtn');
-  if (!btn) return;
-  btn.classList.remove('is-popping', 'is-pressed');
-  document.getElementById('startBoksBtn')?.classList.remove('is-popping', 'is-pressed');
+  if (startGameButtonPressedTimer) {
+    clearTimeout(startGameButtonPressedTimer);
+    startGameButtonPressedTimer = null;
+  }
+  ['startGameBtn', 'startBoksBtn'].forEach((buttonId) => {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    btn.disabled = false;
+    btn.classList.remove('is-popping', 'is-pressed');
+  });
 }
 
 const audioManager = window.BOKS_AUDIO_MANAGER.create({
@@ -7263,7 +7269,7 @@ async function startGameFromGate() {
   requestAppFullscreen({ fromUserGesture: true });
   const btn = document.getElementById('startGameBtn');
   if (btn) btn.disabled = true;
-  pulseStartGameButtonPressedState();
+  pulseStartGameButtonPressedState('startGameBtn');
   btn?.classList.add('is-popping');
   playWelcomeSfx();
   playBubblePopSfx();
@@ -7285,7 +7291,7 @@ async function startSandboxFromGate() {
   startGameGateAnimating = true;
   const btn = document.getElementById('startBoksBtn');
   if (btn) btn.disabled = true;
-  pulseStartGameButtonPressedState();
+  pulseStartGameButtonPressedState('startBoksBtn');
   btn?.classList.add('is-popping');
   playWelcomeSfx();
   playBubblePopSfx();
