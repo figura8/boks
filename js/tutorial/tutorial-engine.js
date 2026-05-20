@@ -2,6 +2,7 @@
   const DEFAULT_BEAT_MS = 3200;
   const MIN_BEAT_MS = 1800;
   const MAX_BEAT_MS = 6200;
+  let unlockedAudio = null;
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -14,6 +15,32 @@
 
   function sleep(ms) {
     return new Promise(resolve => window.setTimeout(resolve, ms));
+  }
+
+  function resolveAudioSrc(src) {
+    if (!src) return '';
+    if (/^(https?:|blob:|data:)/i.test(src)) return src;
+    return new URL(String(src).replace(/^\//, ''), `${window.location.origin}/`).toString();
+  }
+
+  async function unlockAudio(sequence = {}) {
+    const beats = Array.isArray(sequence.beats) ? sequence.beats : [];
+    const firstAudio = beats.find(beat => beat?.type === 'narration' && beat.audio)?.audio;
+    if (!firstAudio) return false;
+    try {
+      unlockedAudio = unlockedAudio || new Audio();
+      unlockedAudio.src = resolveAudioSrc(firstAudio);
+      unlockedAudio.preload = 'auto';
+      unlockedAudio.volume = 0.001;
+      unlockedAudio.muted = false;
+      await unlockedAudio.play();
+      unlockedAudio.pause();
+      unlockedAudio.currentTime = 0;
+      unlockedAudio.volume = 1;
+      return true;
+    } catch (_err) {
+      return false;
+    }
   }
 
   function ensureRoot() {
@@ -42,8 +69,13 @@
   async function playOptionalAudio(src) {
     if (!src) return false;
     try {
-      const audio = new Audio(src);
+      const audio = unlockedAudio || new Audio();
+      audio.pause();
+      audio.src = resolveAudioSrc(src);
       audio.preload = 'auto';
+      audio.currentTime = 0;
+      audio.volume = 1;
+      audio.muted = false;
       await audio.play();
       await new Promise(resolve => {
         let settled = false;
@@ -118,6 +150,7 @@
   }
 
   window.BOKS_TUTORIAL_ENGINE = {
-    create: createTutorialEngine
+    create: createTutorialEngine,
+    unlockAudio
   };
 })();

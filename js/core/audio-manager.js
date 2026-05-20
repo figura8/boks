@@ -253,8 +253,8 @@
       return audio;
     }
 
-    function playUiAudioSfx(path, volume = 0.5, { mode = 'oneshot' } = {}) {
-      if (!soundEffectsEnabled) return;
+    function playUiAudioSfx(path, volume = 0.5, { mode = 'oneshot', respectSettings = true } = {}) {
+      if (respectSettings && !soundEffectsEnabled) return Promise.resolve(false);
       try {
         const audio = mode === 'restart'
           ? getUiAudioSfxPlayer(path)
@@ -269,10 +269,26 @@
           }
         }
         const playAttempt = audio.play();
-        if (playAttempt?.catch) playAttempt.catch(() => {});
+        if (playAttempt?.then) {
+          return playAttempt.then(() => true).catch(() => false);
+        }
+        return Promise.resolve(true);
       } catch (_err) {
         // ignore ui audio failures
+        return Promise.resolve(false);
       }
+    }
+
+    function unlockForUserGesture() {
+      try {
+        FX();
+      } catch (_err) {
+        // ignore audio context availability issues
+      }
+      return playUiAudioSfx(AUDIO_PATHS.sfx.gameplay.bubblePop, 0.001, {
+        mode: 'restart',
+        respectSettings: false
+      });
     }
 
     function stopLevelOneIntro({ reset = true } = {}) {
@@ -339,6 +355,7 @@
       stopLevelOneIntro,
       playLevelOneIntroAndQueueBgm,
       resumeBackgroundMusicLoop,
+      unlockForUserGesture,
       playBlockDragStartSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDetach, 0.42),
       playBlockHoverSlotSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.ui.slotHover, 0.22),
       playBlockDropSuccessSfx: () => playUiAudioSfx(AUDIO_PATHS.sfx.ui.blockDropSuccess, 0.48),

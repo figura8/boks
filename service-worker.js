@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v26';
+const CACHE_VERSION = 'v32';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 

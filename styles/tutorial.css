@@ -76,6 +76,28 @@ body.tutorial-stage.tutorial-forward-visible #blocksRow .ablock {
   animation: tutorialElementEnter 780ms cubic-bezier(0.2, 1.2, 0.28, 1) both;
 }
 
+body.tutorial-stage.tutorial-slot-visible #boardRow {
+  display: block;
+  animation: tutorialElementEnter 780ms cubic-bezier(0.2, 1.2, 0.28, 1) both;
+}
+
+body.tutorial-stage.tutorial-block-draggable #blocksRow {
+  pointer-events: auto;
+}
+
+body.tutorial-stage.tutorial-play-visible #runBtn {
+  display: flex;
+  animation: tutorialElementEnter 780ms cubic-bezier(0.2, 1.2, 0.28, 1) both;
+}
+
+body.tutorial-stage.tutorial-play-visible #runBtn {
+  pointer-events: none;
+}
+
+body.tutorial-stage.tutorial-play-unlocked #runBtn {
+  pointer-events: auto;
+}
+
 body.tutorial-stage #sprite {
   pointer-events: auto;
 }

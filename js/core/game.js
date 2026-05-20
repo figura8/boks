@@ -790,6 +790,7 @@ const clearLevelOneIntroBgmTimer = () => audioManager.clearLevelOneIntroBgmTimer
 const stopLevelOneIntro = options => audioManager.stopLevelOneIntro(options);
 const playLevelOneIntroAndQueueBgm = () => audioManager.playLevelOneIntroAndQueueBgm();
 const resumeBackgroundMusicLoop = () => audioManager.resumeBackgroundMusicLoop();
+const unlockAudioForUserGesture = () => audioManager.unlockForUserGesture?.();
 const playBlockDragStartSfx = () => audioManager.playBlockDragStartSfx();
 const playBlockHoverSlotSfx = () => audioManager.playBlockHoverSlotSfx();
 const playBlockDropSuccessSfx = () => audioManager.playBlockDropSuccessSfx();
@@ -5707,7 +5708,7 @@ function startTutorialStage() {
   selectedElementTool = null;
   selectedDecorationBrush = null;
   START = { x: 2, y: 3 };
-  GOAL = { x: 4, y: 2 };
+  GOAL = { x: 3, y: 3 };
   pos = { ...START };
   ori = tutorialInitialOrientation;
   setCharacterAction('idle');
@@ -5734,7 +5735,11 @@ function stopTutorialStage() {
   tutorialStageActive = false;
   tutorialBoksDoubleClickUnlocked = false;
   tutorialWaitingFor = null;
-  document.body?.classList.remove('tutorial-stage', 'tutorial-boks-visible', 'tutorial-forward-visible');
+  document.body?.classList.remove(
+    'tutorial-stage', 'tutorial-boks-visible', 'tutorial-forward-visible',
+    'tutorial-slot-visible', 'tutorial-block-draggable', 'tutorial-play-visible',
+    'tutorial-play-unlocked', 'tutorial-goal-visible'
+  );
 }
 
 async function revealTutorialBoks() {
@@ -5782,7 +5787,6 @@ function resolveTutorialWait(eventName) {
 
 function waitForTutorialEvent(eventName, count = 1) {
   if (!tutorialStageActive || !eventName) return Promise.resolve();
-  if (eventName === 'boks-facing-start' && ori === tutorialInitialOrientation) return Promise.resolve();
   return new Promise(resolve => {
     tutorialWaitingFor = {
       eventName,
@@ -5801,11 +5805,70 @@ async function revealTutorialForwardBlock() {
   await sleep(900);
 }
 
+async function revealTutorialSlot() {
+  if (!tutorialStageActive) return;
+  activeMainSlots = 1;
+  mainSlotEnabled = Array(SLOTS).fill(false);
+  mainSlotEnabled[0] = true;
+  renderBoard();
+  updateRunAvailability();
+  document.body?.classList.add('tutorial-slot-visible');
+  await sleep(900);
+}
+
+function unlockTutorialBlockDrag() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-block-draggable');
+}
+
+function lockTutorialBlockDrag() {
+  document.body?.classList.remove('tutorial-block-draggable');
+}
+
+async function revealTutorialPlayButton() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-play-visible');
+  await sleep(800);
+}
+
+function unlockTutorialPlay() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-play-unlocked');
+}
+
+function lockTutorialPlay() {
+  document.body?.classList.remove('tutorial-play-unlocked');
+}
+
+async function revealTutorialGoal() {
+  if (!tutorialStageActive) return;
+  goalPlaced = true;
+  pos = { ...START };
+  ori = tutorialInitialOrientation;
+  resetPrograms();
+  syncSprite();
+  renderBoard();
+  document.body?.classList.add('tutorial-goal-visible');
+  await sleep(800);
+}
+
+function unlockTutorialAll() {
+  document.body?.classList.add('tutorial-play-unlocked', 'tutorial-block-draggable');
+}
+
 window.BOKS_TUTORIAL_STAGE = {
   revealBoks: revealTutorialBoks,
   unlockBoksDoubleClick: () => setTutorialBoksDoubleClickUnlocked(true),
   lockBoksDoubleClick: () => setTutorialBoksDoubleClickUnlocked(false),
   revealForwardBlock: revealTutorialForwardBlock,
+  revealSlot: revealTutorialSlot,
+  unlockDragBlock: unlockTutorialBlockDrag,
+  lockDragBlock: lockTutorialBlockDrag,
+  revealPlayButton: revealTutorialPlayButton,
+  unlockPlay: unlockTutorialPlay,
+  lockPlay: lockTutorialPlay,
+  revealGoal: revealTutorialGoal,
+  unlockAll: unlockTutorialAll,
   waitFor: waitForTutorialEvent
 };
 
@@ -7103,6 +7166,7 @@ function endDg(cx,cy) {
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
   if (didDropSuccessfully) playBlockDropSuccessSfx();
+  if (didDropSuccessfully && tutorialStageActive) resolveTutorialWait('block-dropped');
   finishDragCleanup();
   updateDraggedBoardState(dirtySlots);
   if (didDropSuccessfully && slot) triggerSlotCaptureEffect(slot.dataset.zone, +slot.dataset.slot);
@@ -7208,6 +7272,7 @@ async function run() {
   if (!document.getElementById('runBtn')?.classList.contains('is-pressed')) {
     pulseRunButtonPressedState(140);
   }
+  if (tutorialStageActive) resolveTutorialWait('play-pressed');
   if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
   const shouldRestoreAfterRun = editorMode || sandboxMode;
   const runStartState = shouldRestoreAfterRun ? { pos: { ...pos }, ori } : null;
@@ -7286,6 +7351,7 @@ async function run() {
   setRunButtonPressedState(false);
   setRunButtonRunningState(false);
   running=false;
+  if (tutorialStageActive) resolveTutorialWait('execution-finished');
   if (!editorMode && !sandboxMode) resetPrograms();
 
   if (!goalPlaced) {
@@ -7499,12 +7565,16 @@ async function startSandboxFromGate() {
 async function startTutorialFromGate() {
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
+  requestAppFullscreen({ fromUserGesture: true });
   const btn = document.getElementById('startTutorialBtn');
   if (btn) btn.disabled = true;
+  const gameAudioUnlock = unlockAudioForUserGesture();
+  const narrationAudioUnlock = window.BOKS_TUTORIAL_ENGINE?.unlockAudio?.(window.BOKS_TUTORIAL_DATA?.intro);
   pulseStartGameButtonPressedState('startTutorialBtn');
   btn?.classList.add('is-popping');
   playWelcomeSfx();
   playBubblePopSfx();
+  await Promise.allSettled([gameAudioUnlock, narrationAudioUnlock]);
   await sleep(720);
   openAppFromGate({
     openEditor: false,
@@ -7519,6 +7589,9 @@ async function startTutorialFromGate() {
     if (btn) btn.disabled = false;
   }, 0);
 }
+window.BOKS_TUTORIAL_PREVIEW = {
+  startWithAudio: startTutorialFromGate
+};
 function returnToMainMenu() {
   if (document.body.classList.contains('prestart')) return;
   if (running || animating) {
@@ -7548,6 +7621,19 @@ function returnToMainMenu() {
 }
 function openSpritePreviewTool() {
   const targetUrl = new URL('tools/sprite-preview.html', window.location.href).toString();
+  const opened = window.open(targetUrl, '_blank', 'noopener');
+  if (!opened) window.location.href = targetUrl;
+}
+async function openTutorialEditorTool() {
+  const cleanUrl = new URL('/dev/tutorial-editor', window.location.href).toString();
+  const fallbackUrl = new URL('dev/tutorial-editor/index.html', window.location.href).toString();
+  let targetUrl = cleanUrl;
+  try {
+    const response = await fetch(cleanUrl, { cache: 'no-store' });
+    if (!response.ok) targetUrl = fallbackUrl;
+  } catch (_err) {
+    targetUrl = fallbackUrl;
+  }
   const opened = window.open(targetUrl, '_blank', 'noopener');
   if (!opened) window.location.href = targetUrl;
 }
@@ -7653,6 +7739,7 @@ document.getElementById('startGameBtn')?.addEventListener('click', startGameFrom
 document.getElementById('startBoksBtn')?.addEventListener('click', startSandboxFromGate);
 document.getElementById('startTutorialBtn')?.addEventListener('click', startTutorialFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
+document.getElementById('openTutorialEditorBtn')?.addEventListener('click', () => { void openTutorialEditorTool(); });
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
 document.getElementById('openVfxToolBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('openLottieInspectorBtn')?.addEventListener('click', openLottieInspectorTool);

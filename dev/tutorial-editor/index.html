@@ -1130,38 +1130,176 @@
         stopPreviewInGame();
         return;
       }
+      const previewUrl = new URL(`/?tutorialPreview=${Date.now()}`, window.location.href);
+      const previewWindow = window.open('about:blank', 'boks-tutorial-preview');
+      if (!previewWindow) {
+        els.exportStatus.textContent = 'Popup blocked. Opening preview in this tab...';
+        exportTutorialData({ silent: true }).catch(() => {});
+        window.location.href = previewUrl.href;
+        return;
+      }
+      previewWindow.document.write('<!doctype html><title>BOKS preview</title><p style="font-family:sans-serif">Preparing tutorial preview...</p>');
+      previewWindow.document.close();
       try {
-        await exportTutorialData({ silent: true });
-        await startPreviewInGame();
+        exportTutorialData({ silent: true }).catch(() => {});
+        await startPreviewInGame(previewWindow, previewUrl.href);
       } catch (err) {
+        if (!previewWindow.closed) {
+          previewWindow.document.open();
+          previewWindow.document.write(`<!doctype html><title>BOKS preview failed</title><p style="font-family:sans-serif;color:#9b2c2c">Preview failed: ${escapeHtml(err.message)}</p>`);
+          previewWindow.document.close();
+        }
         state.previewRunning = false;
+        state.previewWindow = null;
         updatePreviewButton();
         els.exportStatus.textContent = `Preview failed: ${err.message}`;
       }
     }
 
-    async function startPreviewInGame() {
-      const previewUrl = new URL(`/?tutorialPreview=${Date.now()}`, window.location.href);
-      const previewWindow = window.open(previewUrl.href, 'boks-tutorial-preview');
-      if (!previewWindow) throw new Error('popup blocked');
+    async function startPreviewInGame(previewWindow, previewUrl) {
+      previewWindow.location.href = previewUrl;
       state.previewWindow = previewWindow;
       state.previewRunning = true;
       updatePreviewButton();
       els.exportStatus.textContent = 'Preview opening in game...';
       await waitForGamePreview(previewWindow);
-      els.exportStatus.textContent = 'Preview running in the real game.';
     }
 
     async function waitForGamePreview(previewWindow) {
+      const legacyData = await buildPreviewLegacyData(state.sequenceIndex);
       const started = await waitUntil(() => {
         if (previewWindow.closed) throw new Error('preview window closed');
         const doc = previewWindow.document;
         const button = doc?.getElementById('startTutorialBtn');
-        if (!button || !previewWindow.BOKS_TUTORIAL_DATA?.intro) return false;
-        button.click();
+        if (!button || !previewWindow.BOKS_TUTORIAL_DATA || !previewWindow.BOKS_TUTORIAL_PREVIEW?.startWithAudio) return false;
+        previewWindow.BOKS_TUTORIAL_DATA = legacyData;
+        showPreviewStartOverlay(previewWindow);
         return true;
       }, 12000);
       if (!started) throw new Error('game did not become ready');
+    }
+
+    async function buildPreviewLegacyData(sequenceIndex) {
+      normalizeEditorData();
+      const sequence = state.data.sequences[sequenceIndex] || state.data.sequences[0] || { id: 'intro', title: 'Intro', beats: [] };
+      const beats = [];
+      for (let i = 0; i < sequence.beats.length; i++) {
+        const beat = sequence.beats[i];
+        if (beat.type !== 'Narration') {
+          beats.push(...canonicalBeatToLegacy(stripInternalFields(beat), i));
+          continue;
+        }
+        const legacyBeat = {
+          id: legacyBeatId(beat, i),
+          type: 'narration',
+          text: beat.caption || '',
+          durationMs: Number(beat.durationMs) || 0
+        };
+        const audioSrc = await resolvePreviewAudioSrc(beat);
+        if (audioSrc) legacyBeat.audio = audioSrc;
+        beats.push(legacyBeat);
+      }
+      return { intro: { id: sequence.id || 'intro', title: sequence.title || 'Intro', beats } };
+    }
+
+    async function resolvePreviewAudioSrc(beat) {
+      const attachment = state.audioAttachments.get(beat._editorId);
+      if (attachment?.file) {
+        try { return await fileToDataUrl(attachment.file); } catch (_e) {}
+      }
+      if (attachment?.objectUrl) return attachment.objectUrl;
+      const src = beat.audioSource || '';
+      if (!src) return '';
+      if (/^https?:\/\//i.test(src)) return src;
+      if (/^\/?assets\//i.test(src)) return src.replace(/^\//, '');
+      try {
+        const url = `/dev/tutorial-editor/api/local-audio?path=${encodeURIComponent(src)}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.ok) {
+          const blob = await res.blob();
+          return await blobToDataUrl(blob);
+        }
+      } catch (_e) {}
+      return '';
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function buildLegacyDataObject(data, sequenceIndex) {
+      const sequence = data.sequences[sequenceIndex] || data.sequences[0] || { id: 'intro', title: 'Intro', beats: [] };
+      return {
+        intro: {
+          id: sequence.id || 'intro',
+          title: sequence.title || 'Intro',
+          beats: sequence.beats.flatMap((beat, index) => canonicalBeatToLegacy(beat, index))
+        }
+      };
+    }
+
+    function showPreviewStartOverlay(previewWindow) {
+      const doc = previewWindow.document;
+      if (doc.getElementById('tutorialPreviewStartOverlay')) return;
+      const overlay = doc.createElement('div');
+      overlay.id = 'tutorialPreviewStartOverlay';
+      overlay.innerHTML = `
+        <button type="button">Start preview with audio</button>
+        <p>Chrome needs one real click in the game window before narration audio can play.</p>
+      `;
+      overlay.style.cssText = [
+        'position:fixed',
+        'inset:0',
+        'z-index:999999',
+        'display:grid',
+        'place-content:center',
+        'gap:14px',
+        'text-align:center',
+        'background:rgba(248,247,242,0.92)',
+        'font-family:Trebuchet MS, sans-serif',
+        'color:#1f2933'
+      ].join(';');
+      const startButton = overlay.querySelector('button');
+      startButton.style.cssText = [
+        'min-width:240px',
+        'min-height:56px',
+        'border:0',
+        'border-radius:999px',
+        'background:#235f8f',
+        'color:white',
+        'font:inherit',
+        'font-weight:800',
+        'cursor:pointer',
+        'box-shadow:0 12px 26px rgba(31,41,51,0.22)'
+      ].join(';');
+      doc.body.appendChild(overlay);
+      const script = doc.createElement('script');
+      script.textContent = `
+        (() => {
+          const overlay = document.getElementById('tutorialPreviewStartOverlay');
+          const button = overlay?.querySelector('button');
+          button?.addEventListener('click', () => {
+            overlay?.remove();
+            window.BOKS_TUTORIAL_PREVIEW?.startWithAudio?.();
+          }, { once: true });
+        })();
+      `;
+      doc.body.appendChild(script);
+      els.exportStatus.textContent = 'Preview ready. Click "Start preview with audio" in the game window.';
     }
 
     function stopPreviewInGame() {
@@ -1218,10 +1356,25 @@
           body: JSON.stringify({ source, legacySource, files })
         });
         if (response.ok) {
-          if (!silent) els.exportStatus.textContent = 'Exported TS and legacy tutorial data.';
+          let result = {};
+          try {
+            result = await response.json();
+          } catch (_err) {}
+          const warningText = result.warnings?.length
+            ? ` Warnings: ${result.warnings.join(' | ')}`
+            : '';
+          if (!silent) els.exportStatus.textContent = `Exported TS and legacy tutorial data.${warningText}`;
           return;
         }
-        if (silent) throw new Error('silent export failed');
+        let message = `export failed (${response.status})`;
+        try {
+          const result = await response.json();
+          if (result?.error) message = result.error;
+        } catch (_err) {
+          const text = await response.text().catch(() => '');
+          if (text) message = text;
+        }
+        if (silent) throw new Error(message);
       } catch (_err) {
         if (silent) throw _err;
         // Static hosting fallback below.
@@ -1357,10 +1510,11 @@
       if (copy.type === 'Narration') {
         const hasLocalAudio = !!state.audioAttachments.get(copy._editorId) || isLocalAudioPath(copy.audioSource);
         const hasUrlAudio = /^https?:\/\//i.test(copy.audioSource || '');
-        const hasExportedAudio = /^\/?audio\//i.test(copy.audioSource || '');
-        if (hasLocalAudio && copy.audioFilename) copy.audioSrc = `audio/tutorial/${copy.audioFilename}`;
+        const hasExportedAudio = /^\/?assets\//i.test(copy.audioSource || '');
+        if (hasLocalAudio && copy.audioFilename) copy.audioSrc = `assets/audio/sfx/gameplay/${copy.audioFilename}`;
         else if (hasUrlAudio) copy.audioSrc = copy.audioSource;
         else if (hasExportedAudio) copy.audioSrc = copy.audioSource.replace(/^\//, '');
+        else if (copy.audioFilename) copy.audioSrc = `assets/audio/sfx/gameplay/${copy.audioFilename}`;
       }
       delete copy.notes;
       delete copy.audioFilename;
@@ -1408,7 +1562,7 @@
     }
 
     function isLocalAudioPath(value) {
-      return !!value && !/^https?:\/\//i.test(value) && !/^\/?audio\//i.test(value);
+      return !!value && !/^https?:\/\//i.test(value) && !/^\/?assets\//i.test(value);
     }
 
     function fileToBase64(file) {

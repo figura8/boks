@@ -7,7 +7,7 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
 const OUTPUT_PATH = path.join(ROOT, 'src', 'tutorial', 'tutorialData.ts');
 const LEGACY_OUTPUT_PATH = path.join(ROOT, 'js', 'tutorial', 'tutorial-data.js');
-const AUDIO_OUTPUT_DIR = path.join(ROOT, 'public', 'audio', 'tutorial');
+const AUDIO_OUTPUT_DIR = path.join(ROOT, 'assets', 'audio', 'sfx', 'gameplay');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -103,15 +103,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const files = Array.isArray(payload.files) ? payload.files : [];
+      const warnings = [];
       if (files.length) await fs.promises.mkdir(AUDIO_OUTPUT_DIR, { recursive: true });
       for (const file of files) {
         const filename = sanitizeFilename(file.filename);
         const target = path.join(AUDIO_OUTPUT_DIR, filename);
         if (!target.startsWith(AUDIO_OUTPUT_DIR)) continue;
-        if (file.base64) {
-          await fs.promises.writeFile(target, Buffer.from(file.base64, 'base64'));
-        } else if (file.path) {
-          await fs.promises.copyFile(path.resolve(file.path), target);
+        try {
+          if (file.base64) {
+            await fs.promises.writeFile(target, Buffer.from(file.base64, 'base64'));
+          } else if (file.path) {
+            await fs.promises.copyFile(path.resolve(file.path), target);
+          }
+        } catch (err) {
+          warnings.push(`Skipped ${filename}: ${err.message}`);
         }
       }
       await fs.promises.mkdir(path.dirname(OUTPUT_PATH), { recursive: true });
@@ -123,7 +128,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, JSON.stringify({
         ok: true,
         path: path.relative(ROOT, OUTPUT_PATH),
-        legacyPath: path.relative(ROOT, LEGACY_OUTPUT_PATH)
+        legacyPath: path.relative(ROOT, LEGACY_OUTPUT_PATH),
+        warnings
       }), 'application/json; charset=utf-8');
     } catch (err) {
       send(res, 500, JSON.stringify({ ok: false, error: err.message }), 'application/json; charset=utf-8');
