@@ -61,6 +61,12 @@
   }
 
   function setCaption(root, text) {
+    if (window.BOKS_TUTORIAL_HIDE_CAPTIONS !== false) {
+      root?.classList.remove('is-visible');
+      const caption = root?.querySelector?.('.tutorial-caption__text');
+      if (caption) caption.textContent = '';
+      return;
+    }
     const caption = root.querySelector('.tutorial-caption__text');
     if (caption) caption.textContent = text || '';
     root.classList.toggle('is-visible', !!text);
@@ -68,10 +74,10 @@
 
   async function playOptionalAudio(src) {
     if (!src) return false;
-    try {
-      const audio = unlockedAudio || new Audio();
+    const resolvedSrc = resolveAudioSrc(src);
+    const playAudioElement = async audio => {
       audio.pause();
-      audio.src = resolveAudioSrc(src);
+      audio.src = resolvedSrc;
       audio.preload = 'auto';
       audio.currentTime = 0;
       audio.volume = 1;
@@ -89,7 +95,16 @@
         window.setTimeout(finish, MAX_BEAT_MS + 2400);
       });
       return true;
+    };
+
+    try {
+      return await playAudioElement(unlockedAudio || new Audio());
     } catch (_err) {
+      try {
+        return await playAudioElement(new Audio());
+      } catch (retryErr) {
+        console.warn('[BOKS tutorial] Narration audio did not play:', resolvedSrc, retryErr);
+      }
       return false;
     }
   }
@@ -105,10 +120,11 @@
       return;
     }
     if (beat.type === 'waitFor') {
-      await window.BOKS_TUTORIAL_STAGE?.waitFor?.(beat.event, beat.count);
+      await window.BOKS_TUTORIAL_STAGE?.waitFor?.(beat.event, beat.count, beat);
       return;
     }
     if (beat.type !== 'narration') return;
+    const captionsHidden = window.BOKS_TUTORIAL_HIDE_CAPTIONS !== false;
     setCaption(root, beat.text);
     const audioPlayed = await playOptionalAudio(beat.audio);
     if (!audioPlayed) {

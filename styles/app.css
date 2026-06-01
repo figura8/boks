@@ -1682,7 +1682,8 @@
       animation: slotCaptureBlockSnap .24s ease-out;
     }
     .pslot.first-level-onboarding-slot::after,
-    .pslot.tutorial-slot-focus::after {
+    .pslot.tutorial-slot-focus::after,
+    .pslot.tutorial-function-area-focus::after {
       content: '';
       position: absolute;
       inset: -5px;
@@ -1691,6 +1692,10 @@
       box-shadow: 0 0 0 2px rgba(255, 239, 202, 0.34), 0 0 20px rgba(255, 205, 92, 0.28);
       pointer-events: none;
       animation: firstOnboardingSlotPulse 1.35s ease-in-out infinite;
+    }
+    .pslot.tutorial-function-area-focus::after {
+      border-color: rgba(137, 203, 255, 0.96);
+      box-shadow: 0 0 0 2px rgba(214, 240, 255, 0.46), 0 0 22px rgba(77, 176, 255, 0.34);
     }
     .pslot.locked {
       opacity: 0.34;
@@ -2435,6 +2440,13 @@
       justify-content: center;
       gap: clamp(14px, 5vw, 34px);
       width: 100%;
+    }
+    body.tutorial-menu-locked #startBoksBtn,
+    body.tutorial-menu-locked #startGameBtn {
+      display: none;
+    }
+    body.tutorial-menu-locked #startGate .start-bubble-row {
+      gap: 0;
     }
     #startGate .start-actions {
       display: flex;

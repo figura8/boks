@@ -5,6 +5,7 @@ let START = {x:2,y:2};
 const gridCellEls = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 const coarsePointer = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : true;
 const LOW_END_DEVICE = window.BOKS_RUNTIME_CONFIG?.lowEndDevice === true;
+const TUTORIAL_COMPLETED_STORAGE_KEY = 'boks-tutorial-completed-v2';
 let appSceneVisible = document.visibilityState !== 'hidden';
 let debugTools = null;
 
@@ -777,7 +778,9 @@ function rememberCompletedCampaignLevel(levelId = getCampaignLevelIdForIndex(tut
 }
 function resetJourneyProgressState() {
   audioManager.resetJourneyProgressState();
+  try { localStorage.removeItem(TUTORIAL_COMPLETED_STORAGE_KEY); } catch (_err) {}
   syncAudioState();
+  syncStartGateUnlockState();
 }
 function setBackgroundMusicVolume(nextVolume, { persist = true } = {}) {
   audioManager.setBackgroundMusicVolume(nextVolume, { persist });
@@ -5808,6 +5811,29 @@ function setTutorialBoksOrientation(nextOrientation = 'right') {
   syncSprite();
 }
 
+function setTutorialBoksPosition(value = '') {
+  if (!tutorialStageActive) return;
+  const [rawX, rawY] = String(value || '').split(':');
+  const x = Math.max(0, Math.min(COLS - 1, Number(rawX) || 0));
+  const y = Math.max(0, Math.min(ROWS - 1, Number(rawY) || 0));
+  START = { x, y };
+  pos = { x, y };
+  if (playerPlaced) syncSprite();
+}
+
+function setTutorialGoalPosition(value = '') {
+  if (!tutorialStageActive) return;
+  const [rawX, rawY] = String(value || '').split(':');
+  const x = Math.max(0, Math.min(COLS - 1, Number(rawX) || 0));
+  const y = Math.max(0, Math.min(ROWS - 1, Number(rawY) || 0));
+  GOAL = { x, y };
+  if (goalPlaced) {
+    initGrid();
+    renderBoard();
+    syncSprite();
+  }
+}
+
 function triggerTutorialBoksNudge() {
   const sprite = document.getElementById('sprite');
   if (!sprite || !playerPlaced) return;
@@ -5822,8 +5848,11 @@ function notifyTutorialBoksTurned() {
   if (ori === tutorialInitialOrientation) resolveTutorialWait('boks-facing-start');
 }
 
-function resolveTutorialWait(eventName) {
+function resolveTutorialWait(eventName, payload = {}) {
   if (!tutorialWaitingFor || tutorialWaitingFor.eventName !== eventName) return;
+  if (tutorialWaitingFor.targetBlock && payload.blockType !== tutorialWaitingFor.targetBlock) return;
+  if (tutorialWaitingFor.targetZone && payload.zone !== tutorialWaitingFor.targetZone) return;
+  if (tutorialWaitingFor.condition && !tutorialConditionMatches(tutorialWaitingFor.condition, payload)) return;
   tutorialWaitingFor.remaining -= 1;
   if (tutorialWaitingFor.remaining > 0) return;
   const resolve = tutorialWaitingFor.resolve;
@@ -5831,15 +5860,41 @@ function resolveTutorialWait(eventName) {
   resolve();
 }
 
-function waitForTutorialEvent(eventName, count = 1) {
+function waitForTutorialEvent(eventName, count = 1, beat = {}) {
   if (!tutorialStageActive || !eventName) return Promise.resolve();
   return new Promise(resolve => {
+    const targetBlock = ['forward', 'left', 'right'].includes(beat?.target) ? beat.target : '';
+    const targetZone = ['main', 'fn'].includes(beat?.targetZone) ? beat.targetZone : '';
+    const condition = String(beat?.condition || '').trim().toLowerCase();
     tutorialWaitingFor = {
       eventName,
+      targetBlock,
+      targetZone,
+      condition,
       remaining: Math.max(1, Number(count) || 1),
       resolve
     };
   });
+}
+
+function tutorialConditionMatches(condition = '', payload = {}) {
+  if (!condition) return true;
+  if (condition === 'function_ready') return !!payload.functionReady;
+  return false;
+}
+
+function getTutorialProgramStatePayload() {
+  const mainBlocks = prog
+    .filter(Boolean)
+    .map(block => block.dir || block.direction || '');
+  const fnBlocks = fnProg
+    .filter(Boolean)
+    .map(block => block.dir || block.direction || '');
+  return {
+    mainBlocks,
+    fnBlocks,
+    functionReady: mainBlocks.length === 1 && mainBlocks[0] === 'function' && fnBlocks.length > 0
+  };
 }
 
 function notifyTutorialBlockDropFailed() {
@@ -5850,6 +5905,7 @@ function notifyTutorialBlockDropFailed() {
 const tutorialHighlightClasses = [
   'tutorial-focus',
   'tutorial-slot-focus',
+  'tutorial-function-area-focus',
   'tutorial-play-focus'
 ];
 
@@ -5873,6 +5929,9 @@ function getTutorialHighlightTargets(elementId = '') {
   }
   if (id === 'slot') {
     return Array.from(document.querySelectorAll('.pslot[data-zone="main"]:not(.locked)')).slice(0, 1);
+  }
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    return Array.from(document.querySelectorAll('.pslot[data-zone="fn"]:not(.locked)'));
   }
   if (id === 'play_button' || id === 'play') return [document.getElementById('runBtn')].filter(Boolean);
   if (id === 'goal') return [document.getElementById('goal')].filter(Boolean);
@@ -5922,6 +5981,11 @@ function applyActiveTutorialHighlight() {
     return;
   }
 
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    targets.forEach(target => target.classList.add('tutorial-function-area-focus'));
+    return;
+  }
+
   if (id === 'play_button' || id === 'play') {
     targets.forEach(target => target.classList.add('tutorial-play-focus'));
     return;
@@ -5935,6 +5999,7 @@ function tutorialElementIdToBlockType(elementId = '') {
   if (id === 'forward_block' || id === 'forward' || id === 'move_forward') return 'forward';
   if (id === 'left_block' || id === 'left' || id === 'turn_left') return 'left';
   if (id === 'right_block' || id === 'right' || id === 'turn_right') return 'right';
+  if (id === 'function_block' || id === 'function') return 'function';
   return '';
 }
 
@@ -5946,9 +6011,9 @@ async function revealTutorialBlock(blockType = 'forward') {
     forward: tutorialVisibleBlockTypes.has('forward'),
     left: tutorialVisibleBlockTypes.has('left'),
     right: tutorialVisibleBlockTypes.has('right'),
-    function: false
+    function: tutorialVisibleBlockTypes.has('function')
   };
-  const orderedBlocks = ['forward', 'left', 'right'].filter(dir => tutorialVisibleBlockTypes.has(dir));
+  const orderedBlocks = ['forward', 'left', 'right', 'function'].filter(dir => tutorialVisibleBlockTypes.has(dir));
   setAvailableBlocks(orderedBlocks);
   document.body?.classList.add('tutorial-forward-visible');
   renderAvail();
@@ -5958,6 +6023,7 @@ async function revealTutorialBlock(blockType = 'forward') {
 const revealTutorialForwardBlock = () => revealTutorialBlock('forward');
 const revealTutorialLeftBlock = () => revealTutorialBlock('left');
 const revealTutorialRightBlock = () => revealTutorialBlock('right');
+const revealTutorialFunctionBlock = () => revealTutorialBlock('function');
 
 async function hideTutorialElement(elementId = '') {
   if (!tutorialStageActive) return;
@@ -5969,9 +6035,9 @@ async function hideTutorialElement(elementId = '') {
       forward: tutorialVisibleBlockTypes.has('forward'),
       left: tutorialVisibleBlockTypes.has('left'),
       right: tutorialVisibleBlockTypes.has('right'),
-      function: false
+      function: tutorialVisibleBlockTypes.has('function')
     };
-    const orderedBlocks = ['forward', 'left', 'right'].filter(dir => tutorialVisibleBlockTypes.has(dir));
+    const orderedBlocks = ['forward', 'left', 'right', 'function'].filter(dir => tutorialVisibleBlockTypes.has(dir));
     setAvailableBlocks(orderedBlocks);
     if (!orderedBlocks.length) document.body?.classList.remove('tutorial-forward-visible');
     renderAvail();
@@ -5995,6 +6061,16 @@ async function hideTutorialElement(elementId = '') {
     renderBoard();
     updateRunAvailability();
     document.body?.classList.remove('tutorial-slot-visible');
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    activeFnSlots = 0;
+    fnSlotEnabled = Array(FSLOTS).fill(false);
+    fnProg = Array(FSLOTS).fill(null);
+    renderBoard();
+    updateRunAvailability();
     await sleep(320);
     return;
   }
@@ -6025,6 +6101,15 @@ async function revealTutorialSlot() {
   updateRunAvailability();
   document.body?.classList.add('tutorial-slot-visible');
   await sleep(900);
+}
+
+async function revealTutorialFunctionArea() {
+  if (!tutorialStageActive) return;
+  activeFnSlots = FSLOTS;
+  fnSlotEnabled = Array(FSLOTS).fill(true);
+  renderBoard();
+  updateRunAvailability();
+  await sleep(700);
 }
 
 function unlockTutorialBlockDrag() {
@@ -6064,6 +6149,15 @@ function setTutorialMainProgramSlot(value = '') {
   updateRunAvailability();
 }
 
+function clearTutorialMainProgramSlot(value = '') {
+  if (!tutorialStageActive) return;
+  const index = Math.max(0, Math.min(SLOTS - 1, Number(value) || 0));
+  prog[index] = null;
+  mainSlotEnabled[index] = true;
+  renderBoard();
+  updateRunAvailability();
+}
+
 async function revealTutorialGoal() {
   if (!tutorialStageActive) return;
   goalPlaced = true;
@@ -6081,6 +6175,25 @@ function unlockTutorialAll() {
   document.body?.classList.add('tutorial-play-unlocked', 'tutorial-block-draggable');
 }
 
+function openTutorialAllSlots() {
+  if (!tutorialStageActive) return;
+  activeMainSlots = SLOTS;
+  activeFnSlots = FSLOTS;
+  mainSlotEnabled = Array(SLOTS).fill(true);
+  fnSlotEnabled = Array(FSLOTS).fill(true);
+  renderBoard();
+  renderFn();
+  updateRunAvailability();
+}
+
+async function finishTutorialWithEnding() {
+  if (!tutorialStageActive) return;
+  setTutorialCompleted(true);
+  tutorialEngine?.stop();
+  await playEndingCinematic();
+  returnToMainMenu();
+}
+
 window.BOKS_TUTORIAL_STAGE = {
   revealBoks: revealTutorialBoks,
   unlockBoksDoubleClick: () => setTutorialBoksDoubleClickUnlocked(true),
@@ -6089,23 +6202,30 @@ window.BOKS_TUTORIAL_STAGE = {
   setBoksOrientationDown: () => setTutorialBoksOrientation('down'),
   setBoksOrientationLeft: () => setTutorialBoksOrientation('left'),
   setBoksOrientationUp: () => setTutorialBoksOrientation('up'),
+  setBoksPosition: setTutorialBoksPosition,
+  setGoalPosition: setTutorialGoalPosition,
   revealForwardBlock: revealTutorialForwardBlock,
   revealLeftBlock: revealTutorialLeftBlock,
   revealRightBlock: revealTutorialRightBlock,
+  revealFunctionBlock: revealTutorialFunctionBlock,
   hideElement: hideTutorialElement,
   revealSlot: revealTutorialSlot,
+  revealFunctionArea: revealTutorialFunctionArea,
   highlightElement: highlightTutorialElement,
   clearHighlight: stopTutorialHighlight,
   showDragHandHint: showTutorialDragHandHint,
   showPlayHandHint: showTutorialPlayHandHint,
   clearHandHint: stopTutorialHandHint,
   setMainProgramSlot: setTutorialMainProgramSlot,
+  clearMainProgramSlot: clearTutorialMainProgramSlot,
   unlockDragBlock: unlockTutorialBlockDrag,
   lockDragBlock: lockTutorialBlockDrag,
   revealPlayButton: revealTutorialPlayButton,
   unlockPlay: unlockTutorialPlay,
   lockPlay: lockTutorialPlay,
   revealGoal: revealTutorialGoal,
+  openAllSlots: openTutorialAllSlots,
+  finishTutorial: finishTutorialWithEnding,
   unlockAll: unlockTutorialAll,
   waitFor: waitForTutorialEvent
 };
@@ -7330,6 +7450,8 @@ function endDg(cx,cy) {
   const tapCancelThresholdSq = TAP_CANCEL_THRESHOLD_PX * TAP_CANCEL_THRESHOLD_PX;
   const hadPlacedProgramBlocks = hasAnyPlacedProgramBlock();
   let didDropSuccessfully = false;
+  let dropPayload = null;
+  let removePayload = null;
   const dirtySlots = [];
   cancelDragMoveFrame();
   hideGhost();
@@ -7361,32 +7483,38 @@ function endDg(cx,cy) {
         fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
         dirtySlots.push({ zone:'fn', idx:ti });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='fn'&&dg.si!==ti){
         const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp;
         dirtySlots.push({ zone:'fn', idx:ti }, { zone:'fn', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='prog'){
         fnProg[ti]={...dg.block}; prog[dg.si]=null;
         dirtySlots.push({ zone:'fn', idx:ti }, { zone:'main', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
     } else {
       if(dg.src==='avail') {
         prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
         dirtySlots.push({ zone:'main', idx:ti });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='prog'&&dg.si!==ti){
         const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp;
         dirtySlots.push({ zone:'main', idx:ti }, { zone:'main', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='fn'){
         prog[ti]={...dg.block}; fnProg[dg.si]=null;
         dirtySlots.push({ zone:'main', idx:ti }, { zone:'fn', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
     }
     if (!hadPlacedProgramBlocks && zone === 'main' && prog[ti] && firstLevelOnboardingStage === 'drag') {
@@ -7394,10 +7522,12 @@ function endDg(cx,cy) {
     }
   } else {
     if(dg.src==='prog') {
+      removePayload = { blockType: dg.block?.dir || dg.block?.direction || '', zone:'main', slotIndex: dg.si };
       prog[dg.si]=null;
       dirtySlots.push({ zone:'main', idx:dg.si });
     }
     else if(dg.src==='fn') {
+      removePayload = { blockType: dg.block?.dir || dg.block?.direction || '', zone:'fn', slotIndex: dg.si };
       fnProg[dg.si]=null;
       dirtySlots.push({ zone:'fn', idx:dg.si });
     }
@@ -7407,8 +7537,9 @@ function endDg(cx,cy) {
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
   if (didDropSuccessfully) playBlockDropSuccessSfx();
-  if (didDropSuccessfully && tutorialStageActive) resolveTutorialWait('block-dropped');
-  if (!didDropSuccessfully) notifyTutorialBlockDropFailed();
+  if (didDropSuccessfully && tutorialStageActive) resolveTutorialWait('block-dropped', dropPayload || {});
+  if (removePayload && tutorialStageActive) resolveTutorialWait('block-removed', removePayload);
+  if (!didDropSuccessfully && !removePayload) notifyTutorialBlockDropFailed();
   finishDragCleanup();
   updateDraggedBoardState(dirtySlots);
   if (didDropSuccessfully && slot) triggerSlotCaptureEffect(slot.dataset.zone, +slot.dataset.slot);
@@ -7514,7 +7645,14 @@ async function run() {
   if (!document.getElementById('runBtn')?.classList.contains('is-pressed')) {
     pulseRunButtonPressedState(140);
   }
-  if (tutorialStageActive) resolveTutorialWait('play-pressed');
+  if (tutorialStageActive) {
+    const tutorialProgramState = getTutorialProgramStatePayload();
+    if (tutorialWaitingFor?.eventName === 'play-pressed' && tutorialWaitingFor.condition && !tutorialConditionMatches(tutorialWaitingFor.condition, tutorialProgramState)) {
+      triggerEmptyRunHint();
+      return;
+    }
+    resolveTutorialWait('play-pressed', tutorialProgramState);
+  }
   if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
   const shouldRestoreAfterRun = editorMode || sandboxMode;
   const runStartState = shouldRestoreAfterRun ? { pos: { ...pos }, ori } : null;
@@ -7593,6 +7731,7 @@ async function run() {
   setRunButtonPressedState(false);
   setRunButtonRunningState(false);
   running=false;
+  if (tutorialStageActive && won) resolveTutorialWait('goal-popped');
   if (tutorialStageActive) resolveTutorialWait('execution-finished');
   if (!editorMode && !sandboxMode) resetPrograms();
 
@@ -7686,6 +7825,7 @@ async function init() {
   markPerfMetricStart('game-init');
   await loadEditorLevelsSource();
   syncViewportHeight();
+  syncStartGateUnlockState();
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
   document.getElementById('gridWrap').style.position = 'relative';
@@ -7720,8 +7860,28 @@ async function init() {
 
 void init();
 
+function isTutorialCompleted() {
+  try { return localStorage.getItem(TUTORIAL_COMPLETED_STORAGE_KEY) === '1'; }
+  catch (_err) { return false; }
+}
+
+function setTutorialCompleted(completed = true) {
+  try {
+    if (completed) localStorage.setItem(TUTORIAL_COMPLETED_STORAGE_KEY, '1');
+    else localStorage.removeItem(TUTORIAL_COMPLETED_STORAGE_KEY);
+  } catch (_err) {}
+  syncStartGateUnlockState();
+}
+
+function syncStartGateUnlockState() {
+  const completed = isTutorialCompleted();
+  document.body?.classList.toggle('tutorial-menu-unlocked', completed);
+  document.body?.classList.toggle('tutorial-menu-locked', !completed);
+}
+
 function showStartGate() {
   document.body.classList.add('prestart');
+  syncStartGateUnlockState();
   resetStartGameButtonVisualState();
   document.getElementById('startGate')?.classList.add('show');
   queueFirstLevelOnboardingSync();
@@ -7766,6 +7926,7 @@ function openAppFromGate({ openEditor = false, onOpen = null, playLevelIntro = t
   }, gateFadeMs);
 }
 async function startGameFromGate() {
+  if (!isTutorialCompleted()) return;
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
   requestAppFullscreen({ fromUserGesture: true });
@@ -7789,6 +7950,7 @@ async function startEditorFromGate() {
   openAppFromGate({ openEditor: true });
 }
 async function startSandboxFromGate() {
+  if (!isTutorialCompleted()) return;
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
   const btn = document.getElementById('startBoksBtn');

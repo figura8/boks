@@ -85,6 +85,12 @@ body.tutorial-stage.tutorial-block-draggable #blocksRow {
   pointer-events: auto;
 }
 
+body.tutorial-stage.tutorial-block-draggable #boardRow,
+body.tutorial-stage.tutorial-block-draggable #boardRow .pslot,
+body.tutorial-stage.tutorial-block-draggable #boardRow .pblock {
+  pointer-events: auto;
+}
+
 body.tutorial-stage.tutorial-play-visible #runBtn {
   display: flex;
   animation: tutorialFlowEnter 780ms cubic-bezier(0.2, 1.2, 0.28, 1) both;

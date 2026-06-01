@@ -476,6 +476,8 @@
       { type: 'Narration', color: 'var(--narration)', hint: 'Caption and optional audio.' },
       { type: 'Pause', color: 'var(--pause)', hint: 'Wait for a fixed duration.' },
       { type: 'Spawn', color: 'var(--spawn)', hint: 'Bring an element on stage.' },
+      { type: 'Place', color: 'var(--spawn)', hint: 'Place Boks or the bubble on a grid cell.' },
+      { type: 'Call', color: 'var(--spawn)', hint: 'Run a tutorial stage action.' },
       { type: 'Hide', color: 'var(--hide)', hint: 'Remove an element from stage.' },
       { type: 'Highlight', color: 'var(--highlight)', hint: 'Guide attention to an element.' },
       { type: 'Clear highlight', color: 'var(--highlight)', hint: 'Stop the current highlight.' },
@@ -492,13 +494,19 @@
     };
     const INTERACTIONS = ['DRAG_BOKS', 'DOUBLE_TAP_BOKS', 'DRAG_BLOCK', 'DROP_IN_SLOT', 'PRESS_PLAY', 'ALL'];
     const PERSISTENT_INTERACTIONS = ['DOUBLE_TAP_BOKS', 'DRAG_BLOCK', 'PRESS_PLAY'];
-    const STAGE_ELEMENTS = ['boks', 'forward_block', 'left_block', 'right_block', 'slot', 'play_button', 'goal'];
+    const STAGE_ELEMENTS = ['boks', 'forward_block', 'left_block', 'right_block', 'function_block', 'slot', 'function_area', 'play_button', 'goal'];
     const ORIENTATIONS = ['right', 'down', 'left', 'up'];
-    const PROGRAM_SLOT_OPTIONS = ['forward', 'left', 'right'];
+    const PROGRAM_SLOT_OPTIONS = ['forward', 'left', 'right', 'function'];
+    const PROGRAM_SLOT_COUNT = 8;
+    const BOARD_COLS = 6;
+    const BOARD_ROWS = 6;
+    const DEFAULT_BOKS_POSITION = { x: 2, y: 3 };
+    const DEFAULT_GOAL_POSITION = { x: 3, y: 3 };
+    const PLACEABLE_ELEMENTS = ['boks', 'goal'];
     const HAND_HINTS = ['drag_block', 'press_play'];
-    const EVENTS = ['BOKS_DRAG_RELEASED', 'BOKS_DOUBLE_TAPPED', 'BLOCK_RELEASED_WITHOUT_SLOT', 'BLOCK_DROPPED_IN_SLOT', 'PLAY_PRESSED', 'PROGRAM_EXECUTION_FINISHED'];
+    const EVENTS = ['BOKS_DRAG_RELEASED', 'BOKS_DOUBLE_TAPPED', 'BLOCK_RELEASED_WITHOUT_SLOT', 'BLOCK_REMOVED_FROM_SLOT', 'BLOCK_DROPPED_IN_SLOT', 'PLAY_PRESSED', 'PROGRAM_EXECUTION_FINISHED', 'GOAL_POPPED'];
     const STORAGE_KEY = 'boks-dev-tutorial-editor-draft';
-    const STORAGE_KEY_V2 = 'boks-dev-tutorial-editor-draft-v2';
+    const STORAGE_KEY_V2 = 'boks-dev-tutorial-editor-draft-v3';
 
     const state = {
       data: createDefaultData(),
@@ -674,6 +682,8 @@
         visibleElements: [],
         unlockedInteractions: [],
         boksOrientation: 'right',
+        boksPosition: { ...DEFAULT_BOKS_POSITION },
+        goalPosition: { ...DEFAULT_GOAL_POSITION },
         mainProgram: []
       };
     }
@@ -687,15 +697,41 @@
         ? Array.from(new Set(stateValue.unlockedInteractions.filter(value => PERSISTENT_INTERACTIONS.includes(value))))
         : [];
       const boksOrientation = ORIENTATIONS.includes(stateValue.boksOrientation) ? stateValue.boksOrientation : 'right';
+      const boksPosition = normalizeBoksPosition(stateValue.boksPosition);
+      const goalPosition = normalizeGoalPosition(stateValue.goalPosition);
       const mainProgram = Array.isArray(stateValue.mainProgram)
-        ? stateValue.mainProgram.map(normalizeProgramBlock).slice(0, 8)
+        ? stateValue.mainProgram.map(normalizeProgramBlock).slice(0, PROGRAM_SLOT_COUNT)
         : [];
       return {
         visibleElements,
         unlockedInteractions,
         boksOrientation,
+        boksPosition,
+        goalPosition,
         mainProgram
       };
+    }
+
+    function normalizeBoksPosition(position) {
+      const source = position && typeof position === 'object' ? position : DEFAULT_BOKS_POSITION;
+      return {
+        x: clampGridCoordinate(source.x, BOARD_COLS, DEFAULT_BOKS_POSITION.x),
+        y: clampGridCoordinate(source.y, BOARD_ROWS, DEFAULT_BOKS_POSITION.y)
+      };
+    }
+
+    function normalizeGoalPosition(position) {
+      const source = position && typeof position === 'object' ? position : DEFAULT_GOAL_POSITION;
+      return {
+        x: clampGridCoordinate(source.x, BOARD_COLS, DEFAULT_GOAL_POSITION.x),
+        y: clampGridCoordinate(source.y, BOARD_ROWS, DEFAULT_GOAL_POSITION.y)
+      };
+    }
+
+    function clampGridCoordinate(value, max, fallback) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return fallback;
+      return Math.max(0, Math.min(max - 1, Math.round(number)));
     }
 
     function cloneSequenceStartState(input) {
@@ -710,6 +746,8 @@
       if (type === 'Narration') return withEditorDefaults({ type, caption: '', audioFilename: '', audioSource: '', durationMs: 3000, notes: '' });
       if (type === 'Pause') return { type, durationMs: 2000 };
       if (type === 'Spawn') return { type, elementId: '', transition: 'fade-in', durationMs: 600, delayMs: 0 };
+      if (type === 'Place') return { type, elementId: 'boks', x: DEFAULT_BOKS_POSITION.x, y: DEFAULT_BOKS_POSITION.y };
+      if (type === 'Call') return { type, action: '', target: '' };
       if (type === 'Hide') return { type, elementId: '', transition: 'fade-out', durationMs: 400 };
       if (type === 'Highlight') return { type, elementId: '' };
       if (type === 'Clear highlight') return { type };
@@ -936,6 +974,13 @@
         fields.push(selectField('transition', 'Transition effect', TRANSITIONS.Spawn, beat.transition || 'fade-in'));
         fields.push(numberField('durationMs', 'Duration ms', beat.durationMs || 0));
         fields.push(numberField('delayMs', 'Delay ms', beat.delayMs || 0));
+      } else if (beat.type === 'Place') {
+        fields.push(selectField('elementId', 'Element', PLACEABLE_ELEMENTS, beat.elementId || PLACEABLE_ELEMENTS[0]));
+        fields.push(numberField('x', 'Grid X', beat.x ?? 0));
+        fields.push(numberField('y', 'Grid Y', beat.y ?? 0));
+      } else if (beat.type === 'Call') {
+        fields.push(textField('action', 'Action name', beat.action || ''));
+        fields.push(textField('target', 'Optional target', beat.target || ''));
       } else if (beat.type === 'Hide') {
         fields.push(textField('elementId', 'Element id', beat.elementId || ''));
         fields.push(selectField('transition', 'Transition effect', TRANSITIONS.Hide, beat.transition || 'fade-out'));
@@ -973,6 +1018,8 @@
       els.inspector.innerHTML = [
         textField('title', 'Sequence title', sequence.title || '', 'data-sequence-field'),
         selectField('boksOrientation', 'Starting Boks orientation', ORIENTATIONS, startState.boksOrientation, 'data-sequence-field'),
+        boksPositionField(startState.boksPosition),
+        goalPositionField(startState.goalPosition),
         tagPickerField('visibleElements', 'Visible elements at sequence start', STAGE_ELEMENTS, startState.visibleElements, 'data-sequence-tag-field'),
         tagPickerField('unlockedInteractions', 'Unlocked interactions at sequence start', PERSISTENT_INTERACTIONS, startState.unlockedInteractions, 'data-sequence-tag-field'),
         programSlotField(startState.mainProgram),
@@ -980,6 +1027,34 @@
         '<div class="hint">Preview starts from this checkpoint, then plays only the current sequence.</div>'
       ].join('');
       bindSequenceInspectorFields();
+    }
+
+    function boksPositionField(position) {
+      const normalized = normalizeBoksPosition(position);
+      return `
+        <div class="audio-row">
+          <label>Boks start X
+            <input data-sequence-boks-position="x" type="number" min="0" max="${BOARD_COLS - 1}" step="1" value="${escapeAttr(normalized.x)}">
+          </label>
+          <label>Boks start Y
+            <input data-sequence-boks-position="y" type="number" min="0" max="${BOARD_ROWS - 1}" step="1" value="${escapeAttr(normalized.y)}">
+          </label>
+        </div>
+      `;
+    }
+
+    function goalPositionField(position) {
+      const normalized = normalizeGoalPosition(position);
+      return `
+        <div class="audio-row">
+          <label>Goal X
+            <input data-sequence-goal-position="x" type="number" min="0" max="${BOARD_COLS - 1}" step="1" value="${escapeAttr(normalized.x)}">
+          </label>
+          <label>Goal Y
+            <input data-sequence-goal-position="y" type="number" min="0" max="${BOARD_ROWS - 1}" step="1" value="${escapeAttr(normalized.y)}">
+          </label>
+        </div>
+      `;
     }
 
     function programSlotField(mainProgram) {
@@ -1163,6 +1238,14 @@
       els.inspector.querySelectorAll('[data-sequence-program-slot]').forEach(input => {
         input.addEventListener('change', updateSequenceProgramSlotFromInput);
       });
+      els.inspector.querySelectorAll('[data-sequence-boks-position]').forEach(input => {
+        input.addEventListener('input', updateSequenceBoksPositionFromInput);
+        input.addEventListener('change', updateSequenceBoksPositionFromInput);
+      });
+      els.inspector.querySelectorAll('[data-sequence-goal-position]').forEach(input => {
+        input.addEventListener('input', updateSequenceGoalPositionFromInput);
+        input.addEventListener('change', updateSequenceGoalPositionFromInput);
+      });
       document.getElementById('resetSequenceStateBtn')?.addEventListener('click', () => {
         const sequence = getCurrentSequence();
         if (!sequence) return;
@@ -1179,6 +1262,30 @@
       const nextProgram = sequence.startState.mainProgram.slice();
       nextProgram[slotIndex] = normalizeProgramBlock(event.target.value);
       sequence.startState.mainProgram = nextProgram;
+      render();
+    }
+
+    function updateSequenceBoksPositionFromInput(event) {
+      const sequence = getCurrentSequence();
+      if (!sequence) return;
+      sequence.startState = normalizeSequenceStartState(sequence.startState);
+      const axis = event.target.dataset.sequenceBoksPosition;
+      if (axis !== 'x' && axis !== 'y') return;
+      const nextPosition = { ...sequence.startState.boksPosition };
+      nextPosition[axis] = event.target.value;
+      sequence.startState.boksPosition = normalizeBoksPosition(nextPosition);
+      render();
+    }
+
+    function updateSequenceGoalPositionFromInput(event) {
+      const sequence = getCurrentSequence();
+      if (!sequence) return;
+      sequence.startState = normalizeSequenceStartState(sequence.startState);
+      const axis = event.target.dataset.sequenceGoalPosition;
+      if (axis !== 'x' && axis !== 'y') return;
+      const nextPosition = { ...sequence.startState.goalPosition };
+      nextPosition[axis] = event.target.value;
+      sequence.startState.goalPosition = normalizeGoalPosition(nextPosition);
       render();
     }
 
@@ -1758,16 +1865,27 @@
       return `export const tutorialData = ${JSON.stringify(data, null, 2)} as const;\n\nexport type TutorialData = typeof tutorialData;\n`;
     }
 
-    function buildLegacyTutorialSource(data, sequenceIndex) {
-      const sequence = data.sequences[sequenceIndex] || data.sequences[0] || { id: 'intro', title: 'Intro', beats: [] };
+    function buildLegacyTutorialSource(data, _sequenceIndex) {
+      const sequences = Array.isArray(data?.sequences) ? data.sequences : [];
+      const firstSequence = sequences[0] || { id: 'intro', title: 'Intro', beats: [], startState: createEmptySequenceStartState() };
+      const beats = [];
+      for (let sequenceIndex = 0; sequenceIndex < sequences.length; sequenceIndex++) {
+        const sequence = sequences[sequenceIndex];
+        const currentStart = getResolvedSequenceStartState(sequenceIndex, data);
+        if (sequenceIndex === 0) {
+          beats.push(...buildSequenceStartSetupBeats(currentStart));
+        } else {
+          const previousFinal = buildDerivedSequenceFinalSnapshot(sequenceIndex - 1, data);
+          beats.push(...buildSequenceTransitionSetupBeats(previousFinal, currentStart));
+        }
+        const sequenceBeats = Array.isArray(sequence?.beats) ? sequence.beats : [];
+        beats.push(...sequenceBeats.flatMap((beat, beatIndex) => canonicalBeatToLegacy(beat, `${sequenceIndex}-${beatIndex}`)));
+      }
       const legacy = {
         intro: {
-          id: sequence.id || 'intro',
-          title: sequence.title || 'Intro',
-          beats: [
-            ...buildSequenceStartSetupBeats(getResolvedSequenceStartState(sequenceIndex, data)),
-            ...sequence.beats.flatMap((beat, index) => canonicalBeatToLegacy(beat, index))
-          ]
+          id: firstSequence.id || 'intro',
+          title: firstSequence.title || 'Intro',
+          beats
         }
       };
       return `(() => {\n  window.BOKS_TUTORIAL_DATA = ${JSON.stringify(legacy, null, 2)};\n})();\n`;
@@ -1789,6 +1907,24 @@
       }
       if (beat.type === 'Spawn') {
         return [{ id: legacyBeatId(beat, index), type: 'call', action: spawnActionForElement(beat.elementId) }];
+      }
+      if (beat.type === 'Place') {
+        const placement = getPlacementForBeat(beat);
+        if (!placement) return [];
+        return [{
+          id: legacyBeatId(beat, index),
+          type: 'call',
+          action: placement.action,
+          target: `${placement.x}:${placement.y}`
+        }];
+      }
+      if (beat.type === 'Call') {
+        return [{
+          id: legacyBeatId(beat, index),
+          type: 'call',
+          action: beat.action || '',
+          target: beat.target || ''
+        }].filter(call => !!call.action);
       }
       if (beat.type === 'Hide') {
         return [{ id: legacyBeatId(beat, index), type: 'call', action: 'hideElement', target: beat.elementId || '' }];
@@ -1812,14 +1948,52 @@
         return interactionCallsForBeat(beat, index, 'unlock');
       }
       if (beat.type === 'Wait for event') {
-        return [{
+        const legacyBeat = {
           id: legacyBeatId(beat, index),
           type: 'waitFor',
           event: legacyEventName(beat),
           count: Math.max(1, Number(beat.minRepetitions) || 1)
-        }];
+        };
+        const targetBlock = getWaitForTargetBlock(beat);
+        if (targetBlock) legacyBeat.target = targetBlock;
+        const targetZone = getWaitForTargetZone(beat);
+        if (targetZone) legacyBeat.targetZone = targetZone;
+        const programCondition = getWaitForProgramCondition(beat);
+        if (programCondition) legacyBeat.condition = programCondition;
+        return [legacyBeat];
       }
       return [];
+    }
+
+    function getPlacementForBeat(beat) {
+      const elementId = normalizeElementId(beat?.elementId);
+      const x = clampGridCoordinate(beat?.x, BOARD_COLS, elementId === 'goal' ? DEFAULT_GOAL_POSITION.x : DEFAULT_BOKS_POSITION.x);
+      const y = clampGridCoordinate(beat?.y, BOARD_ROWS, elementId === 'goal' ? DEFAULT_GOAL_POSITION.y : DEFAULT_BOKS_POSITION.y);
+      if (elementId === 'boks') return { action: 'setBoksPosition', x, y };
+      if (elementId === 'goal') return { action: 'setGoalPosition', x, y };
+      return null;
+    }
+
+    function getWaitForTargetBlock(beat) {
+      if (beat?.eventName !== 'BLOCK_DROPPED_IN_SLOT' && beat?.eventName !== 'BLOCK_REMOVED_FROM_SLOT') return '';
+      const tokens = String(beat.completionCondition || '').split(/[^a-z0-9_]+/i);
+      return tokens.map(normalizeProgramBlock).find(Boolean) || '';
+    }
+
+    function getWaitForTargetZone(beat) {
+      if (beat?.eventName !== 'BLOCK_DROPPED_IN_SLOT' && beat?.eventName !== 'BLOCK_REMOVED_FROM_SLOT') return '';
+      const condition = String(beat.completionCondition || '').trim().toLowerCase();
+      if (['fn', 'function_area', 'function_slots', 'fn_slot', 'fn_slots'].includes(condition)) return 'fn';
+      if (condition.includes('@fn') || condition.includes(' fn') || condition.includes('function_area')) return 'fn';
+      if (condition.includes('@main') || condition.includes(' main')) return 'main';
+      return '';
+    }
+
+    function getWaitForProgramCondition(beat) {
+      if (beat?.eventName !== 'PLAY_PRESSED') return '';
+      const condition = String(beat.completionCondition || '').trim().toLowerCase();
+      if (condition === 'function_ready' || condition === 'function') return 'function_ready';
+      return '';
     }
 
     function interactionCallsForBeat(beat, index, mode) {
@@ -1855,7 +2029,7 @@
 
     function buildSequenceStartSetupBeats(snapshot) {
       const beats = [];
-      const visibleOrder = ['boks', 'forward_block', 'left_block', 'right_block', 'slot', 'play_button', 'goal'];
+      const visibleOrder = ['boks', 'forward_block', 'left_block', 'right_block', 'function_block', 'slot', 'play_button', 'goal'];
       visibleOrder.forEach((elementId, index) => {
         if (!snapshot.visibleElements.has(elementId)) return;
         beats.push({
@@ -1863,6 +2037,22 @@
           type: 'call',
           action: spawnActionForElement(elementId)
         });
+        if (elementId === 'boks') {
+          beats.push({
+            id: `setup-boks-position-${snapshot.boksPosition.x}-${snapshot.boksPosition.y}`,
+            type: 'call',
+            action: 'setBoksPosition',
+            target: `${snapshot.boksPosition.x}:${snapshot.boksPosition.y}`
+          });
+        }
+        if (elementId === 'goal') {
+          beats.push({
+            id: `setup-goal-position-${snapshot.goalPosition.x}-${snapshot.goalPosition.y}`,
+            type: 'call',
+            action: 'setGoalPosition',
+            target: `${snapshot.goalPosition.x}:${snapshot.goalPosition.y}`
+          });
+        }
       });
       if (snapshot.visibleElements.has('boks') && snapshot.boksOrientation !== 'right') {
         beats.push({
@@ -1892,7 +2082,7 @@
 
     function buildSequenceTransitionSetupBeats(previousSnapshot, currentSnapshot) {
       const beats = [];
-      const visibleOrder = ['boks', 'forward_block', 'left_block', 'right_block', 'slot', 'play_button', 'goal'];
+      const visibleOrder = ['boks', 'forward_block', 'left_block', 'right_block', 'function_block', 'slot', 'play_button', 'goal'];
       visibleOrder.forEach((elementId, index) => {
         if (!currentSnapshot.visibleElements.has(elementId)) return;
         if (previousSnapshot.visibleElements.has(elementId)) return;
@@ -1912,6 +2102,34 @@
           target: elementId
         });
       });
+      if (
+        currentSnapshot.visibleElements.has('boks')
+        && (
+          currentSnapshot.boksPosition.x !== previousSnapshot.boksPosition.x
+          || currentSnapshot.boksPosition.y !== previousSnapshot.boksPosition.y
+        )
+      ) {
+        beats.push({
+          id: `setup-delta-boks-position-${currentSnapshot.boksPosition.x}-${currentSnapshot.boksPosition.y}`,
+          type: 'call',
+          action: 'setBoksPosition',
+          target: `${currentSnapshot.boksPosition.x}:${currentSnapshot.boksPosition.y}`
+        });
+      }
+      if (
+        currentSnapshot.visibleElements.has('goal')
+        && (
+          currentSnapshot.goalPosition.x !== previousSnapshot.goalPosition.x
+          || currentSnapshot.goalPosition.y !== previousSnapshot.goalPosition.y
+        )
+      ) {
+        beats.push({
+          id: `setup-delta-goal-position-${currentSnapshot.goalPosition.x}-${currentSnapshot.goalPosition.y}`,
+          type: 'call',
+          action: 'setGoalPosition',
+          target: `${currentSnapshot.goalPosition.x}:${currentSnapshot.goalPosition.y}`
+        });
+      }
       if (
         currentSnapshot.visibleElements.has('boks')
         && currentSnapshot.boksOrientation !== previousSnapshot.boksOrientation
@@ -1938,15 +2156,26 @@
           action: interactionToLegacyAction(interaction, 'lock')
         });
       });
-      currentSnapshot.mainProgram.forEach((blockType, index) => {
-        if (!blockType || previousSnapshot.mainProgram[index] === blockType) return;
+      const programLength = Math.max(PROGRAM_SLOT_COUNT, previousSnapshot.mainProgram.length, currentSnapshot.mainProgram.length);
+      for (let index = 0; index < programLength; index++) {
+        const blockType = currentSnapshot.mainProgram[index] || '';
+        if ((previousSnapshot.mainProgram[index] || '') === blockType) continue;
+        if (!blockType) {
+          beats.push({
+            id: `setup-delta-program-main-${index + 1}-empty`,
+            type: 'call',
+            action: 'clearMainProgramSlot',
+            target: String(index)
+          });
+          continue;
+        }
         beats.push({
           id: `setup-delta-program-main-${index + 1}-${blockType}`,
           type: 'call',
           action: 'setMainProgramSlot',
           target: `${index}:${blockType}`
         });
-      });
+      }
       return beats;
     }
 
@@ -1974,7 +2203,19 @@
         const elementId = normalizeElementId(beat.elementId);
         if (!elementId) return;
         snapshot.visibleElements.add(elementId);
-        if (elementId === 'boks') snapshot.boksOrientation = 'right';
+        if (elementId === 'boks') {
+          snapshot.boksOrientation = 'right';
+          snapshot.boksPosition = { ...DEFAULT_BOKS_POSITION };
+        }
+        if (elementId === 'goal') snapshot.goalPosition = { ...DEFAULT_GOAL_POSITION };
+        return;
+      }
+      if (beat.type === 'Place') {
+        const placement = getPlacementForBeat(beat);
+        const elementId = normalizeElementId(beat.elementId);
+        if (!placement) return;
+        if (elementId === 'boks') snapshot.boksPosition = { x: placement.x, y: placement.y };
+        if (elementId === 'goal') snapshot.goalPosition = { x: placement.x, y: placement.y };
         return;
       }
       if (beat.type === 'Hide') {
@@ -1984,6 +2225,7 @@
         if (elementId === 'boks') {
           snapshot.unlockedInteractions.delete('DOUBLE_TAP_BOKS');
           snapshot.boksOrientation = 'right';
+          snapshot.boksPosition = { ...DEFAULT_BOKS_POSITION };
         }
         return;
       }
@@ -2001,8 +2243,38 @@
         return;
       }
       if (beat.type === 'Wait for event' && beat.eventName === 'BLOCK_DROPPED_IN_SLOT') {
-        snapshot.mainProgram[0] = 'forward';
+        if (getWaitForTargetZone(beat) === 'fn') return;
+        snapshot.mainProgram[0] = getWaitForTargetBlock(beat) || 'forward';
+        return;
       }
+      if (beat.type === 'Wait for event' && beat.eventName === 'BLOCK_REMOVED_FROM_SLOT') {
+        snapshot.mainProgram[0] = '';
+        return;
+      }
+      if (beat.type === 'Wait for event' && beat.eventName === 'PROGRAM_EXECUTION_FINISHED' && snapshot.visibleElements.has('boks')) {
+        applyProgramToSnapshot(snapshot);
+      }
+    }
+
+    function applyProgramToSnapshot(snapshot) {
+      snapshot.mainProgram.forEach(blockType => {
+        if (blockType === 'forward') {
+          snapshot.boksPosition = movePositionForward(snapshot.boksPosition, snapshot.boksOrientation);
+        } else if (blockType === 'left') {
+          snapshot.boksOrientation = rotateOrientation(snapshot.boksOrientation, 3);
+        } else if (blockType === 'right') {
+          snapshot.boksOrientation = rotateOrientation(snapshot.boksOrientation, 1);
+        }
+      });
+    }
+
+    function movePositionForward(position, orientation) {
+      const next = normalizeBoksPosition(position);
+      if (orientation === 'up') next.y = Math.max(0, next.y - 1);
+      else if (orientation === 'down') next.y = Math.min(BOARD_ROWS - 1, next.y + 1);
+      else if (orientation === 'left') next.x = Math.max(0, next.x - 1);
+      else next.x = Math.min(BOARD_COLS - 1, next.x + 1);
+      return next;
     }
 
     function toSequenceSnapshot(startState) {
@@ -2011,6 +2283,8 @@
         visibleElements: new Set(normalized.visibleElements),
         unlockedInteractions: new Set(normalized.unlockedInteractions),
         boksOrientation: normalized.boksOrientation,
+        boksPosition: { ...normalized.boksPosition },
+        goalPosition: { ...normalized.goalPosition },
         mainProgram: normalized.mainProgram.slice()
       };
     }
@@ -2020,6 +2294,8 @@
         visibleElements: Array.from(snapshot.visibleElements || []),
         unlockedInteractions: Array.from(snapshot.unlockedInteractions || []),
         boksOrientation: snapshot.boksOrientation || 'right',
+        boksPosition: normalizeBoksPosition(snapshot.boksPosition),
+        goalPosition: normalizeGoalPosition(snapshot.goalPosition),
         mainProgram: Array.isArray(snapshot.mainProgram) ? snapshot.mainProgram : []
       });
     }
@@ -2035,6 +2311,8 @@
       if (id === 'forward' || id === 'move_forward') return 'forward_block';
       if (id === 'left' || id === 'turn_left') return 'left_block';
       if (id === 'right' || id === 'turn_right') return 'right_block';
+      if (id === 'function' || id === 'function_block') return 'function_block';
+      if (id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') return 'function_area';
       if (id === 'play') return 'play_button';
       return id;
     }
@@ -2051,6 +2329,8 @@
       if (id === 'forward_block' || id === 'forward' || id === 'move_forward') return 'revealForwardBlock';
       if (id === 'left_block' || id === 'left' || id === 'turn_left') return 'revealLeftBlock';
       if (id === 'right_block' || id === 'right' || id === 'turn_right') return 'revealRightBlock';
+      if (id === 'function_block' || id === 'function') return 'revealFunctionBlock';
+      if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') return 'revealFunctionArea';
       if (id === 'slot') return 'revealSlot';
       if (id === 'play_button' || id === 'play') return 'revealPlayButton';
       if (id === 'goal') return 'revealGoal';
@@ -2061,9 +2341,11 @@
       if (beat.completionCondition === 'BOKS_FACING_INITIAL_ORIENTATION') return 'boks-facing-start';
       if (beat.eventName === 'BOKS_DOUBLE_TAPPED') return 'boks-turned';
       if (beat.eventName === 'BLOCK_RELEASED_WITHOUT_SLOT') return 'block-drop-failed';
+      if (beat.eventName === 'BLOCK_REMOVED_FROM_SLOT') return 'block-removed';
       if (beat.eventName === 'BLOCK_DROPPED_IN_SLOT') return 'block-dropped';
       if (beat.eventName === 'PLAY_PRESSED') return 'play-pressed';
       if (beat.eventName === 'PROGRAM_EXECUTION_FINISHED') return 'execution-finished';
+      if (beat.eventName === 'GOAL_POPPED') return 'goal-popped';
       return String(beat.eventName || '')
         .toLowerCase()
         .replace(/_/g, '-');
@@ -2191,6 +2473,8 @@
       if (beat.type === 'Narration') return beat.caption || 'Empty caption';
       if (beat.type === 'Pause') return `${beat.durationMs || 0} ms`;
       if (beat.type === 'Spawn') return `${beat.elementId || 'element'} via ${beat.transition}`;
+      if (beat.type === 'Place') return `${beat.elementId || 'element'} at ${beat.x ?? 0}:${beat.y ?? 0}`;
+      if (beat.type === 'Call') return `${beat.action || 'action'}${beat.target ? ` ${beat.target}` : ''}`;
       if (beat.type === 'Hide') return `${beat.elementId || 'element'} via ${beat.transition}`;
       if (beat.type === 'Highlight') return beat.elementId || 'element';
       if (beat.type === 'Clear highlight') return 'Stop current highlight';
@@ -2198,7 +2482,11 @@
       if (beat.type === 'Clear hand hint') return 'Stop hand hint';
       if (beat.type === 'Lock') return 'Lock interactions';
       if (beat.type === 'Unlock') return (beat.interactions || []).join(', ') || 'No interactions';
-      return `${beat.eventName || EVENTS[0]} x${beat.minRepetitions || 1}`;
+      const targetBlock = getWaitForTargetBlock(beat);
+      const targetZone = getWaitForTargetZone(beat);
+      const programCondition = getWaitForProgramCondition(beat);
+      const targetLabel = [targetBlock, targetZone, programCondition].filter(Boolean).join(' @ ');
+      return `${beat.eventName || EVENTS[0]} x${beat.minRepetitions || 1}${targetLabel ? ` (${targetLabel})` : ''}`;
     }
 
     function persistDraft() {
@@ -2265,7 +2553,7 @@
     }
 
     function loadStoredDraft() {
-      const keys = [STORAGE_KEY_V2, STORAGE_KEY];
+      const keys = [STORAGE_KEY_V2];
       for (const key of keys) {
         try {
           const raw = window.localStorage.getItem(key);
