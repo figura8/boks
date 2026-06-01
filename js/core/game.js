@@ -5,6 +5,7 @@ let START = {x:2,y:2};
 const gridCellEls = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 const coarsePointer = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : true;
 const LOW_END_DEVICE = window.BOKS_RUNTIME_CONFIG?.lowEndDevice === true;
+const TUTORIAL_COMPLETED_STORAGE_KEY = 'boks-tutorial-completed-v2';
 let appSceneVisible = document.visibilityState !== 'hidden';
 let debugTools = null;
 
@@ -580,6 +581,14 @@ let activeWinFeedbackAt = 0;
 let scheduledWinFeedbackTimer = null;
 let endingCinematicPromise = null;
 let settingsPanel = null;
+let tutorialEngine = null;
+let tutorialStageActive = false;
+let tutorialBoksDoubleClickUnlocked = false;
+let tutorialInitialOrientation = 'right';
+let tutorialWaitingFor = null;
+let activeTutorialHighlight = '';
+let activeTutorialHandHint = '';
+const tutorialVisibleBlockTypes = new Set();
 let boksTouchRebukeUntil = 0;
 let boksTouchRebukeCooldownUntil = 0;
 let boksTouchRebukeTimer = null;
@@ -769,7 +778,9 @@ function rememberCompletedCampaignLevel(levelId = getCampaignLevelIdForIndex(tut
 }
 function resetJourneyProgressState() {
   audioManager.resetJourneyProgressState();
+  try { localStorage.removeItem(TUTORIAL_COMPLETED_STORAGE_KEY); } catch (_err) {}
   syncAudioState();
+  syncStartGateUnlockState();
 }
 function setBackgroundMusicVolume(nextVolume, { persist = true } = {}) {
   audioManager.setBackgroundMusicVolume(nextVolume, { persist });
@@ -785,6 +796,7 @@ const clearLevelOneIntroBgmTimer = () => audioManager.clearLevelOneIntroBgmTimer
 const stopLevelOneIntro = options => audioManager.stopLevelOneIntro(options);
 const playLevelOneIntroAndQueueBgm = () => audioManager.playLevelOneIntroAndQueueBgm();
 const resumeBackgroundMusicLoop = () => audioManager.resumeBackgroundMusicLoop();
+const unlockAudioForUserGesture = () => audioManager.unlockForUserGesture?.();
 const playBlockDragStartSfx = () => audioManager.playBlockDragStartSfx();
 const playBlockHoverSlotSfx = () => audioManager.playBlockHoverSlotSfx();
 const playBlockDropSuccessSfx = () => audioManager.playBlockDropSuccessSfx();
@@ -1756,6 +1768,7 @@ function syncSprite(overrides = null) {
   if (renderToken && s.dataset.heroRenderToken === renderToken && s.innerHTML) {
     window.BOKS_CHARACTER_RENDERER?.mountIn?.(s);
     applyBoksReactionStates();
+    s.classList.toggle('tutorial-boks-locked', tutorialStageActive && !tutorialBoksDoubleClickUnlocked);
     if (!animating) requestAnimationFrame(() => triggerTouchedDecorationReactions());
     updateAnimationDebugBadge();
     return;
@@ -1776,6 +1789,7 @@ function syncSprite(overrides = null) {
   const preservePlayback = renderInfo?.resolved?.state?.restartPlayback !== true;
   applySpriteMarkup(s, markup, renderToken, { animate: true, preservePlayback });
   applyBoksReactionStates();
+  s.classList.toggle('tutorial-boks-locked', tutorialStageActive && !tutorialBoksDoubleClickUnlocked);
   if (!animating) requestAnimationFrame(() => triggerTouchedDecorationReactions());
   updateAnimationDebugBadge();
   requestAnimationFrame(() => updateAnimationDebugBadge());
@@ -1962,6 +1976,7 @@ function setupSpriteDrag() {
   let sandboxDragStartBox = null;
   let sandboxDragPointerOffset = null;
   function start(cx,cy) {
+    if (tutorialStageActive) return false;
     if(!(editorMode || sandboxMode)||running||animating||!playerPlaced) return false;
     if (sandboxMode) {
       const wrap = document.getElementById('gridWrap');
@@ -2070,6 +2085,12 @@ function setupSpriteDrag() {
   let suppressNextStart = false;
 
   s.addEventListener('touchstart',e=>{
+    if (tutorialStageActive && playerPlaced && !tutorialBoksDoubleClickUnlocked) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerTutorialBoksNudge();
+      return;
+    }
     if (!editorMode && !sandboxMode) {
       e.preventDefault();
       e.stopPropagation();
@@ -2081,7 +2102,7 @@ function setupSpriteDrag() {
       const now = Date.now();
       if (now - lastTapAt < 350) {
         lastTapAt = 0;
-        rotateSpriteClockwise();
+        if (!tutorialStageActive || tutorialBoksDoubleClickUnlocked) rotateSpriteClockwise();
         return;
       }
       lastTapAt = now;
@@ -2108,6 +2129,11 @@ function setupSpriteDrag() {
     s.addEventListener('touchcancel',mu,{passive:false});
   },{passive:false});
   s.addEventListener('mousedown',e=>{
+    if (tutorialStageActive && playerPlaced && !tutorialBoksDoubleClickUnlocked) {
+      e.preventDefault();
+      triggerTutorialBoksNudge();
+      return;
+    }
     if (!editorMode && !sandboxMode) {
       e.preventDefault();
       triggerBoksTouchRebuke();
@@ -2126,6 +2152,10 @@ function setupSpriteDrag() {
     e.preventDefault();
     e.stopPropagation();
     suppressNextStart = false;
+    if (tutorialStageActive && !tutorialBoksDoubleClickUnlocked) {
+      triggerTutorialBoksNudge();
+      return;
+    }
     rotateSpriteClockwise();
   });
   s.addEventListener('mousedown', e => {
@@ -2142,6 +2172,7 @@ function rotateSpriteClockwise() {
   START = { ...pos };
   syncSprite();
   audioManager.playSandboxRotationPositionSfx();
+  notifyTutorialBoksTurned();
 }
 
 function setupGoalDrag() {
@@ -4563,6 +4594,7 @@ function syncAvailableBlockGlowUI() {
     blockEl.classList.toggle('tutorial-focus', shouldGlow);
     blockEl.style.setProperty('--available-block-glow-delay', shouldGlow ? `${(idx % 6) * 0.42}s` : '0s');
   });
+  applyActiveTutorialHighlight();
 }
 function refreshAvailableBlockGlowState({ suspendForActiveDrag = false } = {}) {
   if (editorMode || sandboxMode) {
@@ -4622,6 +4654,13 @@ function clearFirstLevelOnboardingTargets() {
   document.querySelectorAll('.pslot.first-level-onboarding-slot')
     .forEach(slot => slot.classList.remove('first-level-onboarding-slot'));
   document.getElementById('runBtn')?.classList.remove('first-level-onboarding-run');
+}
+function hideFirstLevelOnboardingOverlay() {
+  clearFirstLevelOnboardingTargets();
+  const root = document.getElementById('firstLevelOnboarding');
+  root?.classList.remove('active');
+  if (root) root.dataset.stage = 'hidden';
+  root?.querySelector('.first-level-onboarding__path path')?.setAttribute('d', '');
 }
 function clearFirstLevelOnboardingDelay() {
   if (firstLevelOnboardingDelayTimer) {
@@ -4717,46 +4756,63 @@ function syncFirstLevelOnboarding() {
   root.dataset.stage = 'hidden';
   path.setAttribute('d', '');
 
+  if (tutorialStageActive && activeTutorialHandHint === 'drag_block') {
+    renderDragHandHint(root, bottom, pathSvg, path, ghost);
+    return;
+  }
+  if (tutorialStageActive && activeTutorialHandHint === 'press_play') {
+    renderPlayHandHint(root, bottom);
+    return;
+  }
+
   if (!shouldShowFirstLevelOnboarding()) return;
 
+  renderDragHandHint(root, bottom, pathSvg, path, ghost);
+  if (root.classList.contains('active')) return;
+
+  renderPlayHandHint(root, bottom);
+}
+
+function renderDragHandHint(root, bottom, pathSvg, path, ghost) {
   const bottomRect = bottom.getBoundingClientRect();
   pathSvg.setAttribute('viewBox', `0 0 ${Math.max(1, Math.round(bottomRect.width))} ${Math.max(1, Math.round(bottomRect.height))}`);
   const clampX = (value, inset = 40) => Math.max(inset, Math.min(bottomRect.width - inset, value));
   const stage = hasAnyPlacedProgramBlock() ? 'play' : 'drag';
   firstLevelOnboardingStage = stage;
 
-  if (stage === 'drag') {
-    const sourceBlock = document.querySelector('#blocksRow .ablock:not(.disabled)');
-    const targetSlot = Array.from(document.querySelectorAll('.pslot[data-zone="main"]:not(.locked)'))
-      .find(slot => !slot.classList.contains('filled'));
-    if (!sourceBlock || !targetSlot) return;
+  if (stage !== 'drag') return;
+  const sourceBlock = document.querySelector('#blocksRow .ablock:not(.disabled)');
+  const targetSlot = Array.from(document.querySelectorAll('.pslot[data-zone="main"]:not(.locked)'))
+    .find(slot => !slot.classList.contains('filled'));
+  if (!sourceBlock || !targetSlot) return;
 
-    const sourceRect = sourceBlock.getBoundingClientRect();
-    const targetRect = targetSlot.getBoundingClientRect();
-    const sourceX = sourceRect.left - bottomRect.left + (sourceRect.width * 0.5);
-    const sourceY = sourceRect.top - bottomRect.top + (sourceRect.height * 0.5);
-    const targetX = targetRect.left - bottomRect.left + (targetRect.width * 0.5);
-    const targetY = targetRect.top - bottomRect.top + (targetRect.height * 0.5);
-    const controlX = clampX(Math.min(sourceX, targetX) - Math.max(22, Math.min(42, targetRect.width * 0.8)));
-    const controlY = sourceY + ((targetY - sourceY) * 0.46);
+  const sourceRect = sourceBlock.getBoundingClientRect();
+  const targetRect = targetSlot.getBoundingClientRect();
+  const sourceX = sourceRect.left - bottomRect.left + (sourceRect.width * 0.5);
+  const sourceY = sourceRect.top - bottomRect.top + (sourceRect.height * 0.5);
+  const targetX = targetRect.left - bottomRect.left + (targetRect.width * 0.5);
+  const targetY = targetRect.top - bottomRect.top + (targetRect.height * 0.5);
+  const controlX = clampX(Math.min(sourceX, targetX) - Math.max(22, Math.min(42, targetRect.width * 0.8)));
+  const controlY = sourceY + ((targetY - sourceY) * 0.46);
 
-    ghost.innerHTML = sourceBlock.innerHTML;
-    ghost.style.width = `${Math.round(sourceRect.width)}px`;
-    ghost.style.height = `${Math.round(sourceRect.height)}px`;
-    targetSlot.classList.add('first-level-onboarding-slot');
-    root.dataset.stage = 'drag';
-    root.style.setProperty('--first-onboarding-start-x', `${sourceX}px`);
-    root.style.setProperty('--first-onboarding-start-y', `${sourceY}px`);
-    root.style.setProperty('--first-onboarding-end-x', `${targetX}px`);
-    root.style.setProperty('--first-onboarding-end-y', `${targetY}px`);
-    path.setAttribute('d', `M ${sourceX.toFixed(2)} ${sourceY.toFixed(2)} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${targetX.toFixed(2)} ${targetY.toFixed(2)}`);
-    root.classList.add('active');
-    return;
-  }
+  ghost.innerHTML = sourceBlock.innerHTML;
+  ghost.style.width = `${Math.round(sourceRect.width)}px`;
+  ghost.style.height = `${Math.round(sourceRect.height)}px`;
+  targetSlot.classList.add('first-level-onboarding-slot');
+  root.dataset.stage = 'drag';
+  root.style.setProperty('--first-onboarding-start-x', `${sourceX}px`);
+  root.style.setProperty('--first-onboarding-start-y', `${sourceY}px`);
+  root.style.setProperty('--first-onboarding-end-x', `${targetX}px`);
+  root.style.setProperty('--first-onboarding-end-y', `${targetY}px`);
+  path.setAttribute('d', `M ${sourceX.toFixed(2)} ${sourceY.toFixed(2)} Q ${controlX.toFixed(2)} ${controlY.toFixed(2)} ${targetX.toFixed(2)} ${targetY.toFixed(2)}`);
+  root.classList.add('active');
+}
 
+function renderPlayHandHint(root, bottom) {
   const runBtn = document.getElementById('runBtn');
   if (!runBtn) return;
   const btnRect = runBtn.getBoundingClientRect();
+  const bottomRect = bottom.getBoundingClientRect();
   const targetX = btnRect.left - bottomRect.left + (btnRect.width * 0.5);
   const targetY = btnRect.top - bottomRect.top + (btnRect.height * 0.5);
 
@@ -5661,6 +5717,519 @@ function startSandboxLevel() {
   updateRunAvailability();
 }
 
+function startTutorialStage() {
+  tutorialStageActive = true;
+  tutorialBoksDoubleClickUnlocked = false;
+  tutorialInitialOrientation = 'right';
+  tutorialWaitingFor = null;
+  tutorialVisibleBlockTypes.clear();
+  document.body?.classList.add('tutorial-stage');
+  document.body?.classList.remove(
+    'tutorial-boks-visible', 'tutorial-forward-visible',
+    'tutorial-slot-visible', 'tutorial-play-visible',
+    'tutorial-play-unlocked', 'tutorial-goal-visible'
+  );
+  setSandboxMode(true);
+  selectedEditorLevelId = NEW_EDITOR_LEVEL_ID;
+  currentCustomLevel = null;
+  pendingNewLevelThemeOverrides = {};
+  currentLevel = resolveThemeLevelId(CUSTOM_LEVEL_THEME);
+  tutorialSceneLevelId = currentLevel;
+  pendingNewLevelCharacterId = resolveCharacterId(getLevel()?.characterId);
+  pendingNewLevelHints = {};
+  editorStylePanelOpen = false;
+  applyLevelSceneVars();
+  playerPlaced = false;
+  goalPlaced = false;
+  selectedElementTool = null;
+  selectedDecorationBrush = null;
+  START = { x: 2, y: 3 };
+  GOAL = { x: 3, y: 3 };
+  pos = { ...START };
+  ori = tutorialInitialOrientation;
+  setCharacterAction('idle');
+  setBlockedCells([]);
+  activeLevelDecorations = [];
+  resetPrograms();
+  activeMainSlots = 0;
+  activeFnSlots = 0;
+  mainSlotEnabled = Array(SLOTS).fill(false);
+  fnSlotEnabled = Array(FSLOTS).fill(false);
+  editorBlockEnabled = { forward: false, left: false, right: false, function: false };
+  setAvailableBlocks([]);
+  applyEditorBoardChanges();
+  setupEditorElementPlacement();
+  renderSandboxToolbar();
+  renderAvail();
+  renderBoard();
+  renderFn();
+  updateRunAvailability();
+  syncSprite();
+}
+
+function stopTutorialStage() {
+  tutorialStageActive = false;
+  tutorialBoksDoubleClickUnlocked = false;
+  tutorialWaitingFor = null;
+  activeTutorialHighlight = '';
+  activeTutorialHandHint = '';
+  tutorialVisibleBlockTypes.clear();
+  clearTutorialHighlights();
+  hideFirstLevelOnboardingOverlay();
+  document.body?.classList.remove(
+    'tutorial-stage', 'tutorial-boks-visible', 'tutorial-forward-visible',
+    'tutorial-slot-visible', 'tutorial-block-draggable', 'tutorial-play-visible',
+    'tutorial-play-unlocked', 'tutorial-goal-visible'
+  );
+}
+
+async function revealTutorialBoks() {
+  if (!tutorialStageActive) return;
+  playerPlaced = true;
+  pos = { ...START };
+  ori = tutorialInitialOrientation;
+  syncSprite();
+  const sprite = document.getElementById('sprite');
+  sprite?.classList.remove('tutorial-boks-enter');
+  void sprite?.offsetWidth;
+  sprite?.classList.add('tutorial-boks-enter');
+  document.body?.classList.add('tutorial-boks-visible');
+  await sleep(980);
+  sprite?.classList.remove('tutorial-boks-enter');
+}
+
+function setTutorialBoksDoubleClickUnlocked(enabled) {
+  tutorialBoksDoubleClickUnlocked = !!enabled;
+  document.getElementById('sprite')?.classList.toggle('tutorial-boks-locked', tutorialStageActive && !tutorialBoksDoubleClickUnlocked);
+}
+
+function setTutorialBoksOrientation(nextOrientation = 'right') {
+  if (!tutorialStageActive || !playerPlaced) return;
+  const normalized = ['right', 'down', 'left', 'up'].includes(nextOrientation) ? nextOrientation : 'right';
+  ori = normalized;
+  START = { ...pos };
+  syncSprite();
+}
+
+function setTutorialBoksPosition(value = '') {
+  if (!tutorialStageActive) return;
+  const [rawX, rawY] = String(value || '').split(':');
+  const x = Math.max(0, Math.min(COLS - 1, Number(rawX) || 0));
+  const y = Math.max(0, Math.min(ROWS - 1, Number(rawY) || 0));
+  START = { x, y };
+  pos = { x, y };
+  if (playerPlaced) syncSprite();
+}
+
+function setTutorialGoalPosition(value = '') {
+  if (!tutorialStageActive) return;
+  const [rawX, rawY] = String(value || '').split(':');
+  const x = Math.max(0, Math.min(COLS - 1, Number(rawX) || 0));
+  const y = Math.max(0, Math.min(ROWS - 1, Number(rawY) || 0));
+  GOAL = { x, y };
+  if (goalPlaced) {
+    initGrid();
+    renderBoard();
+    syncSprite();
+  }
+}
+
+function triggerTutorialBoksNudge() {
+  const sprite = document.getElementById('sprite');
+  if (!sprite || !playerPlaced) return;
+  sprite.classList.remove('tutorial-boks-nudge');
+  void sprite.offsetWidth;
+  sprite.classList.add('tutorial-boks-nudge');
+}
+
+function notifyTutorialBoksTurned() {
+  if (!tutorialStageActive) return;
+  resolveTutorialWait('boks-turned');
+  if (ori === tutorialInitialOrientation) resolveTutorialWait('boks-facing-start');
+}
+
+function resolveTutorialWait(eventName, payload = {}) {
+  if (!tutorialWaitingFor || tutorialWaitingFor.eventName !== eventName) return;
+  if (tutorialWaitingFor.targetBlock && payload.blockType !== tutorialWaitingFor.targetBlock) return;
+  if (tutorialWaitingFor.targetZone && payload.zone !== tutorialWaitingFor.targetZone) return;
+  if (tutorialWaitingFor.condition && !tutorialConditionMatches(tutorialWaitingFor.condition, payload)) return;
+  tutorialWaitingFor.remaining -= 1;
+  if (tutorialWaitingFor.remaining > 0) return;
+  const resolve = tutorialWaitingFor.resolve;
+  tutorialWaitingFor = null;
+  resolve();
+}
+
+function waitForTutorialEvent(eventName, count = 1, beat = {}) {
+  if (!tutorialStageActive || !eventName) return Promise.resolve();
+  return new Promise(resolve => {
+    const targetBlock = ['forward', 'left', 'right'].includes(beat?.target) ? beat.target : '';
+    const targetZone = ['main', 'fn'].includes(beat?.targetZone) ? beat.targetZone : '';
+    const condition = String(beat?.condition || '').trim().toLowerCase();
+    tutorialWaitingFor = {
+      eventName,
+      targetBlock,
+      targetZone,
+      condition,
+      remaining: Math.max(1, Number(count) || 1),
+      resolve
+    };
+  });
+}
+
+function tutorialConditionMatches(condition = '', payload = {}) {
+  if (!condition) return true;
+  if (condition === 'function_ready') return !!payload.functionReady;
+  return false;
+}
+
+function getTutorialProgramStatePayload() {
+  const mainBlocks = prog
+    .filter(Boolean)
+    .map(block => block.dir || block.direction || '');
+  const fnBlocks = fnProg
+    .filter(Boolean)
+    .map(block => block.dir || block.direction || '');
+  return {
+    mainBlocks,
+    fnBlocks,
+    functionReady: mainBlocks.length === 1 && mainBlocks[0] === 'function' && fnBlocks.length > 0
+  };
+}
+
+function notifyTutorialBlockDropFailed() {
+  if (!tutorialStageActive) return;
+  resolveTutorialWait('block-drop-failed');
+}
+
+const tutorialHighlightClasses = [
+  'tutorial-focus',
+  'tutorial-slot-focus',
+  'tutorial-function-area-focus',
+  'tutorial-play-focus'
+];
+
+function clearTutorialHighlights() {
+  document.querySelectorAll('.tutorial-focus, .tutorial-slot-focus, .tutorial-play-focus')
+    .forEach(el => tutorialHighlightClasses.forEach(className => el.classList.remove(className)));
+  document.getElementById('blocksRow')?.classList.remove('available-block-guided');
+}
+
+function stopTutorialHighlight() {
+  activeTutorialHighlight = '';
+  clearTutorialHighlights();
+}
+
+function getTutorialHighlightTargets(elementId = '') {
+  const id = String(elementId || '').trim().toLowerCase();
+  if (id === 'boks' || id === 'bocs') return [document.getElementById('sprite')].filter(Boolean);
+  const blockType = tutorialElementIdToBlockType(id);
+  if (blockType) {
+    return Array.from(document.querySelectorAll(`#blocksRow .ablock[data-block-dir="${blockType}"], #blocksRow .ablock[data-dir="${blockType}"]`));
+  }
+  if (id === 'slot') {
+    return Array.from(document.querySelectorAll('.pslot[data-zone="main"]:not(.locked)')).slice(0, 1);
+  }
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    return Array.from(document.querySelectorAll('.pslot[data-zone="fn"]:not(.locked)'));
+  }
+  if (id === 'play_button' || id === 'play') return [document.getElementById('runBtn')].filter(Boolean);
+  if (id === 'goal') return [document.getElementById('goal')].filter(Boolean);
+  return [];
+}
+
+function highlightTutorialElement(elementId = '') {
+  if (!tutorialStageActive) return;
+  activeTutorialHighlight = String(elementId || '').trim().toLowerCase();
+  applyActiveTutorialHighlight();
+}
+
+function showTutorialDragHandHint() {
+  if (!tutorialStageActive) return;
+  activeTutorialHandHint = 'drag_block';
+  queueFirstLevelOnboardingSync();
+}
+
+function showTutorialPlayHandHint() {
+  if (!tutorialStageActive) return;
+  activeTutorialHandHint = 'press_play';
+  queueFirstLevelOnboardingSync();
+}
+
+function stopTutorialHandHint() {
+  activeTutorialHandHint = '';
+  hideFirstLevelOnboardingOverlay();
+  queueFirstLevelOnboardingSync();
+}
+
+function applyActiveTutorialHighlight() {
+  if (!tutorialStageActive) return;
+  clearTutorialHighlights();
+  const id = activeTutorialHighlight;
+  if (!id) return;
+  const targets = getTutorialHighlightTargets(id);
+  if (!targets.length) return;
+
+  if (tutorialElementIdToBlockType(id)) {
+    document.getElementById('blocksRow')?.classList.add('available-block-guided');
+    targets.forEach(target => target.classList.add('tutorial-focus'));
+    return;
+  }
+
+  if (id === 'slot') {
+    targets.forEach(target => target.classList.add('tutorial-slot-focus'));
+    return;
+  }
+
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    targets.forEach(target => target.classList.add('tutorial-function-area-focus'));
+    return;
+  }
+
+  if (id === 'play_button' || id === 'play') {
+    targets.forEach(target => target.classList.add('tutorial-play-focus'));
+    return;
+  }
+
+  targets.forEach(target => target.classList.add('tutorial-focus'));
+}
+
+function tutorialElementIdToBlockType(elementId = '') {
+  const id = String(elementId || '').trim().toLowerCase();
+  if (id === 'forward_block' || id === 'forward' || id === 'move_forward') return 'forward';
+  if (id === 'left_block' || id === 'left' || id === 'turn_left') return 'left';
+  if (id === 'right_block' || id === 'right' || id === 'turn_right') return 'right';
+  if (id === 'function_block' || id === 'function') return 'function';
+  return '';
+}
+
+async function revealTutorialBlock(blockType = 'forward') {
+  if (!tutorialStageActive) return;
+  const normalized = POOL[blockType] ? blockType : 'forward';
+  tutorialVisibleBlockTypes.add(normalized);
+  editorBlockEnabled = {
+    forward: tutorialVisibleBlockTypes.has('forward'),
+    left: tutorialVisibleBlockTypes.has('left'),
+    right: tutorialVisibleBlockTypes.has('right'),
+    function: tutorialVisibleBlockTypes.has('function')
+  };
+  const orderedBlocks = ['forward', 'left', 'right', 'function'].filter(dir => tutorialVisibleBlockTypes.has(dir));
+  setAvailableBlocks(orderedBlocks);
+  document.body?.classList.add('tutorial-forward-visible');
+  renderAvail();
+  await sleep(900);
+}
+
+const revealTutorialForwardBlock = () => revealTutorialBlock('forward');
+const revealTutorialLeftBlock = () => revealTutorialBlock('left');
+const revealTutorialRightBlock = () => revealTutorialBlock('right');
+const revealTutorialFunctionBlock = () => revealTutorialBlock('function');
+
+async function hideTutorialElement(elementId = '') {
+  if (!tutorialStageActive) return;
+  const id = String(elementId || '').trim().toLowerCase();
+  const blockType = tutorialElementIdToBlockType(id);
+  if (blockType) {
+    tutorialVisibleBlockTypes.delete(blockType);
+    editorBlockEnabled = {
+      forward: tutorialVisibleBlockTypes.has('forward'),
+      left: tutorialVisibleBlockTypes.has('left'),
+      right: tutorialVisibleBlockTypes.has('right'),
+      function: tutorialVisibleBlockTypes.has('function')
+    };
+    const orderedBlocks = ['forward', 'left', 'right', 'function'].filter(dir => tutorialVisibleBlockTypes.has(dir));
+    setAvailableBlocks(orderedBlocks);
+    if (!orderedBlocks.length) document.body?.classList.remove('tutorial-forward-visible');
+    renderAvail();
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'boks' || id === 'bocs') {
+    playerPlaced = false;
+    document.body?.classList.remove('tutorial-boks-visible');
+    document.getElementById('sprite')?.classList.remove('tutorial-boks-enter', 'tutorial-focus');
+    syncSprite();
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'slot') {
+    activeMainSlots = 0;
+    mainSlotEnabled = Array(SLOTS).fill(false);
+    resetPrograms();
+    renderBoard();
+    updateRunAvailability();
+    document.body?.classList.remove('tutorial-slot-visible');
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'function_area' || id === 'function_slots' || id === 'fn_slot' || id === 'fn_slots') {
+    activeFnSlots = 0;
+    fnSlotEnabled = Array(FSLOTS).fill(false);
+    fnProg = Array(FSLOTS).fill(null);
+    renderBoard();
+    updateRunAvailability();
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'play_button' || id === 'play') {
+    document.body?.classList.remove('tutorial-play-visible', 'tutorial-play-unlocked');
+    document.getElementById('runBtn')?.classList.remove('tutorial-play-focus', 'first-level-onboarding-run');
+    await sleep(320);
+    return;
+  }
+
+  if (id === 'goal') {
+    goalPlaced = false;
+    document.body?.classList.remove('tutorial-goal-visible');
+    initGrid();
+    renderBoard();
+    syncSprite();
+    await sleep(320);
+  }
+}
+
+async function revealTutorialSlot() {
+  if (!tutorialStageActive) return;
+  activeMainSlots = 1;
+  mainSlotEnabled = Array(SLOTS).fill(false);
+  mainSlotEnabled[0] = true;
+  renderBoard();
+  updateRunAvailability();
+  document.body?.classList.add('tutorial-slot-visible');
+  await sleep(900);
+}
+
+async function revealTutorialFunctionArea() {
+  if (!tutorialStageActive) return;
+  activeFnSlots = FSLOTS;
+  fnSlotEnabled = Array(FSLOTS).fill(true);
+  renderBoard();
+  updateRunAvailability();
+  await sleep(700);
+}
+
+function unlockTutorialBlockDrag() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-block-draggable');
+}
+
+function lockTutorialBlockDrag() {
+  document.body?.classList.remove('tutorial-block-draggable');
+}
+
+async function revealTutorialPlayButton() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-play-visible');
+  await sleep(800);
+}
+
+function unlockTutorialPlay() {
+  if (!tutorialStageActive) return;
+  document.body?.classList.add('tutorial-play-unlocked');
+}
+
+function lockTutorialPlay() {
+  document.body?.classList.remove('tutorial-play-unlocked');
+}
+
+function setTutorialMainProgramSlot(value = '') {
+  if (!tutorialStageActive) return;
+  const [rawIndex, rawBlockType] = String(value || '').split(':');
+  const index = Math.max(0, Math.min(SLOTS - 1, Number(rawIndex) || 0));
+  const blockType = String(rawBlockType || '').trim().toLowerCase();
+  if (!POOL[blockType]) return;
+  activeMainSlots = Math.max(activeMainSlots, index + 1);
+  mainSlotEnabled[index] = true;
+  prog[index] = { id: `${blockType}${idN++}`, ...POOL[blockType] };
+  renderBoard();
+  updateRunAvailability();
+}
+
+function clearTutorialMainProgramSlot(value = '') {
+  if (!tutorialStageActive) return;
+  const index = Math.max(0, Math.min(SLOTS - 1, Number(value) || 0));
+  prog[index] = null;
+  mainSlotEnabled[index] = true;
+  renderBoard();
+  updateRunAvailability();
+}
+
+async function revealTutorialGoal() {
+  if (!tutorialStageActive) return;
+  goalPlaced = true;
+  pos = { ...START };
+  ori = tutorialInitialOrientation;
+  resetPrograms();
+  initGrid();
+  syncSprite();
+  renderBoard();
+  document.body?.classList.add('tutorial-goal-visible');
+  await sleep(800);
+}
+
+function unlockTutorialAll() {
+  document.body?.classList.add('tutorial-play-unlocked', 'tutorial-block-draggable');
+}
+
+function openTutorialAllSlots() {
+  if (!tutorialStageActive) return;
+  activeMainSlots = SLOTS;
+  activeFnSlots = FSLOTS;
+  mainSlotEnabled = Array(SLOTS).fill(true);
+  fnSlotEnabled = Array(FSLOTS).fill(true);
+  renderBoard();
+  renderFn();
+  updateRunAvailability();
+}
+
+async function finishTutorialWithEnding() {
+  if (!tutorialStageActive) return;
+  setTutorialCompleted(true);
+  tutorialEngine?.stop();
+  await playEndingCinematic();
+  returnToMainMenu();
+}
+
+window.BOKS_TUTORIAL_STAGE = {
+  revealBoks: revealTutorialBoks,
+  unlockBoksDoubleClick: () => setTutorialBoksDoubleClickUnlocked(true),
+  lockBoksDoubleClick: () => setTutorialBoksDoubleClickUnlocked(false),
+  setBoksOrientationRight: () => setTutorialBoksOrientation('right'),
+  setBoksOrientationDown: () => setTutorialBoksOrientation('down'),
+  setBoksOrientationLeft: () => setTutorialBoksOrientation('left'),
+  setBoksOrientationUp: () => setTutorialBoksOrientation('up'),
+  setBoksPosition: setTutorialBoksPosition,
+  setGoalPosition: setTutorialGoalPosition,
+  revealForwardBlock: revealTutorialForwardBlock,
+  revealLeftBlock: revealTutorialLeftBlock,
+  revealRightBlock: revealTutorialRightBlock,
+  revealFunctionBlock: revealTutorialFunctionBlock,
+  hideElement: hideTutorialElement,
+  revealSlot: revealTutorialSlot,
+  revealFunctionArea: revealTutorialFunctionArea,
+  highlightElement: highlightTutorialElement,
+  clearHighlight: stopTutorialHighlight,
+  showDragHandHint: showTutorialDragHandHint,
+  showPlayHandHint: showTutorialPlayHandHint,
+  clearHandHint: stopTutorialHandHint,
+  setMainProgramSlot: setTutorialMainProgramSlot,
+  clearMainProgramSlot: clearTutorialMainProgramSlot,
+  unlockDragBlock: unlockTutorialBlockDrag,
+  lockDragBlock: lockTutorialBlockDrag,
+  revealPlayButton: revealTutorialPlayButton,
+  unlockPlay: unlockTutorialPlay,
+  lockPlay: lockTutorialPlay,
+  revealGoal: revealTutorialGoal,
+  openAllSlots: openTutorialAllSlots,
+  finishTutorial: finishTutorialWithEnding,
+  unlockAll: unlockTutorialAll,
+  waitFor: waitForTutorialEvent
+};
+
 function renderSandboxToolbar() {
   const toolbar = document.getElementById('sandboxToolbar');
   if (!toolbar) return;
@@ -6210,6 +6779,7 @@ function renderAvail() {
     row.appendChild(el);
   });
   alignAvailBlocksToSlots();
+  applyActiveTutorialHighlight();
   queueFirstLevelOnboardingSync();
 }
 
@@ -6880,6 +7450,8 @@ function endDg(cx,cy) {
   const tapCancelThresholdSq = TAP_CANCEL_THRESHOLD_PX * TAP_CANCEL_THRESHOLD_PX;
   const hadPlacedProgramBlocks = hasAnyPlacedProgramBlock();
   let didDropSuccessfully = false;
+  let dropPayload = null;
+  let removePayload = null;
   const dirtySlots = [];
   cancelDragMoveFrame();
   hideGhost();
@@ -6895,46 +7467,54 @@ function endDg(cx,cy) {
     const ti = +slot.dataset.slot;
     const zone = slot.dataset.zone;
     if(zone === 'main' && !mainSlotEnabled[ti]) {
+      notifyTutorialBlockDropFailed();
       finishDragCleanup();
       return;
     }
     if(zone === 'fn' && !fnSlotEnabled[ti]) {
+      notifyTutorialBlockDropFailed();
       finishDragCleanup();
       return;
     }
     if(zone === 'fn') {
       // blocchi function non possono stare nella fn zone
-      if(dg.block.dir === 'function') { finishDragCleanup(); return; }
+      if(dg.block.dir === 'function') { notifyTutorialBlockDropFailed(); finishDragCleanup(); return; }
       if(dg.src==='avail') {
         fnProg[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
         dirtySlots.push({ zone:'fn', idx:ti });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='fn'&&dg.si!==ti){
         const tmp=fnProg[ti];fnProg[ti]=dg.block;fnProg[dg.si]=tmp;
         dirtySlots.push({ zone:'fn', idx:ti }, { zone:'fn', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='prog'){
         fnProg[ti]={...dg.block}; prog[dg.si]=null;
         dirtySlots.push({ zone:'fn', idx:ti }, { zone:'main', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
     } else {
       if(dg.src==='avail') {
         prog[ti]={id:`${dg.block.dir}${idN++}`,...POOL[dg.block.dir]};
         dirtySlots.push({ zone:'main', idx:ti });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='prog'&&dg.si!==ti){
         const tmp=prog[ti];prog[ti]=dg.block;prog[dg.si]=tmp;
         dirtySlots.push({ zone:'main', idx:ti }, { zone:'main', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
       else if(dg.src==='fn'){
         prog[ti]={...dg.block}; fnProg[dg.si]=null;
         dirtySlots.push({ zone:'main', idx:ti }, { zone:'fn', idx:dg.si });
         didDropSuccessfully = true;
+        dropPayload = { blockType: dg.block.dir, zone, slotIndex: ti };
       }
     }
     if (!hadPlacedProgramBlocks && zone === 'main' && prog[ti] && firstLevelOnboardingStage === 'drag') {
@@ -6942,10 +7522,12 @@ function endDg(cx,cy) {
     }
   } else {
     if(dg.src==='prog') {
+      removePayload = { blockType: dg.block?.dir || dg.block?.direction || '', zone:'main', slotIndex: dg.si };
       prog[dg.si]=null;
       dirtySlots.push({ zone:'main', idx:dg.si });
     }
     else if(dg.src==='fn') {
+      removePayload = { blockType: dg.block?.dir || dg.block?.direction || '', zone:'fn', slotIndex: dg.si };
       fnProg[dg.si]=null;
       dirtySlots.push({ zone:'fn', idx:dg.si });
     }
@@ -6955,6 +7537,9 @@ function endDg(cx,cy) {
     if (firstFnForwardPlaced) fnUnlockHintActive = true;
   }
   if (didDropSuccessfully) playBlockDropSuccessSfx();
+  if (didDropSuccessfully && tutorialStageActive) resolveTutorialWait('block-dropped', dropPayload || {});
+  if (removePayload && tutorialStageActive) resolveTutorialWait('block-removed', removePayload);
+  if (!didDropSuccessfully && !removePayload) notifyTutorialBlockDropFailed();
   finishDragCleanup();
   updateDraggedBoardState(dirtySlots);
   if (didDropSuccessfully && slot) triggerSlotCaptureEffect(slot.dataset.zone, +slot.dataset.slot);
@@ -7060,6 +7645,14 @@ async function run() {
   if (!document.getElementById('runBtn')?.classList.contains('is-pressed')) {
     pulseRunButtonPressedState(140);
   }
+  if (tutorialStageActive) {
+    const tutorialProgramState = getTutorialProgramStatePayload();
+    if (tutorialWaitingFor?.eventName === 'play-pressed' && tutorialWaitingFor.condition && !tutorialConditionMatches(tutorialWaitingFor.condition, tutorialProgramState)) {
+      triggerEmptyRunHint();
+      return;
+    }
+    resolveTutorialWait('play-pressed', tutorialProgramState);
+  }
   if (firstLevelOnboardingStage === 'play') completeFirstLevelOnboarding();
   const shouldRestoreAfterRun = editorMode || sandboxMode;
   const runStartState = shouldRestoreAfterRun ? { pos: { ...pos }, ori } : null;
@@ -7138,6 +7731,8 @@ async function run() {
   setRunButtonPressedState(false);
   setRunButtonRunningState(false);
   running=false;
+  if (tutorialStageActive && won) resolveTutorialWait('goal-popped');
+  if (tutorialStageActive) resolveTutorialWait('execution-finished');
   if (!editorMode && !sandboxMode) resetPrograms();
 
   if (!goalPlaced) {
@@ -7230,6 +7825,7 @@ async function init() {
   markPerfMetricStart('game-init');
   await loadEditorLevelsSource();
   syncViewportHeight();
+  syncStartGateUnlockState();
   currentLevel = 'level1';
   setLevel('level1', { persist: false });
   document.getElementById('gridWrap').style.position = 'relative';
@@ -7264,8 +7860,28 @@ async function init() {
 
 void init();
 
+function isTutorialCompleted() {
+  try { return localStorage.getItem(TUTORIAL_COMPLETED_STORAGE_KEY) === '1'; }
+  catch (_err) { return false; }
+}
+
+function setTutorialCompleted(completed = true) {
+  try {
+    if (completed) localStorage.setItem(TUTORIAL_COMPLETED_STORAGE_KEY, '1');
+    else localStorage.removeItem(TUTORIAL_COMPLETED_STORAGE_KEY);
+  } catch (_err) {}
+  syncStartGateUnlockState();
+}
+
+function syncStartGateUnlockState() {
+  const completed = isTutorialCompleted();
+  document.body?.classList.toggle('tutorial-menu-unlocked', completed);
+  document.body?.classList.toggle('tutorial-menu-locked', !completed);
+}
+
 function showStartGate() {
   document.body.classList.add('prestart');
+  syncStartGateUnlockState();
   resetStartGameButtonVisualState();
   document.getElementById('startGate')?.classList.add('show');
   queueFirstLevelOnboardingSync();
@@ -7310,6 +7926,7 @@ function openAppFromGate({ openEditor = false, onOpen = null, playLevelIntro = t
   }, gateFadeMs);
 }
 async function startGameFromGate() {
+  if (!isTutorialCompleted()) return;
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
   requestAppFullscreen({ fromUserGesture: true });
@@ -7333,6 +7950,7 @@ async function startEditorFromGate() {
   openAppFromGate({ openEditor: true });
 }
 async function startSandboxFromGate() {
+  if (!isTutorialCompleted()) return;
   if (startGameGateAnimating) return;
   startGameGateAnimating = true;
   const btn = document.getElementById('startBoksBtn');
@@ -7348,6 +7966,36 @@ async function startSandboxFromGate() {
     if (btn) btn.disabled = false;
   }, 0);
 }
+async function startTutorialFromGate() {
+  if (startGameGateAnimating) return;
+  startGameGateAnimating = true;
+  requestAppFullscreen({ fromUserGesture: true });
+  const btn = document.getElementById('startTutorialBtn');
+  if (btn) btn.disabled = true;
+  const gameAudioUnlock = unlockAudioForUserGesture();
+  const narrationAudioUnlock = window.BOKS_TUTORIAL_ENGINE?.unlockAudio?.(window.BOKS_TUTORIAL_DATA?.intro);
+  pulseStartGameButtonPressedState('startTutorialBtn');
+  btn?.classList.add('is-popping');
+  playWelcomeSfx();
+  playBubblePopSfx();
+  await Promise.allSettled([gameAudioUnlock, narrationAudioUnlock]);
+  await sleep(720);
+  openAppFromGate({
+    openEditor: false,
+    onOpen: () => {
+      startTutorialStage();
+      tutorialEngine?.start(window.BOKS_TUTORIAL_DATA?.intro);
+    },
+    playLevelIntro: false
+  });
+  window.setTimeout(() => {
+    startGameGateAnimating = false;
+    if (btn) btn.disabled = false;
+  }, 0);
+}
+window.BOKS_TUTORIAL_PREVIEW = {
+  startWithAudio: startTutorialFromGate
+};
 function returnToMainMenu() {
   if (document.body.classList.contains('prestart')) return;
   if (running || animating) {
@@ -7356,6 +8004,8 @@ function returnToMainMenu() {
   }
   closeSettingsPanel();
   closeSaveLevelModal();
+  tutorialEngine?.stop();
+  stopTutorialStage();
   if (editorMode) exitEditorMode();
   if (sandboxMode) {
     setSandboxMode(false);
@@ -7375,6 +8025,19 @@ function returnToMainMenu() {
 }
 function openSpritePreviewTool() {
   const targetUrl = new URL('tools/sprite-preview.html', window.location.href).toString();
+  const opened = window.open(targetUrl, '_blank', 'noopener');
+  if (!opened) window.location.href = targetUrl;
+}
+async function openTutorialEditorTool() {
+  const cleanUrl = new URL('/dev/tutorial-editor', window.location.href).toString();
+  const fallbackUrl = new URL('dev/tutorial-editor/index.html', window.location.href).toString();
+  let targetUrl = cleanUrl;
+  try {
+    const response = await fetch(cleanUrl, { cache: 'no-store' });
+    if (!response.ok) targetUrl = fallbackUrl;
+  } catch (_err) {
+    targetUrl = fallbackUrl;
+  }
   const opened = window.open(targetUrl, '_blank', 'noopener');
   if (!opened) window.location.href = targetUrl;
 }
@@ -7473,11 +8136,14 @@ settingsPanel = window.BOKS_SETTINGS_PANEL.create({
   toast
 });
 settingsPanel.bindEvents();
+tutorialEngine = window.BOKS_TUTORIAL_ENGINE?.create?.() || null;
 
 // tap to skip
 document.getElementById('startGameBtn')?.addEventListener('click', startGameFromGate);
 document.getElementById('startBoksBtn')?.addEventListener('click', startSandboxFromGate);
+document.getElementById('startTutorialBtn')?.addEventListener('click', startTutorialFromGate);
 document.getElementById('startEditorBtn')?.addEventListener('click', startEditorFromGate);
+document.getElementById('openTutorialEditorBtn')?.addEventListener('click', () => { void openTutorialEditorTool(); });
 document.getElementById('openSpritePreviewBtn')?.addEventListener('click', openSpritePreviewTool);
 document.getElementById('openVfxToolBtn')?.addEventListener('click', openVfxTool);
 document.getElementById('openLottieInspectorBtn')?.addEventListener('click', openLottieInspectorTool);
