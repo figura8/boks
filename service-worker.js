@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v33';
+const CACHE_VERSION = 'v33-live-20260601-201601';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -32,10 +32,6 @@ const PRECACHE_URLS = [
   './assets/audio/sfx/gameplay/effort.mp3',
   './assets/audio/sfx/gameplay/rotation_position.mp3',
   './assets/audio/sfx/gameplay/rotation_position_02.mp3',
-  './assets/audio/sfx/gameplay/bubble_pop_main.ogg',
-  './assets/audio/sfx/gameplay/goal_bubble_bounce.ogg',
-  './assets/audio/sfx/gameplay/level_complete_main.mp3',
-  './assets/audio/sfx/gameplay/wellcome.mp3',
   './assets/audio/sfx/gameplay/01_but_if.mp3',
   './assets/audio/sfx/gameplay/01_hello_and_welcome.mp3',
   './assets/audio/sfx/gameplay/01_its_called_a_sequence.mp3',
