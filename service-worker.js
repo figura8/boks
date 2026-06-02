@@ -42,6 +42,8 @@ const PRECACHE_URLS = [
   './assets/audio/sfx/gameplay/level_complete_main.mp3',
   './assets/audio/sfx/gameplay/entrance_boks.mp3',
   './assets/audio/sfx/gameplay/reveal_bubble_01.mp3',
+  './assets/audio/sfx/gameplay/element_reveal.mp3',
+  './assets/audio/sfx/gameplay/play_reveal.mp3',
   './assets/audio/sfx/gameplay/wellcome.mp3',
   './assets/audio/sfx/gameplay/01_but_if.mp3',
   './assets/audio/sfx/gameplay/01_hello_and_welcome.mp3',
