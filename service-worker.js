@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v33-live-20260602-131411';
+const CACHE_VERSION = 'v33-live-20260602-140652';
 const SHELL_CACHE = `cubetto-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `cubetto-runtime-${CACHE_VERSION}`;
 
@@ -36,7 +36,6 @@ const PRECACHE_URLS = [
   './assets/audio/sfx/gameplay/reveal_bubble_01.mp3',
   './assets/audio/sfx/gameplay/element_reveal.mp3',
   './assets/audio/sfx/gameplay/play_reveal.mp3',
-  './assets/audio/sfx/gameplay/wellcome.mp3',
   './assets/audio/sfx/gameplay/01_but_if.mp3',
   './assets/audio/sfx/gameplay/01_hello_and_welcome.mp3',
   './assets/audio/sfx/gameplay/01_its_called_a_sequence.mp3',
