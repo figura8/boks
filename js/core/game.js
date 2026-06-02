@@ -806,6 +806,8 @@ const playErrorSfx = () => audioManager.playErrorSfx();
 const playBoksAnnoyedSfx = () => audioManager.playBoksAnnoyedSfx();
 const playBoksEntranceSfx = () => audioManager.playBoksEntranceSfx();
 const playMenuBubbleRevealSfx = volume => audioManager.playMenuBubbleRevealSfx(volume);
+const playTutorialElementRevealSfx = () => audioManager.playTutorialElementRevealSfx();
+const playTutorialPlayRevealSfx = () => audioManager.playTutorialPlayRevealSfx();
 const playDecorationRubberSfx = () => audioManager.playDecorationRubberSfx();
 const playGoalBubbleBounceSfx = () => audioManager.playGoalBubbleBounceSfx();
 const playBubblePopSfx = () => audioManager.playBubblePopSfx();
@@ -6024,6 +6026,7 @@ async function revealTutorialBlock(blockType = 'forward') {
   setAvailableBlocks(orderedBlocks);
   document.body?.classList.add('tutorial-forward-visible');
   renderAvail();
+  playTutorialElementRevealSfx();
   await sleep(900);
 }
 
@@ -6107,6 +6110,7 @@ async function revealTutorialSlot() {
   renderBoard();
   updateRunAvailability();
   document.body?.classList.add('tutorial-slot-visible');
+  playTutorialElementRevealSfx();
   await sleep(900);
 }
 
@@ -6131,6 +6135,7 @@ function lockTutorialBlockDrag() {
 async function revealTutorialPlayButton() {
   if (!tutorialStageActive) return;
   document.body?.classList.add('tutorial-play-visible');
+  playTutorialPlayRevealSfx();
   await sleep(800);
 }
 
@@ -8033,6 +8038,7 @@ async function startTutorialFromGate() {
   pulseStartGameButtonPressedState('startTutorialBtn');
   btn?.classList.add('is-popping');
   await Promise.allSettled([gameAudioUnlock]);
+  playBubblePopSfx();
   await sleep(720);
   openAppFromGate({
     openEditor: false,
