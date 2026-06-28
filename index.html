@@ -12,13 +12,13 @@
   <title>BÖKS</title>  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="icons/boks-apple-touch-icon.png">
-  <link rel="stylesheet" href="styles/app.css?v=20260602-140652">
-  <link rel="stylesheet" href="styles/character.css?v=20260602-140652">
+  <link rel="stylesheet" href="styles/app.css?v=20260628-133015">
+  <link rel="stylesheet" href="styles/character.css?v=20260628-133015">
   <link rel="stylesheet" href="styles/tutorial.css?v=20260519-134900">
 </head>
 <body
   class="prestart"
-  data-build="20260602-140652"
+  data-build="20260628-133015"
   data-release-channel="live"
   data-editor-enabled="false"
   data-debug-tools-enabled="false"
@@ -214,22 +214,30 @@
           <img class="boks-logo boks-logo--header" src="assets/ui/brand/boks-logo.svg" alt="B&Ouml;KS">
         </div>
         <div id="sandboxToolbar" aria-label="Strumenti modalita libera"></div>
-        <!-- Row 1: grid (flexible) -->
-        <div id="gridWrap">
-          <canvas id="bgCanvas" style="position:absolute;inset:0;pointer-events:none;border-radius:7px;"></canvas>
-          <div id="gameGrid"></div>
-          <div id="sprite"></div>
-        </div>
+        <div id="gameplayViewport">
+          <div id="gameplaySurface">
+            <!-- Row 1: grid (flexible) -->
+            <div id="gridWrap">
+              <div id="gridStage">
+                <canvas id="bgCanvas" style="position:absolute;inset:0;pointer-events:none;border-radius:7px;"></canvas>
+                <div id="gameGrid"></div>
+                <div id="sprite"></div>
+              </div>
+            </div>
 
-        <!-- Row 2: fixed bottom section -->
-        <div id="bottom">
-          <div id="blocksRow"></div>
-          <div id="boardRow"><div id="boardGrid"></div></div>
-          <button id="runBtn" type="button">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <use href="#icon-play-boks"></use>
-            </svg>
-          </button>
+            <!-- Row 2: fixed bottom section -->
+            <div id="bottomWrap">
+              <div id="bottom">
+                <div id="blocksRow"></div>
+                <div id="boardRow"><div id="boardGrid"></div></div>
+                <button id="runBtn" type="button">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <use href="#icon-play-boks"></use>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -263,6 +271,20 @@
         </div>
       </div>
       <div class="settings-list">
+        <button id="settingsTabletBtn" class="settings-row" type="button" aria-label="Attiva o disattiva il layout tablet" aria-pressed="false">
+          <span class="settings-row__icon" aria-hidden="true"><img src="assets/ui/settings/tablet.svg" alt=""></span>
+          <span class="settings-row__copy">
+            <strong>Schermo tablet</strong>
+          </span>
+          <span id="settingsTabletSwitch" class="settings-switch" aria-hidden="true"><span class="settings-switch__thumb"></span></span>
+        </button>
+        <button id="settingsPinchBtn" class="settings-row" type="button" aria-label="Attiva o disattiva lo zoom con le dita" aria-pressed="false">
+          <span class="settings-row__icon" aria-hidden="true"><img src="assets/ui/settings/pinch.svg" alt=""></span>
+          <span class="settings-row__copy">
+            <strong>Zoom con le dita</strong>
+          </span>
+          <span id="settingsPinchSwitch" class="settings-switch" aria-hidden="true"><span class="settings-switch__thumb"></span></span>
+        </button>
         <button id="settingsSfxBtn" class="settings-row" type="button" aria-label="Turn sound effects on or off">
           <span class="settings-row__icon" aria-hidden="true"><img src="assets/ui/settings/sound.svg" alt=""></span>
           <span class="settings-row__copy">
@@ -338,6 +360,6 @@
   </div>
 </div>
 
-  <script src="js/core/app-loader.js?v=20260602-140652"></script>
+  <script src="js/core/app-loader.js?v=20260628-133015"></script>
 </body>
 </html>
